@@ -39,10 +39,25 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c1229aea-4b01-4887-9600-7a393a7c572c"
+      }
     }
   }
 }
