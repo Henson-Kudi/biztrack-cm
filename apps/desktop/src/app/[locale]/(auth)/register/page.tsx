@@ -90,7 +90,7 @@ export default function RegisterPage() {
           <Input type="password" value={form.password} onChange={handleChange('password')} required />
         </div>
         {error && <div className="text-sm text-destructive">{error}</div>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
           {loading ? t('register.loading') : t('register.continue')}
         </Button>
       </form>

@@ -26,6 +26,10 @@ export type RequestConfig = {
   signal?: AbortSignal
 }
 
+export type RequestDefaults = Omit<RequestConfig, "url">
+
+export type RequestOptions = Omit<RequestConfig, "url" | "method" | "data">
+
 export type HttpResponse<T = unknown> = {
   status: number
   statusText: string
@@ -102,25 +106,25 @@ class InterceptorManager<T> {
 
 export type HttpClient = {
   request<T = unknown>(config: RequestConfig): Promise<HttpResponse<T>>
-  get<T = unknown>(url: string, config?: RequestConfig): Promise<HttpResponse<T>>
+  get<T = unknown>(url: string, config?: RequestOptions): Promise<HttpResponse<T>>
   post<T = unknown>(
     url: string,
     data?: unknown,
-    config?: RequestConfig,
+    config?: RequestOptions,
   ): Promise<HttpResponse<T>>
   put<T = unknown>(
     url: string,
     data?: unknown,
-    config?: RequestConfig,
+    config?: RequestOptions,
   ): Promise<HttpResponse<T>>
   patch<T = unknown>(
     url: string,
     data?: unknown,
-    config?: RequestConfig,
+    config?: RequestOptions,
   ): Promise<HttpResponse<T>>
   delete<T = unknown>(
     url: string,
-    config?: RequestConfig,
+    config?: RequestOptions,
   ): Promise<HttpResponse<T>>
   interceptors: {
     request: InterceptorManager<RequestConfig>
@@ -190,7 +194,7 @@ async function parseResponseData(response: Response) {
   return response.text()
 }
 
-function mergeConfig(defaults: RequestConfig, config: RequestConfig) {
+function mergeConfig(defaults: RequestDefaults, config: RequestConfig) {
   return {
     ...defaults,
     ...config,
@@ -199,7 +203,7 @@ function mergeConfig(defaults: RequestConfig, config: RequestConfig) {
 }
 
 export function createHttpClientWithFetch(
-  defaults: RequestConfig,
+  defaults: RequestDefaults,
   fetchProvider: FetchProvider,
 ): HttpClient {
   const requestInterceptors = new InterceptorManager<RequestConfig>()

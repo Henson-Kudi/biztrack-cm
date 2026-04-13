@@ -85,7 +85,7 @@ export default function PasswordLoginPage() {
           />
         </div>
         {error && <div className="text-sm text-destructive">{error}</div>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
           {loading ? t('password.loading') : t('password.submit')}
         </Button>
       </form>

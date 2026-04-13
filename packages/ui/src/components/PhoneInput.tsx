@@ -1,3 +1,5 @@
+//@ts-ignore
+import 'react-phone-number-input/style.css'
 import * as React from 'react'
 import PhoneInputBase, { type Country } from 'react-phone-number-input'
 import { cn } from '../lib/utils'
@@ -39,7 +41,7 @@ const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
           country={'CM' as Country}
           withCountryCallingCode
           value={value}
-          onChange={onChange}
+          onChange={onChange!}
           inputComponent={PhoneNumberInput}
           countrySelectProps={{ disabled: true, className: 'text-sm text-muted-foreground bg-transparent' }}
           className="w-full flex items-center gap-2"

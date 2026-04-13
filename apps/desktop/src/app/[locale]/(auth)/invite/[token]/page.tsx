@@ -42,7 +42,7 @@ export default function InvitePreviewPage({ params }: { params: { token: string 
               {t('invite.invited_by_label')}: {invite.invitedByName ?? t('invite.team_name')}
             </div>
           </div>
-          <Button onClick={() => goTo('/register')} className="w-full">
+          <Button variant="primary" onClick={() => goTo('/register')} className="w-full">
             {t('invite.accept')}
           </Button>
           <Button variant="secondary" onClick={() => goTo('/login')} className="w-full">

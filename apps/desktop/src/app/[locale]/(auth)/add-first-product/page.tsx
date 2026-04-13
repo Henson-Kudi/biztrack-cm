@@ -15,7 +15,7 @@ export default function AddFirstProductPage() {
   return (
     <AuthCard title={t('first_product.title')} subtitle={t('first_product.subtitle')}>
       <div className="space-y-3">
-        <Button onClick={() => goTo('/products')} className="w-full">
+        <Button variant="primary" onClick={() => goTo('/products')} className="w-full">
           {t('first_product.add')}
         </Button>
         <Button variant="secondary" onClick={() => goTo('/')} className="w-full">

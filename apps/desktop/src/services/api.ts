@@ -45,7 +45,7 @@ function resolveQueue(token: string | null) {
 
 api.interceptors.response.use(
   (response) => response,
-  async (error: HttpError) => {
+  async (error: any) => {
     const original = error.config
     if (!original || (original.headers as any)?.['x-skip-auth-refresh']) {
       return Promise.reject(error)

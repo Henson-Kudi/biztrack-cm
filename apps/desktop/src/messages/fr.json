@@ -1,5 +1,4 @@
 {
-  "app.title": "BizTrack CM",
   "nav": {
     "home": "Accueil",
     "sell": "Vendre",
@@ -12,6 +11,7 @@
     "last_sync": "Derniere synchro: il y a 2 min"
   },
   "app": {
+    "title": "BizTrack Desktop",
     "dashboard": {
       "title": "Tableau de bord",
       "subtitle": "Resume quotidien - bientot disponible.",

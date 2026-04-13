@@ -54,7 +54,7 @@ export default function SetupBusinessPage() {
           <Input value={form.address} onChange={handleChange('address')} placeholder={t('setup_business.address_placeholder')} />
         </div>
         {error && <div className="text-sm text-destructive">{error}</div>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
           {loading ? t('setup_business.loading') : t('setup_business.continue')}
         </Button>
       </form>

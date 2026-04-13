@@ -2,7 +2,7 @@ import {
   createHttpClientWithFetch,
   type FetchLike,
   type FetchProvider,
-  type RequestConfig,
+  type RequestDefaults,
 } from "./core"
 
 export type {
@@ -11,6 +11,8 @@ export type {
   HttpMethod,
   HttpResponse,
   RequestConfig,
+  RequestDefaults,
+  RequestOptions,
   RequestHeaders,
   RequestParams,
 } from "./core"
@@ -28,5 +30,5 @@ const getFetch: FetchProvider = async () => {
   return cachedFetch
 }
 
-export const createHttpClient = (defaults: RequestConfig) =>
+export const createHttpClient = (defaults: RequestDefaults) =>
   createHttpClientWithFetch(defaults, getFetch)

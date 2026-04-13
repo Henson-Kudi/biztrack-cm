@@ -34,5 +34,10 @@ Thumbs.db
 # Electron
 release/
 
+# Local desktop DB files
+apps/desktop/biztrack-dev.db
+apps/desktop/biztrack-dev.db-shm
+apps/desktop/biztrack-dev.db-wal
+
 # Prisma
 prisma/migrations/dev/
