@@ -1,0 +1,38 @@
+{
+  "name": "@biztrack/http-client",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./dist/react-native.js",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./react-native": {
+      "types": "./dist/react-native.d.ts",
+      "default": "./dist/react-native.js"
+    }
+  },
+  "react-native": "./dist/react-native.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint . --max-warnings 0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "undici": "^8.1.0"
+  },
+  "devDependencies": {
+    "@biztrack/eslint-config": "workspace:*",
+    "@biztrack/typescript-config": "workspace:*",
+    "eslint": "^9.32.0",
+    "typescript": "^5.7.2"
+  }
+}

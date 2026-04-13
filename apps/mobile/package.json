@@ -13,11 +13,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@biztrack/http-client": "workspace:*",
     "@biztrack/types": "workspace:*",
     "@biztrack/utils": "workspace:*",
     "@biztrack/validators": "workspace:*",
     "@react-native-async-storage/async-storage": "^2.1.0",
-    "axios": "^1.7.9",
     "expo": "~55.0.6",
     "expo-router": "~55.0.5",
     "expo-splash-screen": "^55.0.10",

@@ -2,5 +2,8 @@
 // Components are added here as they are built
 export * from './components/Button'
 export * from './components/Input'
+export * from './components/InputOTP'
+export * from './components/PhoneInput'
 export * from './components/Badge'
 export * from './components/Spinner'
+export * from './lib/utils'

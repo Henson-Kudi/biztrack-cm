@@ -29,4 +29,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     version: () => ipcRenderer.invoke('app:version'),
   },
+  // Secure storage
+  secureStore: {
+    isAvailable: () => ipcRenderer.invoke('secure-store:is-available'),
+    get: (key: string) => ipcRenderer.invoke('secure-store:get', key),
+    set: (key: string, value: string) => ipcRenderer.invoke('secure-store:set', key, value),
+    delete: (key: string) => ipcRenderer.invoke('secure-store:delete', key),
+    clear: () => ipcRenderer.invoke('secure-store:clear'),
+  },
+  theme: {
+    onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
+      ipcRenderer.on('theme-changed', (_event, theme) => callback(theme))
+    },
+    setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.send('set-theme', theme),
+  },
 })

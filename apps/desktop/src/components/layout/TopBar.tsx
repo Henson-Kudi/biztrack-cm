@@ -1,8 +1,14 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
+
 export function TopBar() {
+  const t = useTranslations('topbar')
+
   return (
-    <header style={{ height: 52, background: '#fff', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem' }}>
-      <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Derniere synchro: il y a 2 min</div>
-      <div style={{ fontSize: '0.85rem', color: '#374151' }}>Jean Kamga</div>
+    <header className="h-[52px] bg-card border-b border-border flex items-center justify-between px-6">
+      <div className="text-xs text-muted-foreground">{t('last_sync')}</div>
+      <div className="text-sm text-foreground">Jean Kamga</div>
     </header>
   )
 }

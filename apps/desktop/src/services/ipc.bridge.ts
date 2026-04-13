@@ -22,8 +22,52 @@ declare global {
       app: {
         version: () => Promise<string>
       }
+      secureStore: {
+        isAvailable: () => Promise<boolean>
+        get: (key: string) => Promise<string | null>
+        set: (key: string, value: string) => Promise<boolean>
+        delete: (key: string) => Promise<boolean>
+        clear: () => Promise<boolean>
+      }
+      theme: {
+        onThemeChange: (callback: (theme: 'light' | 'dark') => void) => void
+        setTheme: (theme: 'light' | 'dark' | 'system') => void
+      }
     }
   }
 }
 
-export const ipc = window.electronAPI
+const fallbackIpc: Window['electronAPI'] = {
+  db: {
+    query: async () => [],
+    run: async () => ({ changes: 0 }),
+  },
+  sync: {
+    trigger: async () => ({ success: false, message: 'unavailable' }),
+    onStatus: () => {},
+  },
+  network: {
+    isOnline: async () => true,
+    onStatusChange: () => {},
+  },
+  print: {
+    receipt: async () => {},
+  },
+  app: {
+    version: async () => 'web',
+  },
+  secureStore: {
+    isAvailable: async () => false,
+    get: async () => null,
+    set: async () => false,
+    delete: async () => false,
+    clear: async () => false,
+  },
+  theme: {
+    onThemeChange: () => {},
+    setTheme: () => {},
+  },
+}
+
+export const ipc =
+  typeof window !== 'undefined' && window.electronAPI ? window.electronAPI : fallbackIpc

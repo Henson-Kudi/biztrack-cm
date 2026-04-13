@@ -1,0 +1,159 @@
+{
+  "app.title": "BizTrack CM",
+  "nav": {
+    "home": "Home",
+    "sell": "Sell",
+    "products": "Products",
+    "expenses": "Expenses",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "topbar": {
+    "last_sync": "Last sync: 2 minutes ago"
+  },
+  "app": {
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Daily summary - coming soon.",
+      "logout": "Sign out",
+      "logout_loading": "Signing out..."
+    },
+    "sell": {
+      "title": "Sell",
+      "subtitle": "Sales screen - coming soon."
+    },
+    "products": {
+      "title": "Products",
+      "subtitle": "Products - coming soon."
+    },
+    "expenses": {
+      "title": "Expenses",
+      "subtitle": "Expenses - coming soon."
+    },
+    "reports": {
+      "title": "Reports",
+      "subtitle": "Reports - coming soon."
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Settings - coming soon."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome",
+      "subtitle_online": "Sign in to continue.",
+      "subtitle_offline": "Offline mode.",
+      "phone_mode": "Phone",
+      "email_mode": "Email",
+      "phone_label": "Phone number",
+      "email_label": "Email address",
+      "use_email": "Use email",
+      "use_phone": "Use phone",
+      "email_placeholder": "name@email.com",
+      "password_label": "Password",
+      "password_placeholder": "Your password",
+      "loading": "Loading...",
+      "continue": "Continue",
+      "offline_submit": "Access offline",
+      "no_account": "No account yet?",
+      "create_account": "Create an account",
+      "error_default": "Unable to continue. Please try again.",
+      "offline_no_hash": "No offline password is stored on this device. Connect to the internet to login.",
+      "offline_incorrect": "Incorrect password.",
+      "offline_failed": "Offline login failed."
+    },
+    "register": {
+      "title": "Create an account",
+      "subtitle": "Start your BizTrack setup.",
+      "name_label": "Full name",
+      "phone_label": "Phone number",
+      "email_label": "Email (optional)",
+      "email_placeholder": "name@email.com",
+      "password_label": "Password",
+      "loading": "Creating...",
+      "continue": "Continue",
+      "have_account": "Already have an account?",
+      "login_link": "Sign in",
+      "error_default": "Unable to create account."
+    },
+    "password": {
+      "title": "Password",
+      "subtitle": "Enter your password to continue.",
+      "label": "Password",
+      "placeholder": "Your password",
+      "loading": "Signing in...",
+      "submit": "Sign in",
+      "error_default": "Incorrect password."
+    },
+    "login_otp": {
+      "title": "Login code",
+      "subtitle": "Enter the code sent by SMS or WhatsApp."
+    },
+    "verify_phone": {
+      "title": "Verify phone",
+      "subtitle": "Enter the code you received."
+    },
+    "verify_email": {
+      "title": "Verify email",
+      "subtitle": "Enter the code sent by email."
+    },
+    "otp": {
+      "code_label": "6-digit code",
+      "loading": "Verifying...",
+      "verify": "Verify",
+      "resend": "Resend code",
+      "resending": "Resending...",
+      "invalid": "Invalid code.",
+      "sent_to": "Enter the code sent to {target}."
+    },
+    "select_business": {
+      "title": "Choose a business",
+      "subtitle": "Select your working context.",
+      "loading": "Loading...",
+      "empty": "No business available.",
+      "fallback_name": "Business",
+      "choose": "Choose",
+      "load_error": "Unable to load businesses.",
+      "select_error": "Selection failed.",
+      "default_city": "Cameroon"
+    },
+    "setup_business": {
+      "title": "Your business",
+      "subtitle": "Let us complete the main information.",
+      "name_label": "Business name",
+      "city_label": "City",
+      "city_placeholder": "Douala",
+      "address_label": "Address",
+      "address_placeholder": "Akwa, Douala",
+      "loading": "Saving...",
+      "continue": "Continue",
+      "error_default": "Unable to save."
+    },
+    "select_plan": {
+      "title": "Choose a plan",
+      "subtitle": "Select a plan to activate your business.",
+      "loading": "Loading...",
+      "choose": "Choose",
+      "price": "{price} XAF / month",
+      "load_error": "Unable to load plans.",
+      "select_error": "Selection failed."
+    },
+    "invite": {
+      "title": "Invitation",
+      "subtitle": "You have received an invitation.",
+      "invalid": "Invitation is invalid or expired.",
+      "role_label": "Role",
+      "invited_by_label": "Invited by",
+      "team_name": "BizTrack team",
+      "accept": "Accept and create account",
+      "have_account": "I already have an account"
+    },
+    "first_product": {
+      "title": "First product",
+      "subtitle": "Add your first product to get started.",
+      "add": "Add a product",
+      "skip": "Skip for now"
+    }
+  }
+}

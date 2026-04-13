@@ -1,5 +1,8 @@
 import type { NextConfig } from "next"
+import createNextIntlPlugin from "next-intl/plugin"
 import { resolve } from "path"
+
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts")
 
 const nextConfig: NextConfig = {
   output: "export",
@@ -11,4 +14,4 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@biztrack/types", "@biztrack/utils", "@biztrack/ui"],
 }
 
-export default nextConfig
+export default withNextIntl(nextConfig)

@@ -8,11 +8,11 @@ export interface BadgeProps {
 
 export const Badge: React.FC<BadgeProps> = ({ variant = 'neutral', children, className = '' }) => {
   const variants = {
-    success: 'bg-green-100 text-green-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    danger: 'bg-red-100 text-red-800',
-    info: 'bg-blue-100 text-blue-800',
-    neutral: 'bg-gray-100 text-gray-800',
+    success: 'bg-success-50 text-success-600',
+    warning: 'bg-warning-50 text-warning-600',
+    danger: 'bg-danger-50 text-danger-600',
+    info: 'bg-info-50 text-info-600',
+    neutral: 'bg-secondary text-secondary-foreground',
   }
 
   return (

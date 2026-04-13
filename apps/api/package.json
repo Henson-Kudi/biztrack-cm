@@ -16,7 +16,8 @@
     "migration:run": "node -r tsconfig-paths/register ./node_modules/typeorm/cli-ts-node-commonjs.js migration:run -d src/database/data-source.ts",
     "migration:show": "node -r tsconfig-paths/register ./node_modules/typeorm/cli-ts-node-commonjs.js migration:show -d src/database/data-source.ts",
     "migration:revert": "node -r tsconfig-paths/register ./node_modules/typeorm/cli-ts-node-commonjs.js migration:revert -d src/database/data-source.ts",
-    "seed": "ts-node -r tsconfig-paths/register database/seeds/seed.ts"
+    "seed": "ts-node -r tsconfig-paths/register database/seeds/seed.ts",
+    "seed:plans": "ts-node -r tsconfig-paths/register src/database/seeds/seed-plan-configs.ts"
   },
   "dependencies": {
     "@biztrack/logger": "workspace:*",
@@ -37,6 +38,7 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.6",
     "dotenv": "^17.3.1",
     "ioredis": "^5.10.1",
     "nestjs-i18n": "^10.6.0",
@@ -57,8 +59,8 @@
     "@nestjs/schematics": "^10.2.3",
     "@nestjs/testing": "^10.4.15",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.6",
     "@types/express": "^5.0.0",
-    "@types/ioredis": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.2",
     "@types/passport-jwt": "^4.0.1",

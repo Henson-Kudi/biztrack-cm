@@ -16,6 +16,17 @@ const envSchema = z.object({
   API_PORT: z.preprocess((value) => Number(value), z.number().int().positive()).default(3001),
   API_URL: z.string().min(1),
   NEXT_PUBLIC_API_URL: z.string().min(1),
+  CORS_ORIGINS: z.string().optional(),
+  CORS_ALLOW_NULL_ORIGIN: z.preprocess(
+    (value) => (value === undefined ? undefined : String(value).toLowerCase()),
+    z.enum(['true', 'false']).optional(),
+  ),
+  REFRESH_COOKIE_NAME: z.string().optional(),
+  REFRESH_COOKIE_DOMAIN: z.string().optional(),
+  REFRESH_COOKIE_SAMESITE: z.preprocess(
+    (value) => (value === undefined ? undefined : String(value).toLowerCase()),
+    z.enum(['lax', 'strict', 'none']).optional(),
+  ),
   LOG_LEVEL: z.string().optional(),
   LOG_DIR: z.string().optional(),
   PASSWORD_SALT_ROUNDS: z.preprocess((value) => (value === undefined ? undefined : Number(value)), z.number().int().positive()).default(12),

@@ -1,0 +1,159 @@
+{
+  "app.title": "BizTrack CM",
+  "nav": {
+    "home": "Accueil",
+    "sell": "Vendre",
+    "products": "Produits",
+    "expenses": "Depenses",
+    "reports": "Rapports",
+    "settings": "Parametres"
+  },
+  "topbar": {
+    "last_sync": "Derniere synchro: il y a 2 min"
+  },
+  "app": {
+    "dashboard": {
+      "title": "Tableau de bord",
+      "subtitle": "Resume quotidien - bientot disponible.",
+      "logout": "Se deconnecter",
+      "logout_loading": "Deconnexion..."
+    },
+    "sell": {
+      "title": "Vendre",
+      "subtitle": "Ecran de vente - bientot disponible."
+    },
+    "products": {
+      "title": "Produits",
+      "subtitle": "Produits - bientot disponible."
+    },
+    "expenses": {
+      "title": "Depenses",
+      "subtitle": "Depenses - bientot disponible."
+    },
+    "reports": {
+      "title": "Rapports",
+      "subtitle": "Rapports - bientot disponible."
+    },
+    "settings": {
+      "title": "Parametres",
+      "subtitle": "Parametres - bientot disponible."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Bienvenue",
+      "subtitle_online": "Connectez-vous pour continuer.",
+      "subtitle_offline": "Mode hors ligne.",
+      "phone_mode": "Telephone",
+      "email_mode": "Email",
+      "phone_label": "Numero de telephone",
+      "email_label": "Adresse email",
+      "use_email": "Utiliser l'email",
+      "use_phone": "Utiliser le telephone",
+      "email_placeholder": "nom@email.com",
+      "password_label": "Mot de passe",
+      "password_placeholder": "Votre mot de passe",
+      "loading": "Chargement...",
+      "continue": "Continuer",
+      "offline_submit": "Acceder hors ligne",
+      "no_account": "Pas encore de compte ?",
+      "create_account": "Creer un compte",
+      "error_default": "Impossible de continuer. Reessayez.",
+      "offline_no_hash": "Aucun mot de passe hors ligne n'est enregistre sur cet appareil. Connectez-vous a internet pour vous connecter.",
+      "offline_incorrect": "Mot de passe incorrect.",
+      "offline_failed": "Connexion hors ligne impossible."
+    },
+    "register": {
+      "title": "Creer un compte",
+      "subtitle": "Commencez votre configuration BizTrack.",
+      "name_label": "Nom complet",
+      "phone_label": "Numero de telephone",
+      "email_label": "Email (optionnel)",
+      "email_placeholder": "nom@email.com",
+      "password_label": "Mot de passe",
+      "loading": "Creation...",
+      "continue": "Continuer",
+      "have_account": "Deja un compte ?",
+      "login_link": "Se connecter",
+      "error_default": "Impossible de creer le compte."
+    },
+    "password": {
+      "title": "Mot de passe",
+      "subtitle": "Entrez votre mot de passe pour continuer.",
+      "label": "Mot de passe",
+      "placeholder": "Votre mot de passe",
+      "loading": "Connexion...",
+      "submit": "Se connecter",
+      "error_default": "Mot de passe incorrect."
+    },
+    "login_otp": {
+      "title": "Code de connexion",
+      "subtitle": "Entrez le code envoye par SMS ou WhatsApp."
+    },
+    "verify_phone": {
+      "title": "Verifier le telephone",
+      "subtitle": "Entrez le code recu."
+    },
+    "verify_email": {
+      "title": "Verifier l'email",
+      "subtitle": "Entrez le code recu par email."
+    },
+    "otp": {
+      "code_label": "Code a 6 chiffres",
+      "loading": "Verification...",
+      "verify": "Verifier",
+      "resend": "Renvoyer le code",
+      "resending": "Renvoi...",
+      "invalid": "Code invalide.",
+      "sent_to": "Entrez le code envoye a {target}."
+    },
+    "select_business": {
+      "title": "Choisir un business",
+      "subtitle": "Selectionnez votre contexte de travail.",
+      "loading": "Chargement...",
+      "empty": "Aucun business disponible.",
+      "fallback_name": "Business",
+      "choose": "Choisir",
+      "load_error": "Impossible de charger les businesses.",
+      "select_error": "Selection impossible.",
+      "default_city": "Cameroun"
+    },
+    "setup_business": {
+      "title": "Votre business",
+      "subtitle": "Completons les informations principales.",
+      "name_label": "Nom du business",
+      "city_label": "Ville",
+      "city_placeholder": "Douala",
+      "address_label": "Adresse",
+      "address_placeholder": "Akwa, Douala",
+      "loading": "Sauvegarde...",
+      "continue": "Continuer",
+      "error_default": "Impossible de sauvegarder."
+    },
+    "select_plan": {
+      "title": "Choisir un plan",
+      "subtitle": "Selectionnez un plan pour activer votre business.",
+      "loading": "Chargement...",
+      "choose": "Choisir",
+      "price": "{price} XAF / mois",
+      "load_error": "Impossible de charger les plans.",
+      "select_error": "Selection impossible."
+    },
+    "invite": {
+      "title": "Invitation",
+      "subtitle": "Vous avez recu une invitation.",
+      "invalid": "Invitation invalide ou expiree.",
+      "role_label": "Role",
+      "invited_by_label": "Invite par",
+      "team_name": "Equipe BizTrack",
+      "accept": "Accepter et creer un compte",
+      "have_account": "J'ai deja un compte"
+    },
+    "first_product": {
+      "title": "Premier produit",
+      "subtitle": "Ajoutez votre premier produit pour demarrer.",
+      "add": "Ajouter un produit",
+      "skip": "Passer pour l'instant"
+    }
+  }
+}

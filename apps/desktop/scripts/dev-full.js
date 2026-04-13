@@ -1,7 +1,9 @@
 const { spawn } = require('child_process')
 const path = require('path')
+const dotenv = require('dotenv')
 
 const cwd = path.resolve(__dirname, '..')
+dotenv.config({ path: path.join(cwd, '.env') })
 
 const processes = []
 
@@ -30,9 +32,23 @@ const run = (label, command) => {
   processes.push(child)
 }
 
+const rendererPort = process.env.DESKTOP_RENDERER_PORT
+const rendererUrl =
+  process.env.DESKTOP_RENDERER_URL ||
+  (rendererPort ? `http://localhost:${rendererPort}` : undefined)
+
+if (!rendererUrl) {
+  console.error(
+    'Missing renderer URL. Set DESKTOP_RENDERER_URL or DESKTOP_RENDERER_PORT in apps/desktop/.env',
+  )
+  process.exit(1)
+}
+
+const nextPortArg = rendererPort ? `-p ${rendererPort}` : ''
+
 run('tsc', 'tsc -p tsconfig.electron.json -w')
-run('next', 'next dev -p 3000')
-run('electron', 'wait-on dist/electron/main.js http://localhost:3000 && electron .')
+run('next', `next dev ${nextPortArg}`.trim())
+run('electron', `wait-on dist/electron/main.js ${rendererUrl} && electron .`)
 
 process.on('SIGINT', () => {
   processes.forEach((proc) => proc && proc.kill && proc.kill())

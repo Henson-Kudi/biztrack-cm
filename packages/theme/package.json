@@ -1,0 +1,30 @@
+{
+  "name": "@biztrack/theme",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint . --max-warnings 0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@biztrack/eslint-config": "workspace:*",
+    "@biztrack/typescript-config": "workspace:*",
+    "@types/react": "^18.3.18",
+    "eslint": "^9.32.0",
+    "typescript": "^5.7.2"
+  }
+}

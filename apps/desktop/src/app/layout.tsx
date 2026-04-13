@@ -1,5 +1,7 @@
-import "./globals.css"
-import type { ReactNode } from "react"
+// @ts-ignore
+import './globals.css'
+import type { ReactNode } from 'react'
+import { Providers } from './providers'
 
 export const metadata = {
   title: "BizTrack CM",
@@ -8,8 +10,10 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   )
 }
