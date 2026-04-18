@@ -13,6 +13,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@biztrack/theme": "workspace:^",
     "@biztrack/types": "workspace:*",
     "@biztrack/utils": "workspace:*",
     "@biztrack/validators": "workspace:*",
@@ -27,9 +28,9 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.25.2",
     "@biztrack/eslint-config": "workspace:*",
     "@biztrack/typescript-config": "workspace:*",
-    "@babel/core": "^7.25.2",
     "@types/react": "~19.2.10",
     "eslint": "^9.32.0",
     "typescript": "^5.3.3"

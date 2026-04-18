@@ -1,0 +1,159 @@
+// BizTrack CM — Design System Tokens
+// Single source of truth for all color values across the monorepo
+// Web/Desktop apps consume these via tailwind.config.ts
+// Mobile app consumes these via ThemeProvider (React Native)
+
+export const colors = {
+  brand: {
+    50: '#E6F1FB',
+    100: '#B5D4F4',
+    200: '#85B7EB',
+    400: '#378ADD',
+    600: '#185FA5',
+    800: '#0C447C',
+    900: '#042C53',
+  },
+  neutral: {
+    50: '#F8F7F4',
+    100: '#EFEDE8',
+    200: '#D9D6CF',
+    300: '#C2BFB7',
+    400: '#8C8980',
+    500: '#6B6861',
+    600: '#4A4843',
+    700: '#343230',
+    800: '#1F1E1C',
+    900: '#111110',
+    950: '#0A0A09',
+  },
+  success: {
+    50: '#EAF3DE',
+    100: '#C0DD97',
+    400: '#639922',
+    600: '#3B6D11',
+    800: '#27500A',
+  },
+  warning: {
+    50: '#FAEEDA',
+    100: '#FAC775',
+    400: '#BA7517',
+    600: '#854F0B',
+    800: '#633806',
+  },
+  danger: {
+    50: '#FCEBEB',
+    100: '#F7C1C1',
+    400: '#E24B4A',
+    600: '#A32D2D',
+    800: '#791F1F',
+  },
+  info: {
+    50: '#EEEDFE',
+    100: '#CECBF6',
+    400: '#7F77DD',
+    600: '#534AB7',
+    800: '#3C3489',
+  },
+} as const
+
+// --- Semantic token sets for React Native (mobile) ---
+
+export const light = {
+  bg: {
+    base: colors.neutral[50],
+    surface: '#FFFFFF',
+    elevated: '#FFFFFF',
+    subtle: colors.neutral[100],
+    inverse: colors.brand[900],
+    brand: colors.brand[600],
+    brandHover: colors.brand[800],
+    brandMuted: colors.brand[50],
+    success: colors.success[50],
+    warning: colors.warning[50],
+    danger: colors.danger[50],
+    info: colors.info[50],
+  },
+  text: {
+    primary: colors.neutral[800],
+    secondary: colors.neutral[600],
+    muted: colors.neutral[400],
+    disabled: colors.neutral[300],
+    inverse: '#FFFFFF',
+    brand: colors.brand[600],
+    brandMuted: colors.brand[800],
+    success: colors.success[600],
+    warning: colors.warning[600],
+    danger: colors.danger[600],
+    info: colors.info[600],
+  },
+  border: {
+    default: colors.neutral[200],
+    subtle: colors.neutral[100],
+    strong: colors.neutral[300],
+    brand: colors.brand[400],
+    success: colors.success[100],
+    warning: colors.warning[100],
+    danger: colors.danger[100],
+    info: colors.info[100],
+  },
+  icon: {
+    default: colors.neutral[500],
+    muted: colors.neutral[400],
+    brand: colors.brand[600],
+    inverse: '#FFFFFF',
+    success: colors.success[600],
+    warning: colors.warning[600],
+    danger: colors.danger[600],
+  },
+}
+
+export const dark: typeof light = {
+  bg: {
+    base: colors.neutral[950],
+    surface: '#1C1C1B',
+    elevated: '#252523',
+    subtle: '#1C1C1B',
+    inverse: colors.brand[900],
+    brand: colors.brand[600],
+    brandHover: '#1F72C4',
+    brandMuted: '#0C1E33',
+    success: '#0D1F07',
+    warning: '#1F1100',
+    danger: '#200909',
+    info: '#0E0C24',
+  },
+  text: {
+    primary: '#F0EFE9',
+    secondary: colors.neutral[400],
+    muted: colors.neutral[500],
+    disabled: '#3D3C39',
+    inverse: colors.neutral[950],
+    brand: colors.brand[200],
+    brandMuted: colors.brand[100],
+    success: '#97C459',
+    warning: '#FAC775',
+    danger: '#F09595',
+    info: '#AFA9EC',
+  },
+  border: {
+    default: '#2E2D2A',
+    subtle: '#222221',
+    strong: '#3D3C39',
+    brand: colors.brand[600],
+    success: '#1D3A08',
+    warning: '#3A2000',
+    danger: '#3A0F0F',
+    info: '#1A1840',
+  },
+  icon: {
+    default: colors.neutral[400],
+    muted: colors.neutral[500],
+    brand: colors.brand[200],
+    inverse: colors.neutral[950],
+    success: '#97C459',
+    warning: '#FAC775',
+    danger: '#F09595',
+  },
+}
+
+export type Theme = typeof light
