@@ -13,7 +13,11 @@ export function unwrapApiResponse<T>(payload: ApiEnvelope<T> | T): T {
 }
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
-  return getApiErrorResponse(error)?.message ?? fallback
+  return (
+    getApiErrorResponse(error)?.message ??
+    (error instanceof Error ? error.message : undefined) ??
+    fallback
+  )
 }
 
 export function getApiErrorDetails<T>(error: unknown): T | undefined {

@@ -72,6 +72,8 @@ export interface I18nTranslations {
     inventory_insufficient_stock: string
     unit_of_measure_exists: string
     unit_of_measure_not_found: string
+    unit_of_measure_in_use: string
+    unit_of_measure_system_immutable: string
   }
   plans: {
     selected: string

@@ -11,9 +11,7 @@ const nextConfig: NextConfig = {
   distDir: "dist/next",
   assetPrefix: isProd ? "./" : undefined,
   images: { unoptimized: true },
-  experimental: {
-    outputFileTracingRoot: resolve(__dirname, "../../"),
-  },
+  outputFileTracingRoot: resolve(__dirname, "../../"),
   transpilePackages: ["@biztrack/types", "@biztrack/utils", "@biztrack/ui"],
 }
 

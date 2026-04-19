@@ -1,23 +1,32 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import type { Logger, LogMetadata } from '@biztrack/logger'
-import type { CreateUnitOfMeasureRequest, UnitOfMeasuresQuery } from '@biztrack/types'
+import type {
+  CreateUnitOfMeasureRequest,
+  UnitOfMeasuresQuery,
+  UpdateUnitOfMeasureRequest,
+} from '@biztrack/types'
 import { I18nService } from 'nestjs-i18n'
-import { Brackets, Repository } from 'typeorm'
+import { Brackets, IsNull, Repository } from 'typeorm'
 import { AppException } from '@/common/exceptions/app.exception'
 import {
+  AppBadRequestException,
   AppConflictException,
   AppInternalServerException,
+  AppNotFoundException,
 } from '@/common/exceptions/app-exceptions'
 import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
 import { UnitOfMeasure } from '@/entities/unit-of-measure.entity'
+import { Product } from '@/entities/product.entity'
 
 @Injectable()
 export class UnitOfMeasuresService {
   constructor(
     @InjectRepository(UnitOfMeasure)
     private readonly unitsRepo: Repository<UnitOfMeasure>,
+    @InjectRepository(Product)
+    private readonly productsRepo: Repository<Product>,
     private readonly i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
@@ -32,7 +41,8 @@ export class UnitOfMeasuresService {
       const skip = (page - 1) * limit
       const qb = this.unitsRepo
         .createQueryBuilder('uom')
-        .where(
+        .where('uom.deleted_at IS NULL')
+        .andWhere(
           new Brackets((builder) => {
             builder.where('uom.business_id IS NULL').orWhere('uom.business_id = :businessId', {
               businessId,
@@ -86,11 +96,111 @@ export class UnitOfMeasuresService {
         abbreviation: dto.abbreviation.trim(),
         type: dto.type,
         isDefault: false,
+        isActive: true,
       })
       return this.unitsRepo.save(unit)
     } catch (error) {
       return this.handleServiceError('create', error, { businessId, name: dto.name })
     }
+  }
+
+  async update(id: string, businessId: string, dto: UpdateUnitOfMeasureRequest) {
+    try {
+      const unit = await this.findEditableById(id, businessId)
+      const name = dto.name?.trim() ?? unit.name
+      const abbreviation = dto.abbreviation?.trim() ?? unit.abbreviation
+      const type = dto.type ?? unit.type
+
+      if (!name) {
+        throw new AppBadRequestException(
+          await this.i18n.translate('errors.validation_failed'),
+          'UNIT_OF_MEASURE_NAME_REQUIRED',
+        )
+      }
+
+      if (dto.name && dto.name.trim().toLowerCase() !== unit.name.trim().toLowerCase()) {
+        const existing = await this.unitsRepo
+          .createQueryBuilder('uom')
+          .withDeleted()
+          .where('uom.business_id = :businessId', { businessId })
+          .andWhere('LOWER(uom.name) = LOWER(:name)', { name })
+          .andWhere('uom.id <> :id', { id })
+          .getOne()
+
+        if (existing) {
+          throw new AppConflictException(
+            await this.i18n.translate('errors.unit_of_measure_exists'),
+            'UNIT_OF_MEASURE_EXISTS',
+          )
+        }
+      }
+
+      await this.unitsRepo.update(id, {
+        name,
+        abbreviation,
+        type,
+        isActive: dto.isActive ?? unit.isActive,
+      })
+
+      return this.findEditableById(id, businessId)
+    } catch (error) {
+      return this.handleServiceError('update', error, { id, businessId })
+    }
+  }
+
+  async remove(id: string, businessId: string): Promise<void> {
+    try {
+      await this.findEditableById(id, businessId)
+      const productCount = await this.productsRepo.count({
+        where: {
+          businessId,
+          unitOfMeasureId: id,
+          deletedAt: IsNull(),
+        },
+      })
+
+      if (productCount > 0) {
+        throw new AppConflictException(
+          await this.i18n.translate('errors.unit_of_measure_in_use'),
+          'UNIT_OF_MEASURE_IN_USE',
+          { productCount },
+        )
+      }
+
+      await this.unitsRepo
+        .createQueryBuilder()
+        .update(UnitOfMeasure)
+        .set({
+          isActive: false,
+          deletedAt: new Date(),
+        })
+        .where('id = :id', { id })
+        .execute()
+    } catch (error) {
+      return this.handleServiceError('remove', error, { id, businessId })
+    }
+  }
+
+  private async findEditableById(id: string, businessId: string) {
+    const unit = await this.unitsRepo.findOne({
+      where: { id, businessId, deletedAt: IsNull() },
+    })
+
+    if (!unit) {
+      throw new AppNotFoundException(
+        await this.i18n.translate('errors.unit_of_measure_not_found'),
+        'UNIT_OF_MEASURE_NOT_FOUND',
+      )
+    }
+
+    if (unit.isDefault || !unit.businessId) {
+      throw new AppBadRequestException(
+        await this.i18n.translate('errors.unit_of_measure_system_immutable'),
+        'UNIT_OF_MEASURE_SYSTEM_IMMUTABLE',
+      )
+    }
+
+    return unit
   }
 
   private async handleServiceError(

@@ -64,7 +64,7 @@ export class InventoryAlertsProcessor extends WorkerHost {
           sourceJobId: job.id ?? null,
         },
         {
-          jobId: `${INVENTORY_LOW_STOCK_DISPATCH_JOB}:${businessId}:${dayKey}`,
+          jobId: `${INVENTORY_LOW_STOCK_DISPATCH_JOB}-${businessId}-${dayKey}`,
         },
       )
     }

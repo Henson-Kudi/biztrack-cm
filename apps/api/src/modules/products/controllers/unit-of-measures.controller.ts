@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Resource } from '@biztrack/types'
 import type { JwtPayload, PaginatedResult, UnitOfMeasure } from '@biztrack/types'
@@ -8,6 +8,7 @@ import { Phase2Guard } from '@/modules/auth/guards/phase2.guard'
 import { RequireResource, ResourceGuard } from '@/modules/permissions/guards/resource.guard'
 import { ListUnitOfMeasuresQueryDto } from '../dto/list-unit-of-measures-query.dto'
 import { CreateUnitOfMeasureDto } from '../dto/create-unit-of-measure.dto'
+import { UpdateUnitOfMeasureDto } from '../dto/update-unit-of-measure.dto'
 import { UnitOfMeasureDto } from '../dto/unit-of-measure-response.dto'
 import { UnitOfMeasuresService } from '../services/unit-of-measures.service'
 
@@ -44,5 +45,28 @@ export class UnitOfMeasuresController {
         await this.unitOfMeasuresService.create(user.businessId as string, dto),
       )!,
     )
+  }
+
+  @Patch(':id')
+  @RequireResource(Resource.PRODUCTS_EDIT)
+  @ApiOperation({ summary: 'Update a custom unit of measure' })
+  async update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateUnitOfMeasureDto,
+  ): Promise<UnitOfMeasure> {
+    return serializeDto(
+      UnitOfMeasureDto.fromEntity(
+        await this.unitOfMeasuresService.update(id, user.businessId as string, dto),
+      )!,
+    )
+  }
+
+  @Delete(':id')
+  @RequireResource(Resource.PRODUCTS_DELETE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a custom unit of measure' })
+  remove(@CurrentUser() user: JwtPayload, @Param('id') id: string): Promise<void> {
+    return this.unitOfMeasuresService.remove(id, user.businessId as string)
   }
 }

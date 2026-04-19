@@ -23,6 +23,7 @@ export interface ProductCategory {
   icon?: string | null
   imageUrl?: string | null
   sortOrder?: number
+  isActive?: boolean
   createdAt: IsoDateString
   updatedAt: IsoDateString
 }
@@ -34,6 +35,10 @@ export interface UnitOfMeasure {
   businessId?: string | null
   type: UnitOfMeasureType | null
   isDefault: boolean
+  isActive?: boolean
+  createdAt?: IsoDateString
+  updatedAt?: IsoDateString
+  deletedAt?: IsoDateString | null
 }
 
 export interface ProductImage {
@@ -116,9 +121,12 @@ export interface CreateCategoryRequest {
   icon?: string
   imageUrl?: string
   sortOrder?: number
+  isActive?: boolean
 }
 
-export interface UpdateCategoryRequest extends Partial<CreateCategoryRequest> {}
+export interface UpdateCategoryRequest extends Partial<CreateCategoryRequest> {
+  isActive?: boolean
+}
 
 export interface ProductImagesQuery extends ListQuery {}
 
@@ -136,6 +144,10 @@ export interface CreateUnitOfMeasureRequest {
   name: string
   abbreviation: string
   type: UnitOfMeasureType
+}
+
+export interface UpdateUnitOfMeasureRequest extends Partial<CreateUnitOfMeasureRequest> {
+  isActive?: boolean
 }
 
 export interface LowStockProduct {

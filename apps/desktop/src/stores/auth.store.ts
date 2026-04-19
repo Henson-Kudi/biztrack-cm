@@ -3,12 +3,25 @@
 import { create } from 'zustand'
 import type { AuthTokens, BusinessMemberRole, JwtPayload } from '@biztrack/types'
 import { decodeJwtPayload } from '@/lib/jwt'
+import { ipc } from '@/services/ipc.bridge'
 import { secureStore } from '@/services/secure-store'
 
 const TOKENS_KEY = 'auth.tokens'
 const PASSWORD_HASH_KEY = 'auth.passwordHash'
 const LAST_BUSINESS_KEY = 'auth.lastBusinessId'
 const LAST_ROLE_KEY = 'auth.lastRole'
+
+async function nudgeDesktopSync() {
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    return
+  }
+
+  try {
+    await ipc.sync.nudge()
+  } catch {
+    // Auth changes should not fail if the desktop sync runtime is temporarily unavailable.
+  }
+}
 
 type TokenType = 'phase1' | 'phase2'
 
@@ -71,6 +84,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       role,
       isOffline: false,
     })
+
+    await nudgeDesktopSync()
   },
   setOfflineSession: (businessId, role) => {
     set({
@@ -81,6 +96,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accessToken: null,
       refreshToken: null,
     })
+
+    void nudgeDesktopSync()
   },
   clearSession: async () => {
     await secureStore.delete(TOKENS_KEY)
@@ -92,6 +109,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       businessId: null,
       role: null,
     })
+
+    await nudgeDesktopSync()
   },
   hydrate: async () => {
     const stored = await secureStore.get(TOKENS_KEY)

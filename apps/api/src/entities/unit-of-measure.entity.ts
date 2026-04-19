@@ -6,7 +6,7 @@ import {
   ManyToOne,
   OneToMany,
 } from 'typeorm'
-import { ImmutableBaseEntity } from '@/common/entities/immutable-base.entity'
+import { BaseEntity } from '@/common/entities/base.entity'
 import { UnitOfMeasureType } from '@biztrack/types'
 import { Business } from './business.entity'
 import { Product } from './product.entity'
@@ -23,7 +23,7 @@ export { UnitOfMeasureType as UomType }
   unique: true,
   where: '"business_id" IS NOT NULL',
 })
-export class UnitOfMeasure extends ImmutableBaseEntity {
+export class UnitOfMeasure extends BaseEntity {
   @Column({ name: 'business_id', nullable: true })
   businessId?: string | null
 
@@ -42,6 +42,9 @@ export class UnitOfMeasure extends ImmutableBaseEntity {
 
   @Column({ name: 'is_default', default: false })
   isDefault!: boolean
+
+  @Column({ name: 'is_active', default: true })
+  isActive!: boolean
 
   @OneToMany(() => Product, (product) => product.unitOfMeasure)
   products?: Product[]

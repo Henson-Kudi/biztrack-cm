@@ -26,6 +26,8 @@ export interface PhoneInputProps
 
 const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
   ({ className, value, onChange, ...props }, ref) => {
+    const PhoneInputPrimitive = PhoneInputBase as unknown as React.ComponentType<any>
+
     return (
       <div
         className={cn(
@@ -33,7 +35,7 @@ const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
           className,
         )}
       >
-        <PhoneInputBase
+        <PhoneInputPrimitive
           {...props}
           ref={ref as any}
           international

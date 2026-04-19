@@ -1,9 +1,11 @@
 const { spawn } = require('child_process')
+const fs = require('fs')
 const path = require('path')
 const dotenv = require('dotenv')
 
 const cwd = path.resolve(__dirname, '..')
 dotenv.config({ path: path.join(cwd, '.env') })
+fs.rmSync(path.join(cwd, 'dist', 'electron'), { recursive: true, force: true })
 
 const processes = []
 
@@ -48,7 +50,10 @@ const nextPortArg = rendererPort ? `-p ${rendererPort}` : ''
 
 run('tsc', 'tsc -p tsconfig.electron.json -w')
 run('next', `next dev ${nextPortArg}`.trim())
-run('electron', `wait-on dist/electron/main.js ${rendererUrl} && electron .`)
+run(
+  'electron',
+  `wait-on dist/electron/main.js dist/electron/preload.js ${rendererUrl} && electron .`,
+)
 
 process.on('SIGINT', () => {
   processes.forEach((proc) => proc && proc.kill && proc.kill())

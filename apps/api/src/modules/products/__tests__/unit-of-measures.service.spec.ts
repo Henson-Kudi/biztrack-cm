@@ -18,6 +18,10 @@ const makeService = () => {
     create: jest.fn((input) => input),
     save: jest.fn(async (input) => ({ id: 'uom-1', ...input })),
   }
+
+  const productsRepo = {
+    count: jest.fn(),
+  }
   const i18n = { translate: jest.fn(async (key: string) => key) }
   const logger = {
     setContext: jest.fn(),
@@ -25,7 +29,7 @@ const makeService = () => {
     error: jest.fn(),
   }
 
-  const service = new UnitOfMeasuresService(unitsRepo as any, i18n as any, logger as any)
+  const service = new UnitOfMeasuresService(unitsRepo as any, productsRepo as any, i18n as any, logger as any)
 
   return {
     service,

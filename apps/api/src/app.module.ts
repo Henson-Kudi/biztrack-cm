@@ -27,12 +27,13 @@ import { QueuesModule } from './common/queues/queues.module'
 import { RedisModule } from './common/redis/redis.module'
 import { UserLocaleResolver } from './common/resolvers/user-locale.resolver'
 import { User } from './entities/user.entity'
-import { BullModule } from '@nestjs/bullmq'
+import { HealthController } from './health.controller'
 
 const entitiesPath = join(__dirname, '**', '*.entity.{ts,js}').replace(/\\/g, '/')
 const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').replace(/\\/g, '/')
 
 @Module({
+  controllers: [HealthController],
   imports: [
     LoggerModule,
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
@@ -68,17 +69,6 @@ const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').r
         synchronize: false,
         logging: config.get('NODE_ENV', { infer: true }) === NodeEnv.DEVELOPMENT,
       }),
-    }),
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory(config: ConfigService<AppConfig>) {
-        return {
-          connection: {
-            url: config.get('REDIS_URL', { infer: true }),
-          }
-        }
-      },
     }),
     AuthModule,
     UsersModule,

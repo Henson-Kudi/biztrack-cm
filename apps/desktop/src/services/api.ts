@@ -4,8 +4,10 @@ import { createHttpClient, type RequestConfig } from '@biztrack/http-client/brow
 import type { TokensResponse } from '@biztrack/types'
 import { useAuthStore } from '@/stores/auth.store'
 import { type ApiEnvelope, unwrapApiResponse } from './api-response'
+import { secureStore } from './secure-store'
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+const TOKENS_KEY = 'auth.tokens'
 
 export const api = createHttpClient({
   baseURL,
@@ -13,11 +15,25 @@ export const api = createHttpClient({
   withCredentials: true,
 })
 
-api.interceptors.request.use((config) => {
+async function getStoredTokens() {
+  const raw = await secureStore.get(TOKENS_KEY)
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as { accessToken?: string; refreshToken?: string }
+  } catch {
+    return null
+  }
+}
+
+api.interceptors.request.use(async (config) => {
   if ((config.headers as any)?.['x-skip-auth']) {
     return config
   }
-  const token = useAuthStore.getState().accessToken
+  const stored = await getStoredTokens()
+  const token = stored?.accessToken ?? useAuthStore.getState().accessToken
   if (token) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
@@ -41,7 +57,8 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const refreshToken = useAuthStore.getState().refreshToken
+    const stored = await getStoredTokens()
+    const refreshToken = stored?.refreshToken ?? useAuthStore.getState().refreshToken
     const url = original.url ?? ''
     const isAuthRequest = url.includes('/auth/') || url.includes('/invites/')
     if (error.response?.status === 401 && !isAuthRequest) {

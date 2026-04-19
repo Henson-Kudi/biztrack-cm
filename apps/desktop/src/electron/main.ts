@@ -13,6 +13,7 @@ import { registerSecureStoreIpc } from './ipc/secure-store.ipc'
 const isDev = !app.isPackaged
 
 let networkService: NetworkService | null = null
+let syncService: SyncService | null = null
 
 function getSystemTheme() {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
@@ -57,11 +58,11 @@ function createWindow() {
   win.once('ready-to-show', () => win.show())
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const databaseService = new DatabaseService()
   networkService = new NetworkService()
-  const syncService = new SyncService(networkService)
   const secureStoreService = new SecureStoreService()
+  syncService = new SyncService(networkService, databaseService, secureStoreService)
 
   registerDatabaseIpc(databaseService)
   registerSyncIpc(syncService)
@@ -78,6 +79,7 @@ app.whenReady().then(() => {
   })
 
   networkService.start()
+  await syncService.start()
 
   createWindow()
 
@@ -92,5 +94,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   networkService?.stop()
+  syncService?.stop()
   if (process.platform !== 'darwin') app.quit()
 })

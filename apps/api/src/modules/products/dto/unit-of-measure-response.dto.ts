@@ -1,5 +1,6 @@
 import type { UnitOfMeasure } from '@biztrack/types'
 import { UnitOfMeasure as UnitOfMeasureEntity } from '@/entities'
+import { toIsoString } from '@/common/http/serialization'
 
 export class UnitOfMeasureDto implements UnitOfMeasure {
   id!: string
@@ -8,6 +9,10 @@ export class UnitOfMeasureDto implements UnitOfMeasure {
   businessId?: string | null
   type!: UnitOfMeasure['type']
   isDefault!: boolean
+  isActive?: boolean
+  createdAt?: string
+  updatedAt?: string
+  deletedAt?: string | null
 
   static fromEntity(entity?: UnitOfMeasureEntity | null): UnitOfMeasureDto | null {
     if (!entity) return null
@@ -19,6 +24,10 @@ export class UnitOfMeasureDto implements UnitOfMeasure {
     dto.businessId = entity.businessId ?? null
     dto.type = entity.type
     dto.isDefault = entity.isDefault ?? false
+    dto.isActive = entity.isActive
+    dto.createdAt = toIsoString(entity.createdAt) ?? ''
+    dto.updatedAt = toIsoString(entity.updatedAt) ?? ''
+    dto.deletedAt = toIsoString(entity.deletedAt) ?? null
     return dto
   }
 }

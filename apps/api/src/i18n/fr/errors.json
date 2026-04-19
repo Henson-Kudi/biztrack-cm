@@ -28,6 +28,8 @@
   "inventory_insufficient_stock": "Stock insuffisant pour cet ajustement.",
   "unit_of_measure_exists": "Une unitÃƒÂ© de mesure avec ce nom existe dÃƒÂ©jÃƒÂ .",
   "unit_of_measure_not_found": "UnitÃƒÂ© de mesure introuvable.",
+  "unit_of_measure_in_use": "UnitÃƒÂ© de mesure en cours d'utilisation.",
+  "unit_of_measure_system_immutable": "Les unitÃƒÂ©s de mesure systÃƒÂ¨me ne peuvent pas ÃƒÂªtre modifiÃƒÂ©es ou supprimÃƒÂ©es.",
   "validation_failed": "DonnÃƒÂ©es invalides.",
   "server_error": "Une erreur est survenue. Veuillez rÃƒÂ©essayer.",
   "rate_limited": "Trop de requÃƒÂªtes. RÃƒÂ©essayez dans {seconds} secondes."

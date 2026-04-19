@@ -3,13 +3,71 @@
     "home": "Accueil",
     "sell": "Vendre",
     "products": "Produits",
+    "categories": "Categories",
+    "units_of_measure": "Unites de mesure",
+    "inventory": "Stock",
     "expenses": "Depenses",
     "reports": "Rapports",
     "settings": "Parametres"
   },
   "topbar": {
-    "last_sync": "Derniere synchro: il y a 2 min"
-  },
+    "last_sync": "Derniere synchro : {time}",
+    "never": "Jamais",
+      "quality_label": "Connexion : {quality}",
+      "status_label": "Synchro : {status}",
+      "pending_label": "En attente : {count}",
+      "realtime_label": "Transport : {mode} ({status})",
+      "realtime_badge": "Canal live",
+      "realtime_status_label": "Canal live : {mode} ({status})",
+      "auto_sync_on": "Auto-sync active",
+      "auto_sync_off": "Auto-sync inactive",
+    "auto_sync_label": "Auto-sync",
+    "auto_sync_enable": "Activer",
+    "auto_sync_disable": "Desactiver",
+    "auto_sync_help_on": "BizTrack se synchronise en arriere-plan quand la connexion est suffisante.",
+    "auto_sync_help_off": "Les changements restent locaux jusqu'a une synchro manuelle ou la reactivation de l'auto-sync.",
+    "auto_sync_warning": "L'auto-sync est inactive sur cet appareil. Si vous utilisez plus d'un appareil, les donnees peuvent ne pas rester a jour tant que vous ne synchronisez pas manuellement.",
+    "sync_now": "Synchroniser",
+    "syncing": "Synchronisation...",
+    "settings_title": "Preferences de synchro",
+    "settings_description": "Ces preferences sont enregistrees uniquement sur cet appareil.",
+    "min_quality_label": "Demarrer l'auto-sync quand la connexion est",
+    "min_quality_help": "La synchro en arriere-plan demarre quand cet appareil atteint une connexion {quality}.",
+    "min_quality_disabled": "Reactivez l'auto-sync pour choisir quand la synchro en arriere-plan demarre.",
+    "desktop_only_title": "Application desktop",
+    "desktop_only_subtitle": "Les preferences de synchro sont disponibles dans l'application desktop installee.",
+    "theme_to_light": "Passer au mode clair",
+    "theme_to_dark": "Passer au mode sombre",
+    "user_fallback": "Membre de l'equipe",
+    "quality": {
+      "offline": "Hors ligne",
+      "weak": "Faible",
+      "fair": "Correcte",
+      "strong": "Bonne",
+      "very_strong": "Tres bonne"
+    },
+      "status": {
+        "idle": "Au repos",
+        "syncing": "En cours",
+        "synced": "Synchronise",
+        "error": "Attention requise",
+        "paused": "En pause",
+        "disabled": "Desactive"
+      },
+      "realtime": {
+        "mode": {
+          "disabled": "Arret",
+          "fallback": "Polling de secours",
+          "realtime": "Websocket live"
+        },
+        "status": {
+          "disconnected": "Deconnecte",
+          "connecting": "Connexion",
+          "connected": "Connecte",
+          "reconnecting": "Reconnexion"
+        }
+      }
+    },
   "app": {
     "title": "BizTrack Desktop",
     "dashboard": {
@@ -23,8 +81,516 @@
       "subtitle": "Ecran de vente - bientot disponible."
     },
     "products": {
-      "title": "Produits",
-      "subtitle": "Produits - bientot disponible."
+      "eyebrow": "Catalogue",
+      "title": "Catalogue produits",
+      "subtitle": "Ajoutez des produits, parcourez le catalogue et reperez rapidement les articles en manque.",
+      "actions": {
+        "back": "Retour",
+        "add_product": "Ajouter un produit",
+        "add_category": "Ajouter une categorie",
+        "add_unit": "Ajouter une unite",
+        "refresh": "Actualiser",
+        "update_product": "Modifier le produit",
+        "update_category": "Modifier la categorie",
+        "update_unit": "Modifier l'unite",
+        "restock": "Reapprovisionner",
+        "more_actions": "Plus d'actions",
+        "activate": "Activer",
+        "deactivate": "Desactiver",
+        "mark_inactive": "Rendre inactif",
+        "delete": "Supprimer",
+        "undo_delete": "Annuler la suppression",
+        "deleting": "Suppression..."
+      },
+      "metrics": {
+        "total_products": "Produits",
+        "total_products_hint": "Produits actifs et inactifs du catalogue.",
+        "low_stock": "Stock faible",
+        "low_stock_hint": "Produits au niveau ou en dessous du seuil.",
+        "categories": "Categories",
+        "categories_hint": "Groupes disponibles pour ce business.",
+        "units": "Unites",
+        "units_hint": "Unites systeme et unites personnalisees."
+      },
+      "list": {
+        "title": "Tous les produits",
+        "description": "Filtrez le catalogue complet dans un tableau puis ouvrez un produit pour voir ses details.",
+        "back_to_recent": "Retour aux produits recents",
+        "uncategorized": "Sans categorie",
+        "no_unit": "Sans unite",
+        "price": "Prix",
+        "stock": "Stock",
+        "sku": "SKU",
+        "barcode": "Code-barres",
+        "threshold": "Seuil",
+        "not_tracked": "Non suivi"
+      },
+      "recent": {
+        "title": "Produits recents",
+        "description": "Les cinq produits mis a jour le plus recemment dans ce business.",
+        "cta_title": "Besoin du catalogue complet ?",
+        "cta_description": "Ouvrez la vue tableau complete pour filtrer, paginer et retrouver un produit plus vite.",
+        "cta_link": "Voir tous les produits",
+        "empty_title": "Aucun produit recent",
+        "empty_description": "Ajoutez votre premier produit pour commencer a constituer le catalogue de ce business."
+      },
+      "filters": {
+        "search": "Recherche",
+        "search_placeholder": "Rechercher par nom, SKU ou code-barres",
+        "category": "Categorie",
+        "all_categories": "Toutes les categories",
+        "activity": "Statut",
+        "all_statuses": "Tous les statuts",
+        "search_statuses": "Rechercher un statut",
+        "no_statuses": "Aucun statut correspondant.",
+        "active_only": "Actifs seulement",
+        "inactive_only": "Inactifs seulement",
+        "product_type": "Type",
+        "all_types": "Tous les types",
+        "search_types": "Rechercher un type",
+        "no_types": "Aucun type correspondant.",
+        "tracked_only": "Stock suivi",
+        "services_only": "Services"
+      },
+      "badges": {
+        "active": "Actif",
+        "inactive": "Inactif",
+        "service": "Service",
+        "product": "Physique",
+        "tracked": "Suivi",
+        "untracked": "Non suivi",
+        "low_stock": "Stock faible"
+      },
+      "empty": {
+        "title": "Aucun produit trouve",
+        "description": "Essayez un autre filtre ou ouvrez Ajouter un produit pour creer votre premier article."
+      },
+      "form": {
+        "title": "Ajouter un produit",
+        "description": "Commencez avec l'essentiel. Vous pourrez ajuster les details et les regles de stock ensuite.",
+        "update_title": "Modifier le produit",
+        "update_description": "Mettez a jour les informations catalogue de ce produit sans quitter l'espace de travail.",
+        "close": "Fermer la boite de dialogue",
+        "cancel": "Annuler",
+        "fields": {
+          "name": "Nom du produit",
+          "description": "Description",
+          "selling_price": "Prix de vente",
+          "cost_price": "Prix de revient",
+          "sku": "SKU",
+          "barcode": "Code-barres",
+          "category": "Categorie",
+          "unit": "Unite de mesure",
+          "opening_stock": "Stock initial",
+          "low_stock_threshold": "Seuil de stock faible",
+          "tax_rate": "Taux de taxe (%)",
+          "image_url": "URL de l'image",
+          "is_service": "Ce produit est un service",
+          "track_inventory": "Suivre le stock pour ce produit",
+          "is_active": "Produit actif"
+        },
+        "placeholders": {
+          "description": "Note de vente ou rappel interne",
+          "sku": "Laisser vide pour une generation automatique",
+          "barcode": "Optionnel. Doit etre valide s'il est renseigne",
+          "image_url": "https://"
+        },
+        "tooltips": {
+          "track_inventory": "Activez ceci pour les produits physiques afin que BizTrack suive le stock, les seuils bas et les reapprovisionnements.",
+          "track_inventory_disabled_service": "Impossible de suivre le stock pour les services."
+        },
+        "select_category": "Choisir une categorie",
+        "search_categories": "Rechercher une categorie",
+        "no_categories": "Aucune categorie correspondante.",
+        "loading_options": "Chargement des options...",
+        "load_more": "Charger plus",
+        "search_units": "Rechercher une unite de mesure",
+        "no_units": "Aucune unite correspondante.",
+        "unit_types": {
+          "quantity": "Quantite",
+          "weight": "Poids",
+          "volume": "Volume",
+          "length": "Longueur",
+          "custom": "Personnalisee",
+          "generic": "Unite"
+        },
+        "all_categories": "Aucune categorie",
+        "select_unit": "Choisir une unite",
+        "success": "Produit cree avec succes.",
+        "update_success": "Produit mis a jour avec succes.",
+        "submitting": "Creation du produit...",
+        "updating": "Enregistrement des modifications...",
+        "submit": "Creer le produit",
+        "update_submit": "Enregistrer les modifications"
+      },
+      "low_stock": {
+        "title": "Attention requise",
+        "description": "Vue rapide des produits deja en dessous de leur seuil configure.",
+        "empty": "Aucun produit en stock faible pour le moment."
+      },
+      "pagination": {
+        "page_label": "Page {page} sur {totalPages}",
+        "previous": "Precedent",
+        "next": "Suivant"
+      },
+      "table": {
+        "product": "Produit",
+        "category": "Categorie",
+        "unit": "Unite",
+        "status": "Statut",
+        "price": "Prix",
+        "stock": "Stock",
+        "updated": "Mis a jour",
+        "no_identifier": "Aucun SKU ni code-barres"
+      },
+      "detail": {
+        "title": "Details du produit",
+        "back_to_recent": "Produits recents",
+        "back_to_list": "Tous les produits",
+        "inactive_state": "Deja inactif",
+        "no_description": "Aucune description n'a encore ete ajoutee pour ce produit.",
+        "not_found_title": "Produit introuvable",
+        "not_found_description": "BizTrack n'a pas trouve ce produit dans le catalogue local de ce business.",
+        "metrics": {
+          "price": "Prix de vente",
+          "stock": "Stock actuel",
+          "threshold": "Seuil de stock faible",
+          "updated": "Derniere mise a jour"
+        },
+        "overview_title": "Vue d'ensemble",
+        "overview_description": "Les informations principales du produit utilisees par l'equipe pour la vente et le catalogue.",
+        "inventory_title": "Profil de stock",
+        "inventory_description": "Les details de suivi et d'identification de ce produit.",
+        "movements_description": "Les mouvements recents de stock et les ajustements d'inventaire pour ce produit.",
+        "inventory_disabled_title": "Le suivi de stock est desactive",
+        "inventory_disabled_description": "Activez le suivi de stock dans les parametres du produit si cet article doit participer au suivi des quantites.",
+        "enable_tracking": "Activer le suivi dans les parametres du produit",
+        "copy_value": "Copier la valeur",
+        "copy_success": "{label} copie.",
+        "copy_failed": "Impossible de copier cette valeur.",
+        "delete_confirm": "Supprimer ce produit du catalogue local ?",
+        "delete_success": "Produit supprime.",
+        "inactive_success": "Produit marque comme inactif.",
+        "fields": {
+          "category": "Categorie",
+          "unit": "Unite de mesure",
+          "sku": "SKU",
+          "barcode": "Code-barres",
+          "cost_price": "Prix de revient",
+          "tax_rate": "Taux de taxe",
+          "created_at": "Cree le",
+          "updated_at": "Mis a jour le",
+          "current_stock": "Stock actuel",
+          "low_stock_threshold": "Seuil de stock faible",
+          "reorder_point": "Point de commande",
+          "barcode_type": "Type de code-barres",
+          "slug": "Slug"
+        }
+      },
+      "categories_page": {
+        "title": "Categories",
+        "description": "Consultez comment les produits sont regroupes dans le catalogue.",
+        "views": {
+          "list": "Liste",
+          "grid": "Grille"
+        },
+        "search_placeholder": "Rechercher par nom de categorie",
+        "summary": "{total} categories, {uncategorized} produits sans categorie",
+        "empty_title": "Aucune categorie",
+        "empty_description": "Les categories apparaitront ici des qu'elles seront disponibles dans ce business.",
+        "no_icon": "Aucune icone",
+        "product_count": "{count} produits",
+        "badges": {
+          "active": "Actif",
+          "inactive": "Inactif"
+        },
+        "metrics": {
+          "total": "Categories",
+          "total_hint": "Groupes de catalogue disponibles dans ce business.",
+          "assigned": "Produits assignes",
+          "assigned_hint": "Produits actuellement lies a une categorie.",
+          "uncategorized": "Sans categorie",
+          "uncategorized_hint": "Produits qui ont encore besoin d'une categorie."
+        },
+        "fields": {
+          "products": "Produits",
+          "sort_order": "Ordre de tri",
+          "updated_at": "Mis a jour"
+        },
+        "active_success": "Categorie activee.",
+        "inactive_success": "Categorie desactivee.",
+        "delete_confirm": "Supprimer cette categorie ? Cette action est irreversible. Contactez un super admin si vous avez besoin d'aide pour la restaurer.",
+        "delete_confirm_super_admin": "Supprimer cette categorie ? Cette action est irreversible depuis la liste, mais vous pourrez annuler la suppression juste apres.",
+        "delete_success": "Categorie supprimee.",
+        "undo_delete_success": "Categorie restauree.",
+        "create_title": "Ajouter une categorie",
+        "create_description": "Ajoutez une categorie avec une couleur, une icone, une image et un ordre de tri optionnels.",
+        "update_title": "Modifier la categorie",
+        "update_description": "Mettez a jour cette categorie sans quitter l'espace produits.",
+        "create_success": "Categorie creee avec succes.",
+        "update_success": "Categorie mise a jour avec succes.",
+        "form": {
+          "fields": {
+            "name": "Nom de la categorie",
+            "color": "Couleur",
+            "icon": "Icone",
+            "image_url": "URL de l'image",
+            "sort_order": "Ordre de tri"
+          },
+          "placeholders": {
+            "color": "#F97316",
+            "icon": "Icone ou emoji optionnel",
+            "image_url": "https://",
+            "sort_order": "0"
+          },
+          "submit": "Creer la categorie",
+          "submitting": "Creation de la categorie...",
+          "update_submit": "Enregistrer les modifications",
+          "updating": "Enregistrement des modifications..."
+        }
+      },
+      "units_page": {
+        "title": "Unites de mesure",
+        "description": "Consultez les options de mesure disponibles lors de la creation et de la modification des produits.",
+        "views": {
+          "list": "Liste",
+          "grid": "Grille"
+        },
+        "search_placeholder": "Rechercher par nom ou abreviation",
+        "summary": "{total} unites, {defaults} par defaut, {inUse} utilisees",
+        "empty_title": "Aucune unite disponible",
+        "empty_description": "Les unites de mesure apparaitront ici des que BizTrack les chargera pour ce business.",
+        "no_abbreviation": "Aucune abreviation",
+        "product_count": "{count} produits",
+        "metrics": {
+          "total": "Unites",
+          "total_hint": "Unites systeme et unites propres au business actuellement disponibles.",
+          "defaults": "Unites par defaut",
+          "defaults_hint": "Unites marquees par defaut dans le catalogue local.",
+          "in_use": "Unites utilisees",
+          "in_use_hint": "Unites deja attribuees a un ou plusieurs produits."
+        },
+        "badges": {
+          "default": "Par defaut",
+          "active": "Actif",
+          "inactive": "Inactif",
+          "system": "Systeme",
+          "business": "Business"
+        },
+        "fields": {
+          "type": "Type",
+          "products": "Produits",
+          "scope": "Portee",
+          "updated_at": "Mis a jour"
+        },
+        "active_success": "Unite activee.",
+        "inactive_success": "Unite desactivee.",
+        "delete_confirm": "Supprimer cette unite de mesure ? Cette action est irreversible. Contactez un super admin si vous avez besoin d'aide pour la restaurer.",
+        "delete_confirm_super_admin": "Supprimer cette unite de mesure ? Cette action est irreversible depuis la liste, mais vous pourrez annuler la suppression juste apres.",
+        "delete_success": "Unite de mesure supprimee.",
+        "undo_delete_success": "Unite de mesure restauree.",
+        "create_title": "Ajouter une unite de mesure",
+        "create_description": "Creez une unite personnalisee avec un nom, une abreviation et un type.",
+        "update_title": "Modifier l'unite de mesure",
+        "update_description": "Mettez a jour cette unite personnalisee sans quitter l'espace produits.",
+        "create_success": "Unite de mesure creee avec succes.",
+        "update_success": "Unite de mesure mise a jour avec succes.",
+        "form": {
+          "fields": {
+            "name": "Nom de l'unite",
+            "abbreviation": "Abreviation",
+            "type": "Type"
+          },
+          "placeholders": {
+            "type": "Choisir un type d'unite"
+          },
+          "submit": "Creer l'unite",
+          "submitting": "Creation de l'unite...",
+          "update_submit": "Enregistrer les modifications",
+          "updating": "Enregistrement des modifications..."
+        }
+      },
+      "errors": {
+        "metadata": "Impossible de charger les categories ou les unites.",
+        "load": "Impossible de charger les produits.",
+        "update": "Impossible de mettre a jour le produit.",
+        "delete": "Impossible de supprimer le produit.",
+        "deactivate": "Impossible de rendre le produit inactif.",
+        "business_required": "Selectionnez un business sur cet appareil avant de continuer.",
+        "product_not_found": "BizTrack n'a pas trouve ce produit dans le catalogue local.",
+        "create": "Impossible de creer le produit.",
+        "name_required": "Saisissez un nom de produit avant de le creer.",
+        "name_too_long": "Le nom du produit doit contenir 200 caracteres maximum.",
+        "name_in_use": "Un produit avec ce nom existe deja dans ce business.",
+        "description_too_long": "La description doit contenir 2000 caracteres maximum.",
+        "unit_required": "Choisissez une unite de mesure avant de creer le produit.",
+        "unit_invalid": "Choisissez une unite de mesure valide pour ce business.",
+        "category_required": "Choisissez une categorie avant de creer le produit.",
+        "category_invalid": "Choisissez une categorie valide pour ce business.",
+        "price_required": "Entrez un prix de vente valide.",
+        "cost_price_invalid": "Le prix de revient doit etre superieur ou egal a zero.",
+        "tax_rate_invalid": "Le taux de taxe doit etre superieur ou egal a zero.",
+        "opening_stock_invalid": "Le stock initial doit etre superieur ou egal a zero.",
+        "low_stock_threshold_invalid": "Le seuil de stock faible doit etre superieur ou egal a zero.",
+        "sku_invalid": "Le SKU peut contenir uniquement des lettres, des chiffres, des tirets et des underscores.",
+        "sku_immutable": "Le SKU ne peut pas etre modifie apres la creation du produit.",
+        "sku_in_use": "Ce SKU est deja utilise par un autre produit local.",
+        "sku_generation_failed": "BizTrack n'a pas pu generer un SKU unique pour le moment.",
+        "barcode_invalid": "Entrez un code-barres valide. Les codes-barres numeriques doivent avoir une cle de controle valide.",
+        "barcode_in_use": "Ce code-barres est deja utilise par un autre produit local.",
+        "image_url_too_long": "L'URL de l'image doit contenir 500 caracteres maximum.",
+        "reload_after_create": "Le produit a ete enregistre localement, mais BizTrack n'a pas pu le recharger ensuite.",
+        "category_load": "Impossible de charger les categories.",
+        "category_create": "Impossible de creer la categorie.",
+        "category_update": "Impossible de mettre a jour la categorie.",
+        "category_toggle": "Impossible de mettre a jour le statut de la categorie.",
+        "category_delete": "Impossible de supprimer la categorie.",
+        "category_restore": "Impossible de restaurer la categorie.",
+        "category_not_found": "BizTrack n'a pas trouve cette categorie dans le catalogue local.",
+        "category_name_required": "Saisissez un nom de categorie avant d'enregistrer.",
+        "category_name_too_long": "Le nom de la categorie doit contenir 100 caracteres maximum.",
+        "category_name_in_use": "Une categorie avec ce nom existe deja dans ce business.",
+        "category_color_invalid": "La couleur doit contenir 7 caracteres maximum.",
+        "category_icon_too_long": "L'icone doit contenir 50 caracteres maximum.",
+        "category_image_url_too_long": "L'URL de l'image doit contenir 500 caracteres maximum.",
+        "category_sort_order_invalid": "L'ordre de tri doit etre un nombre entier superieur ou egal a zero.",
+        "category_has_products": "Cette categorie ne peut pas etre supprimee car des produits y sont encore assignes.",
+        "category_save_reload_failed": "La categorie a ete enregistree localement, mais BizTrack n'a pas pu la recharger ensuite.",
+        "unit_load": "Impossible de charger les unites de mesure.",
+        "unit_create": "Impossible de creer l'unite de mesure.",
+        "unit_update": "Impossible de mettre a jour l'unite de mesure.",
+        "unit_toggle": "Impossible de mettre a jour le statut de l'unite de mesure.",
+        "unit_delete": "Impossible de supprimer l'unite de mesure.",
+        "unit_restore": "Impossible de restaurer l'unite de mesure.",
+        "unit_not_found": "BizTrack n'a pas trouve cette unite de mesure dans le catalogue local.",
+        "unit_name_required": "Saisissez un nom d'unite avant d'enregistrer.",
+        "unit_name_too_long": "Le nom de l'unite doit contenir 50 caracteres maximum.",
+        "unit_name_in_use": "Une unite avec ce nom existe deja dans ce business.",
+        "unit_abbreviation_required": "Saisissez une abreviation avant d'enregistrer.",
+        "unit_abbreviation_too_long": "L'abreviation doit contenir 10 caracteres maximum.",
+        "unit_type_invalid": "Choisissez un type d'unite valide.",
+        "unit_system_immutable": "Les unites systeme et les unites par defaut ne peuvent pas etre modifiees ou supprimees.",
+        "unit_has_products": "Cette unite ne peut pas etre supprimee car des produits l'utilisent encore.",
+        "unit_save_reload_failed": "L'unite a ete enregistree localement, mais BizTrack n'a pas pu la recharger ensuite."
+      }
+    },
+    "inventory": {
+      "eyebrow": "Stock",
+      "title": "Espace inventaire",
+      "subtitle": "Surveillez le stock en direct, traitez les alertes et faites les ajustements depuis le desktop.",
+      "actions": {
+        "refresh": "Actualiser"
+      },
+      "metrics": {
+        "tracked_products": "Produits suivis",
+        "tracked_products_hint": "Produits avec une ligne d'inventaire dans ce business.",
+        "alerts": "Alertes actives",
+        "alerts_hint": "Produits au niveau ou en dessous du seuil.",
+        "page_low_stock": "Stock faible sur la page",
+        "page_low_stock_hint": "Elements visibles actuellement signales.",
+        "selected_quantity": "Quantite selectionnee"
+      },
+      "alerts": {
+        "title": "Alertes de stock faible",
+        "description": "Les problemes de stock les plus urgents du business.",
+        "empty": "Aucune alerte de stock faible pour le moment.",
+        "summary": "{currentQuantity} restant pour un seuil de {threshold}"
+      },
+      "filters": {
+        "category": "Categorie",
+        "all_categories": "Toutes les categories",
+        "low_stock_only": "Afficher seulement le stock faible"
+      },
+      "stock": {
+        "title": "Niveaux de stock",
+        "description": "Consultez les quantites actuelles et ouvrez un produit pour gerer les seuils ou mouvements.",
+        "empty_title": "Aucune ligne de stock",
+        "empty_description": "Le stock apparait seulement pour les produits avec suivi active.",
+        "low_stock_badge": "Stock faible",
+        "healthy_badge": "Correct",
+        "uncategorized": "Sans categorie",
+        "no_unit": "Sans unite",
+        "quantity": "Quantite",
+        "threshold": "Seuil",
+        "last_restock": "Dernier reappro"
+      },
+      "detail": {
+        "empty_title": "Selectionnez un produit",
+        "empty_description": "Choisissez une ligne de stock pour voir les mouvements et agir.",
+        "current_quantity": "Quantite actuelle",
+        "last_restock": "Dernier reappro",
+        "threshold": "Seuil de stock faible",
+        "reorder_point": "Point de commande",
+        "movements": "Mouvements recents",
+        "movement_logs": "Historique des mouvements de stock",
+        "no_movements": "Aucun mouvement recent.",
+        "view_all": "Voir tout",
+        "all_movements_title": "Tous les mouvements de stock",
+        "all_movements_description": "Consultez l'historique complet des mouvements de stock pour ce produit.",
+        "system": "Systeme",
+        "movement_summary": "{before} avant, {after} apres"
+      },
+      "thresholds": {
+        "title": "Seuils",
+        "description": "Ajustez la facon dont le produit apparait dans le suivi de stock faible.",
+        "low_stock_threshold": "Seuil de stock faible",
+        "reorder_point": "Point de commande",
+        "success": "Seuils mis a jour.",
+        "submitting": "Enregistrement...",
+        "submit": "Enregistrer les seuils"
+      },
+      "adjustment": {
+        "title": "Ajuster le stock",
+        "open": "Ajuster le stock",
+        "description": "Corrigez le stock apres un comptage, une casse ou un ecart.",
+        "type": "Type d'ajustement",
+        "quantity": "Quantite",
+        "notes": "Notes",
+        "success": "Stock ajuste avec succes.",
+        "submitting": "Ajustement du stock...",
+        "submit": "Ajuster le stock"
+      },
+      "restock": {
+        "title": "Reapprovisionnement",
+        "description": "Enregistrez le stock entrant pour le produit selectionne.",
+        "quantity": "Quantite recue",
+        "unit_cost": "Cout unitaire",
+        "supplier": "Fournisseur",
+        "reference": "Numero de reference",
+        "notes": "Notes",
+        "success": "Reappro enregistre avec succes.",
+        "submitting": "Enregistrement du reappro...",
+        "submit": "Enregistrer le reappro"
+      },
+      "dialog": {
+        "close": "Fermer la boite de dialogue",
+        "close_action": "Fermer"
+      },
+      "pagination": {
+        "page_label": "Page {page} sur {totalPages}",
+        "previous": "Precedent",
+        "next": "Suivant"
+      },
+      "errors": {
+        "load": "Impossible de charger l'inventaire.",
+        "detail": "Impossible de charger les details du stock.",
+        "inventory_not_found": "Aucun stock suivi n'a ete trouve pour ce produit.",
+        "thresholds": "Impossible de mettre a jour les seuils.",
+        "low_stock_threshold_invalid": "Le seuil de stock faible doit etre superieur ou egal a zero.",
+        "reorder_point_invalid": "Le point de commande doit etre superieur ou egal a zero.",
+        "adjust": "Impossible d'appliquer l'ajustement.",
+        "adjustment_quantity_invalid": "Entrez une quantite valide pour cet ajustement.",
+        "adjustment_notes_required": "Ajoutez une courte note avant d'appliquer cet ajustement.",
+        "insufficient_stock": "Le stock disponible est insuffisant pour cet ajustement.",
+        "restock": "Impossible d'enregistrer le reappro.",
+        "restock_items_required": "Ajoutez au moins un article de reappro avant d'enregistrer.",
+        "restock_product_invalid": "Le produit selectionne n'est pas disponible pour ce reappro.",
+        "restock_quantity_invalid": "La quantite de reappro doit etre d'au moins 0.001.",
+        "restock_unit_cost_invalid": "Le cout unitaire doit etre superieur ou egal a zero.",
+        "restock_total_cost_invalid": "Le cout total du reappro doit etre superieur ou egal a zero.",
+        "adjustment_validation": "Entrez une quantite et des notes avant l'ajustement.",
+        "restock_validation": "Entrez une quantite de reappro valide."
+      }
     },
     "expenses": {
       "title": "Depenses",

@@ -28,6 +28,8 @@
   "inventory_insufficient_stock": "Not enough stock available for this adjustment.",
   "unit_of_measure_exists": "A unit of measure with this name already exists.",
   "unit_of_measure_not_found": "Unit of measure not found.",
+  "unit_of_measure_in_use": "Unit of measure is in use.",
+  "unit_of_measure_system_immutable": "System units of measure cannot be modified or deleted.",
   "validation_failed": "Invalid data.",
   "server_error": "An error occurred. Please try again.",
   "rate_limited": "Too many requests. Try again in {seconds} seconds."

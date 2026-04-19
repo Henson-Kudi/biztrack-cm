@@ -26,7 +26,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('REDIS_URL is not configured. RedisService will not be initialized.')
       return
     }
-    this.client = new Redis(this.getClientOptions())
+    this.client = this.createClient('module_init')
   }
 
   onModuleDestroy() {
@@ -70,11 +70,60 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  getConnectionState() {
+    return {
+      configured: Boolean(this.redisUrl),
+      status: this.client?.status ?? 'idle',
+    }
+  }
+
   private getClient(): Redis {
     if (!this.client) {
-      this.client = new Redis(this.getClientOptions())
+      this.client = this.createClient('lazy_client')
     }
     return this.client
+  }
+
+  private createClient(source: 'module_init' | 'lazy_client'): Redis {
+    const client = new Redis(this.getClientOptions())
+
+    client.on('connect', () => {
+      this.logger.log('Redis socket connected', 'RedisService', {
+        source,
+        status: client.status,
+      })
+    })
+
+    client.on('ready', () => {
+      this.logger.log('Redis client ready', 'RedisService', {
+        source,
+        status: client.status,
+      })
+    })
+
+    client.on('reconnecting', () => {
+      this.logger.warn('Redis client reconnecting', 'RedisService', {
+        source,
+        status: client.status,
+      })
+    })
+
+    client.on('end', () => {
+      this.logger.warn('Redis connection ended', 'RedisService', {
+        source,
+        status: client.status,
+      })
+    })
+
+    client.on('error', (error) => {
+      this.logger.error('Redis client error', 'RedisService', {
+        source,
+        status: client.status,
+        message: error.message,
+      })
+    })
+
+    return client
   }
 
   private getClientOptions(): RedisOptions {

@@ -13,6 +13,21 @@
       ],
       "@biztrack/ui": [
         "../../packages/ui/src"
+      ],
+      "@hookform/resolvers/zod": [
+        "../../node_modules/.pnpm/@hookform+resolvers@5.2.2_react-hook-form@7.72.1_react@19.2.4_/node_modules/@hookform/resolvers/zod"
+      ],
+      "@radix-ui/react-dialog": [
+        "../../node_modules/.pnpm/@radix-ui+react-dialog@1.1.15_@types+react-dom@19.2.3_@types+react@19.2.14__@types+react@19.2_pgsc3zoflmqylo7gtpmb22hihi/node_modules/@radix-ui/react-dialog"
+      ],
+      "react-hook-form": [
+        "../../node_modules/.pnpm/react-hook-form@7.72.1_react@19.2.4/node_modules/react-hook-form"
+      ],
+      "sonner": [
+        "../../node_modules/.pnpm/sonner@1.7.4_react-dom@19.2.4_react@19.2.4__react@19.2.4/node_modules/sonner"
+      ],
+      "zod": [
+        "../../packages/validators/node_modules/zod"
       ]
     }
   },

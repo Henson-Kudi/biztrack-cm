@@ -75,6 +75,8 @@ export type I18nTranslations = {
         "inventory_insufficient_stock": string;
         "unit_of_measure_exists": string;
         "unit_of_measure_not_found": string;
+        "unit_of_measure_in_use": string;
+        "unit_of_measure_system_immutable": string;
         "validation_failed": string;
         "server_error": string;
         "rate_limited": string;

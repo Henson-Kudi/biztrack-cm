@@ -34,6 +34,7 @@ export class CategoriesService {
         businessId,
         name: dto.name.trim(),
         slug,
+        isActive: true,
         color: dto.color?.trim() ?? null,
         icon: dto.icon?.trim() ?? null,
         imageUrl: dto.imageUrl?.trim() ?? null,
@@ -56,6 +57,7 @@ export class CategoriesService {
           [sortField]: query.sortOrder || 'ASC',
         },
       }
+
 
       const result = await this.categoriesRepo.paginate(
         { businessId, deletedAt: IsNull() },
@@ -83,6 +85,7 @@ export class CategoriesService {
       await this.categoriesRepo.update(id, {
         name: dto.name?.trim() ?? category.name,
         slug,
+        isActive: dto.isActive ?? category.isActive,
         color: dto.color === undefined ? category.color : (dto.color?.trim() ?? null),
         icon: dto.icon === undefined ? category.icon : (dto.icon?.trim() ?? null),
         imageUrl: dto.imageUrl === undefined ? category.imageUrl : (dto.imageUrl?.trim() ?? null),
@@ -114,7 +117,11 @@ export class CategoriesService {
         )
       }
 
-      await this.categoriesRepo.update(id, { deletedAt: new Date(), updatedAt: new Date() })
+      await this.categoriesRepo.update(id, {
+        isActive: false,
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
     } catch (error) {
       return this.handleServiceError('remove', error, { id, businessId })
     }

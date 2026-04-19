@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { logger } from '@biztrack/logger'
 import { AppModule } from './app.module'
 import { mountBullBoard } from './common/queues/bull-board'
+import { RedisService } from './common/redis/redis.service'
 import { NodeEnv, type AppConfig } from './config/configuration'
 import { createI18nValidationPipe } from './common/pipes/i18n-validation.pipe'
 import cookieParser from 'cookie-parser'
@@ -12,6 +13,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule)
 
   const config = app.get<ConfigService<AppConfig>>(ConfigService)
+  const redis = app.get<RedisService>(RedisService)
   const nodeEnv = config.get('NODE_ENV', { infer: true })
   const corsOriginsRaw = config.get('CORS_ORIGINS', { infer: true })
   const allowNullOriginRaw = config.get('CORS_ALLOW_NULL_ORIGIN', { infer: true })
@@ -56,6 +58,12 @@ async function bootstrap() {
     const bullBoardPath = mountBullBoard(app)
     logger.log(`Bull Board is available at ${bullBoardPath}`, 'Bootstrap')
   }
+
+  const redisState = redis.getConnectionState()
+  logger.log(
+    `Redis/Bull connection state: ${redisState.configured ? redisState.status : 'not_configured'}`,
+    'Bootstrap',
+  )
 
   const port = config.get('API_PORT', { infer: true }) ?? 3001
 

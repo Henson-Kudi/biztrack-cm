@@ -7,7 +7,6 @@ import {
 
 export type {
   HttpClient,
-  HttpError,
   HttpMethod,
   HttpResponse,
   RequestConfig,
@@ -16,6 +15,8 @@ export type {
   RequestHeaders,
   RequestParams,
 } from "./core"
+
+export { HttpError } from "./core"
 
 let cachedFetch: FetchLike | null = null
 
