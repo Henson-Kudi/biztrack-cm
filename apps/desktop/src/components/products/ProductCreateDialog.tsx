@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import type { ProductCategory, UnitOfMeasure } from '@biztrack/types'
-import { CreateProductForm } from '@/components/products/CreateProductForm'
+import type { Product, ProductCategory, UnitOfMeasure } from '@biztrack/types'
+import {
+  CreateProductForm,
+  type ProductFormDefaultValues,
+} from '@/components/products/CreateProductForm'
 import {
   Dialog,
   DialogContent,
@@ -17,15 +20,17 @@ type ProductCreateDialogProps = {
   businessId: string | null
   categories: ProductCategory[]
   units: UnitOfMeasure[]
+  defaultValues?: ProductFormDefaultValues
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: () => void
+  onCreated: (product: Product) => void
 }
 
 export function ProductCreateDialog({
   businessId,
   categories,
   units,
+  defaultValues,
   open,
   onOpenChange,
   onCreated,
@@ -56,9 +61,10 @@ export function ProductCreateDialog({
           categories={categories}
           units={units}
           defaultUnitId={fallbackUnit?.id}
+          defaultValues={defaultValues}
           onCancel={() => onOpenChange(false)}
-          onSaved={() => {
-            onCreated()
+          onSaved={(product) => {
+            onCreated(product)
             onOpenChange(false)
           }}
         />

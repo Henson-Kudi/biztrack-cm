@@ -51,16 +51,32 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS sales (
         id TEXT PRIMARY KEY,
         business_id TEXT NOT NULL,
+        client_id TEXT NOT NULL,
         cashier_id TEXT NOT NULL,
+        cashier_name TEXT,
         device_id TEXT,
+        sale_number TEXT NOT NULL,
+        receipt_number TEXT NOT NULL,
+        subtotal REAL NOT NULL,
         total_amount REAL NOT NULL,
         discount_amount REAL NOT NULL DEFAULT 0,
         tax_amount REAL NOT NULL DEFAULT 0,
         net_amount REAL NOT NULL,
-        payment_method TEXT NOT NULL,
+        amount_paid REAL NOT NULL,
+        change_given REAL NOT NULL DEFAULT 0,
+        payment_method TEXT,
         momo_reference TEXT,
+        customer_name TEXT,
+        customer_phone TEXT,
         notes TEXT,
-        receipt_number TEXT NOT NULL,
+        price_drift_warning INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'XAF',
+        sale_date TEXT NOT NULL,
+        sold_at TEXT NOT NULL,
+        synced_at TEXT,
+        voided_at TEXT,
+        voided_by TEXT,
+        void_reason TEXT,
         status TEXT NOT NULL DEFAULT 'COMPLETED',
         is_deleted INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
@@ -70,14 +86,31 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS sale_items (
         id TEXT PRIMARY KEY,
         sale_id TEXT NOT NULL,
+        business_id TEXT NOT NULL,
         product_id TEXT NOT NULL,
         product_name TEXT NOT NULL,
+        product_sku TEXT,
+        unit_of_measure TEXT,
         quantity REAL NOT NULL,
         unit_price REAL NOT NULL,
+        discount_amount REAL NOT NULL DEFAULT 0,
+        line_total REAL NOT NULL,
         total_price REAL NOT NULL,
+        cost_price REAL,
         is_deleted INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        FOREIGN KEY (sale_id) REFERENCES sales(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS sale_payments (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        business_id TEXT NOT NULL,
+        method TEXT NOT NULL,
+        amount REAL NOT NULL,
+        mobile_money_reference TEXT,
+        created_at TEXT NOT NULL,
         FOREIGN KEY (sale_id) REFERENCES sales(id)
       );
 
@@ -194,6 +227,7 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_product_categories_business ON product_categories(business_id, is_deleted);
       CREATE INDEX IF NOT EXISTS idx_inventory_levels_business ON inventory_levels(business_id, product_id);
       CREATE INDEX IF NOT EXISTS idx_inventory_movements_business ON inventory_movements(business_id, product_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_sale_payments_business ON sale_payments(business_id, sale_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_outbox_entity_record ON sync_outbox(entity, record_id);
       CREATE INDEX IF NOT EXISTS idx_sync_outbox_status_created ON sync_outbox(status, created_at);
     `)
@@ -201,6 +235,10 @@ export class DatabaseService {
     this.ensureProductColumns()
     this.ensureCategoryColumns()
     this.ensureUnitColumns()
+    this.ensureSaleColumns()
+    this.ensureSaleItemColumns()
+    this.backfillSaleSchema()
+    this.ensureSaleIndexes()
     this.seedUnitOfMeasures()
   }
 
@@ -213,15 +251,13 @@ export class DatabaseService {
   }
 
   batch(operations: Array<{ sql: string; params?: unknown[] }>): { changes: number } {
-    const transaction = this.db.transaction(
-      (steps: Array<{ sql: string; params?: unknown[] }>) => {
-        let changes = 0
-        for (const step of steps) {
-          changes += this.db.prepare(step.sql).run(step.params ?? []).changes
-        }
-        return { changes }
-      },
-    )
+    const transaction = this.db.transaction((steps: Array<{ sql: string; params?: unknown[] }>) => {
+      let changes = 0
+      for (const step of steps) {
+        changes += this.db.prepare(step.sql).run(step.params ?? []).changes
+      }
+      return { changes }
+    })
 
     return transaction(operations)
   }
@@ -261,10 +297,94 @@ export class DatabaseService {
     this.ensureColumn('unit_of_measures', 'is_deleted', 'is_deleted INTEGER NOT NULL DEFAULT 0')
   }
 
+  private ensureSaleColumns() {
+    this.ensureColumn('sales', 'client_id', 'client_id TEXT')
+    this.ensureColumn('sales', 'cashier_name', 'cashier_name TEXT')
+    this.ensureColumn('sales', 'sale_number', 'sale_number TEXT')
+    this.ensureColumn('sales', 'subtotal', 'subtotal REAL')
+    this.ensureColumn('sales', 'sale_date', 'sale_date TEXT')
+    this.ensureColumn('sales', 'sold_at', 'sold_at TEXT')
+    this.ensureColumn('sales', 'amount_paid', 'amount_paid REAL')
+    this.ensureColumn('sales', 'change_given', 'change_given REAL')
+    this.ensureColumn('sales', 'customer_name', 'customer_name TEXT')
+    this.ensureColumn('sales', 'customer_phone', 'customer_phone TEXT')
+    this.ensureColumn('sales', 'price_drift_warning', 'price_drift_warning INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('sales', 'currency', "currency TEXT NOT NULL DEFAULT 'XAF'")
+    this.ensureColumn('sales', 'synced_at', 'synced_at TEXT')
+    this.ensureColumn('sales', 'voided_at', 'voided_at TEXT')
+    this.ensureColumn('sales', 'voided_by', 'voided_by TEXT')
+    this.ensureColumn('sales', 'void_reason', 'void_reason TEXT')
+  }
+
+  private ensureSaleItemColumns() {
+    this.ensureColumn('sale_items', 'business_id', 'business_id TEXT')
+    this.ensureColumn('sale_items', 'product_sku', 'product_sku TEXT')
+    this.ensureColumn('sale_items', 'unit_of_measure', 'unit_of_measure TEXT')
+    this.ensureColumn('sale_items', 'discount_amount', 'discount_amount REAL NOT NULL DEFAULT 0')
+    this.ensureColumn('sale_items', 'line_total', 'line_total REAL')
+    this.ensureColumn('sale_items', 'cost_price', 'cost_price REAL')
+  }
+
+  private backfillSaleSchema() {
+    this.db.exec(`
+      UPDATE sales
+      SET
+        client_id = COALESCE(NULLIF(client_id, ''), id),
+        sale_number = COALESCE(NULLIF(sale_number, ''), NULLIF(receipt_number, ''), id),
+        receipt_number = COALESCE(NULLIF(receipt_number, ''), NULLIF(sale_number, ''), id),
+        subtotal = COALESCE(subtotal, total_amount, 0),
+        amount_paid = COALESCE(amount_paid, net_amount, total_amount, 0),
+        change_given = COALESCE(change_given, 0),
+        sale_date = COALESCE(NULLIF(sale_date, ''), substr(COALESCE(sold_at, created_at), 1, 10)),
+        sold_at = COALESCE(NULLIF(sold_at, ''), created_at),
+        currency = COALESCE(NULLIF(currency, ''), 'XAF'),
+        price_drift_warning = COALESCE(price_drift_warning, 0);
+
+      UPDATE sale_items
+      SET
+        business_id = COALESCE(
+          NULLIF(business_id, ''),
+          (SELECT s.business_id FROM sales s WHERE s.id = sale_items.sale_id)
+        ),
+        line_total = COALESCE(line_total, total_price, 0),
+        total_price = COALESCE(total_price, line_total, 0);
+
+      INSERT INTO sale_payments (
+        id,
+        sale_id,
+        business_id,
+        method,
+        amount,
+        mobile_money_reference,
+        created_at
+      )
+      SELECT
+        s.id || '-payment',
+        s.id,
+        s.business_id,
+        COALESCE(NULLIF(s.payment_method, ''), 'CASH'),
+        COALESCE(s.amount_paid, s.net_amount, s.total_amount, 0),
+        s.momo_reference,
+        s.created_at
+      FROM sales s
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM sale_payments sp
+        WHERE sp.sale_id = s.id
+      );
+    `)
+  }
+
+  private ensureSaleIndexes() {
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_sales_business_client ON sales(business_id, client_id);
+      CREATE INDEX IF NOT EXISTS idx_sales_business_sale_number ON sales(business_id, sale_number);
+      CREATE INDEX IF NOT EXISTS idx_sale_items_business ON sale_items(business_id, sale_id);
+    `)
+  }
+
   private ensureColumn(table: string, column: string, definition: string) {
-    const columns = this.db
-      .prepare(`PRAGMA table_info(${table})`)
-      .all() as Array<{ name?: string }>
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: string }>
 
     if (columns.some((item) => item.name === column)) {
       return
@@ -338,15 +458,7 @@ export class DatabaseService {
 
     const transaction = this.db.transaction(() => {
       for (const unit of defaults) {
-        insert.run(
-          unit.id,
-          unit.name,
-          unit.abbreviation,
-          unit.type,
-          unit.isDefault,
-          now,
-          now,
-        )
+        insert.run(unit.id, unit.name, unit.abbreviation, unit.type, unit.isDefault, now, now)
       }
     })
 

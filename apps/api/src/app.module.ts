@@ -11,6 +11,7 @@ import { PlansModule } from '@/modules/plans/plans.module'
 import { PermissionsModule } from '@/modules/permissions/permissions.module'
 import { SubscriptionsModule } from '@/modules/subscriptions/subscriptions.module'
 import { InventoryModule } from '@/modules/inventory/inventory.module'
+import { SalesModule } from '@/modules/sales/sales.module'
 import { LoggerModule } from './logger/logger.module'
 import { join, resolve } from 'path'
 import { existsSync } from 'fs'
@@ -67,7 +68,7 @@ const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').r
         entities: [entitiesPath],
         migrations: [migrationsPath],
         synchronize: false,
-        logging: config.get('NODE_ENV', { infer: true }) === NodeEnv.DEVELOPMENT,
+        logging: false //config.get('NODE_ENV', { infer: true }) === NodeEnv.DEVELOPMENT,
       }),
     }),
     AuthModule,
@@ -76,6 +77,7 @@ const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').r
     QueuesModule,
     ProductsModule,
     InventoryModule,
+    SalesModule,
     SyncModule,
     PermissionsModule,
     PlansModule,

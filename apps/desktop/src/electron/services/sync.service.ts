@@ -6,12 +6,17 @@ import type {
   InventoryMovementSyncRecord,
   InventoryRestockSyncPayload,
   InventoryThresholdSyncPayload,
+  SaleItemSyncRecord,
+  SalePaymentSyncRecord,
+  SaleSyncPayload,
+  SaleSyncRecord,
   NetworkQuality,
   NetworkSnapshot,
   RestockItemSyncRecord,
   RestockRecordSyncRecord,
   SyncBatchStatusResponse,
   SyncChangesAvailableEvent,
+  SyncEntity,
   SyncPullResponse,
   SyncPushOperation,
   SyncPushPayload,
@@ -24,6 +29,7 @@ import type {
   SyncSettings,
   SyncSnapshot,
 } from '@biztrack/types'
+import { getSyncEntityDependencyTier, getSyncEntityStableOrder } from '@biztrack/types'
 import {
   createHttpClient,
   HttpError,
@@ -44,10 +50,12 @@ type OutboxRow = {
     | 'inventoryThresholds'
     | 'inventoryAdjustments'
     | 'inventoryRestocks'
+    | 'sales'
   record_id: string
   payload: string | null
   status: 'pending' | 'failed'
   attempt_count: number
+  created_at: string
   updated_at: string
 }
 
@@ -157,6 +165,20 @@ const QUALITY_RANK: Record<NetworkQuality, number> = {
   fair: 2,
   strong: 3,
   very_strong: 4,
+}
+
+// Keep this mapper aligned with the canonical execution plan in
+// `packages/types/src/sync.types.ts`. Desktop batches are capped, so the
+// selection order here decides which dependencies are shipped before their
+// dependents when a device comes back online with a large backlog.
+const OUTBOX_ENTITY_TO_SYNC_ENTITY: Record<OutboxRow['entity'], SyncEntity> = {
+  unitOfMeasures: 'unit_of_measure',
+  productCategories: 'product_category',
+  products: 'product',
+  inventoryThresholds: 'inventory_threshold',
+  inventoryRestocks: 'inventory_restock',
+  inventoryAdjustments: 'inventory_adjustment',
+  sales: 'sale',
 }
 
 export class SyncService extends EventEmitter {
@@ -355,37 +377,48 @@ export class SyncService extends EventEmitter {
       finalCursor = initialPull.data.cursor
 
       let batchError: string | null = null
-      const pendingRows = this.getOutboxRows(
-        OUTBOX_BATCH_LIMIT,
-        force ? ['pending', 'failed'] : ['pending'],
-      )
 
-      if (pendingRows.length > 0) {
-        const payload = await this.buildPushPayload(deviceId, baseCursor, pendingRows)
+      while (!batchError) {
+        const pendingRows = this.getOutboxRows(
+          OUTBOX_BATCH_LIMIT,
+          force ? ['pending', 'failed'] : ['pending'],
+        )
 
-        if (payload.operations.length > 0) {
-          const pushResponse = await this.pushBatch(activeTokens, payload)
-          activeTokens = pushResponse.tokens
-
-          if (pushResponse.data.status === 'enqueue_failed') {
-            batchError = pushResponse.data.lastError ?? 'Sync batch could not be queued.'
-            this.markOutboxAttempt(pendingRows, batchError)
-          } else if (pushResponse.data.batchId) {
-            const batchStatus = await this.waitForBatch(activeTokens, pushResponse.data.batchId)
-            activeTokens = batchStatus.tokens
-
-            const batchOutcome = this.applyBatchResults(batchStatus.data, pendingRows)
-            pushedCount = batchStatus.data.acceptedCount
-            conflictCount += batchStatus.data.conflictCount
-            batchError = batchOutcome.firstError
-
-            const followUpPull = await this.pullChanges(activeTokens, baseCursor)
-            activeTokens = followUpPull.tokens
-            await this.applyPulledChanges(followUpPull.data)
-            pulledCount = countChanges(followUpPull.data.changes)
-            finalCursor = followUpPull.data.cursor
-          }
+        if (pendingRows.length === 0) {
+          break
         }
+
+        const payload = await this.buildPushPayload(deviceId, baseCursor, pendingRows)
+        if (payload.operations.length === 0) {
+          break
+        }
+
+        const pushResponse = await this.pushBatch(activeTokens, payload)
+        activeTokens = pushResponse.tokens
+
+        if (pushResponse.data.status === 'enqueue_failed') {
+          batchError = pushResponse.data.lastError ?? 'Sync batch could not be queued.'
+          this.markOutboxAttempt(pendingRows, batchError)
+          break
+        }
+
+        if (!pushResponse.data.batchId) {
+          break
+        }
+
+        const batchStatus = await this.waitForBatch(activeTokens, pushResponse.data.batchId)
+        activeTokens = batchStatus.tokens
+
+        const batchOutcome = this.applyBatchResults(batchStatus.data, pendingRows)
+        pushedCount += batchStatus.data.acceptedCount
+        conflictCount += batchStatus.data.conflictCount
+        batchError = batchOutcome.firstError
+
+        const followUpPull = await this.pullChanges(activeTokens, baseCursor)
+        activeTokens = followUpPull.tokens
+        await this.applyPulledChanges(followUpPull.data)
+        pulledCount = countChanges(followUpPull.data.changes)
+        finalCursor = followUpPull.data.cursor
       }
 
       if (finalCursor) {
@@ -483,8 +516,9 @@ export class SyncService extends EventEmitter {
     outboxRows: OutboxRow[],
   ): Promise<SyncPushRequest> {
     const operations: SyncPushOperation[] = []
+    const sortedRows = [...outboxRows].sort((left, right) => this.compareOutboxRowsForPush(left, right))
 
-    for (const row of outboxRows) {
+    for (const row of sortedRows) {
       if (row.entity === 'products') {
         const product = this.loadProductSyncRecord(row.record_id)
         operations.push({
@@ -556,7 +590,42 @@ export class SyncService extends EventEmitter {
           payload,
         })
       }
+
+      if (row.entity === 'sales') {
+        const payload = this.parseOutboxPayload<SaleSyncPayload>(row.payload)
+        if (!payload) {
+          continue
+        }
+
+        operations.push({
+          operationId: row.id,
+          entity: 'sale',
+          action: 'UPSERT',
+          recordId: row.record_id,
+          updatedAt: row.updated_at,
+          payload,
+        })
+      }
     }
+
+    operations.sort((left, right) => {
+      const tierOrder = getSyncEntityDependencyTier(left.entity) - getSyncEntityDependencyTier(right.entity)
+      if (tierOrder !== 0) {
+        return tierOrder
+      }
+
+      const updatedAtOrder = new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime()
+      if (updatedAtOrder !== 0) {
+        return updatedAtOrder
+      }
+
+      const entityOrder = getSyncEntityStableOrder(left.entity) - getSyncEntityStableOrder(right.entity)
+      if (entityOrder !== 0) {
+        return entityOrder
+      }
+
+      return left.operationId.localeCompare(right.operationId)
+    })
 
     return {
       deviceId,
@@ -816,6 +885,9 @@ export class SyncService extends EventEmitter {
     const serverInventoryMovements = response.changes.inventoryMovements ?? []
     const serverRestockRecords = response.changes.restockRecords ?? []
     const serverRestockItems = response.changes.restockItems ?? []
+    const serverSales = response.changes.sales ?? []
+    const serverSaleItems = response.changes.saleItems ?? []
+    const serverSalePayments = response.changes.salePayments ?? []
 
     if (serverUnits.length > 0) {
       this.applyUnitOfMeasureChanges(serverUnits)
@@ -827,6 +899,18 @@ export class SyncService extends EventEmitter {
 
     for (const record of serverProducts) {
       operations.push(this.buildProductUpsertOperation(record))
+    }
+
+    for (const record of serverSales) {
+      operations.push(this.buildSaleUpsertOperation(record))
+    }
+
+    for (const record of serverSaleItems) {
+      operations.push(this.buildSaleItemUpsertOperation(record))
+    }
+
+    for (const record of serverSalePayments) {
+      operations.push(this.buildSalePaymentUpsertOperation(record))
     }
 
     for (const record of serverInventoryLevels) {
@@ -1210,6 +1294,202 @@ export class SyncService extends EventEmitter {
         data.icon ?? null,
         data.imageUrl ?? null,
         data.sortOrder ?? 0,
+      ],
+    }
+  }
+
+  private buildSaleUpsertOperation(record: SaleSyncRecord) {
+    const saleNumber = record.saleNumber?.trim() || record.id
+    const createdAt = record.createdAt ?? record.updatedAt
+
+    return {
+      sql: `
+        INSERT INTO sales (
+          id,
+          business_id,
+          client_id,
+          cashier_id,
+          cashier_name,
+          sale_number,
+          receipt_number,
+          subtotal,
+          total_amount,
+          discount_amount,
+          tax_amount,
+          net_amount,
+          amount_paid,
+          change_given,
+          payment_method,
+          momo_reference,
+          customer_name,
+          customer_phone,
+          notes,
+          price_drift_warning,
+          currency,
+          sale_date,
+          sold_at,
+          synced_at,
+          voided_at,
+          voided_by,
+          void_reason,
+          status,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          business_id = excluded.business_id,
+          client_id = excluded.client_id,
+          cashier_id = excluded.cashier_id,
+          cashier_name = excluded.cashier_name,
+          sale_number = excluded.sale_number,
+          receipt_number = excluded.receipt_number,
+          subtotal = excluded.subtotal,
+          total_amount = excluded.total_amount,
+          discount_amount = excluded.discount_amount,
+          tax_amount = excluded.tax_amount,
+          net_amount = excluded.net_amount,
+          amount_paid = excluded.amount_paid,
+          change_given = excluded.change_given,
+          payment_method = excluded.payment_method,
+          momo_reference = excluded.momo_reference,
+          customer_name = excluded.customer_name,
+          customer_phone = excluded.customer_phone,
+          notes = excluded.notes,
+          price_drift_warning = excluded.price_drift_warning,
+          currency = excluded.currency,
+          sale_date = excluded.sale_date,
+          sold_at = excluded.sold_at,
+          synced_at = excluded.synced_at,
+          voided_at = excluded.voided_at,
+          voided_by = excluded.voided_by,
+          void_reason = excluded.void_reason,
+          status = excluded.status,
+          is_deleted = excluded.is_deleted,
+          updated_at = excluded.updated_at
+      `,
+      params: [
+        record.id,
+        record.businessId,
+        record.clientId,
+        record.cashierId,
+        record.cashierName ?? null,
+        saleNumber,
+        saleNumber,
+        record.subtotal,
+        record.totalAmount,
+        record.discountAmount,
+        record.taxAmount,
+        record.totalAmount,
+        record.amountPaid,
+        record.changeGiven,
+        record.paymentMethod ?? null,
+        null,
+        record.customerName ?? null,
+        record.customerPhone ?? null,
+        record.notes ?? null,
+        record.priceDriftWarning ? 1 : 0,
+        record.currency ?? 'XAF',
+        record.saleDate,
+        record.soldAt,
+        record.syncedAt ?? record.updatedAt,
+        record.voidedAt ?? null,
+        record.voidedById ?? null,
+        record.voidReason ?? null,
+        record.status,
+        record.isDeleted ? 1 : 0,
+        createdAt,
+        record.updatedAt,
+      ],
+    }
+  }
+
+  private buildSaleItemUpsertOperation(record: SaleItemSyncRecord) {
+    return {
+      sql: `
+        INSERT INTO sale_items (
+          id,
+          sale_id,
+          business_id,
+          product_id,
+          product_name,
+          product_sku,
+          unit_of_measure,
+          quantity,
+          unit_price,
+          discount_amount,
+          line_total,
+          total_price,
+          cost_price,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          sale_id = excluded.sale_id,
+          business_id = excluded.business_id,
+          product_id = excluded.product_id,
+          product_name = excluded.product_name,
+          product_sku = excluded.product_sku,
+          unit_of_measure = excluded.unit_of_measure,
+          quantity = excluded.quantity,
+          unit_price = excluded.unit_price,
+          discount_amount = excluded.discount_amount,
+          line_total = excluded.line_total,
+          total_price = excluded.total_price,
+          cost_price = excluded.cost_price,
+          is_deleted = excluded.is_deleted,
+          updated_at = excluded.updated_at
+      `,
+      params: [
+        record.id,
+        record.saleId,
+        record.businessId,
+        record.productId,
+        record.productName,
+        record.productSku ?? null,
+        record.unitOfMeasure ?? null,
+        record.quantity,
+        record.unitPrice,
+        record.discountAmount,
+        record.lineTotal,
+        record.lineTotal,
+        record.costPrice ?? null,
+        record.isDeleted ? 1 : 0,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    }
+  }
+
+  private buildSalePaymentUpsertOperation(record: SalePaymentSyncRecord) {
+    return {
+      sql: `
+        INSERT INTO sale_payments (
+          id,
+          sale_id,
+          business_id,
+          method,
+          amount,
+          mobile_money_reference,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          sale_id = excluded.sale_id,
+          business_id = excluded.business_id,
+          method = excluded.method,
+          amount = excluded.amount,
+          mobile_money_reference = excluded.mobile_money_reference,
+          created_at = excluded.created_at
+      `,
+      params: [
+        record.id,
+        record.saleId,
+        record.businessId,
+        record.method,
+        record.amount,
+        record.mobileMoneyReference ?? null,
+        record.createdAt,
       ],
     }
   }
@@ -1753,7 +2033,7 @@ export class SyncService extends EventEmitter {
   ) {
     const placeholders = statuses.map(() => '?').join(', ')
 
-    return this.db.query(
+    const rows = this.db.query(
       `
         SELECT
           id,
@@ -1762,14 +2042,45 @@ export class SyncService extends EventEmitter {
           payload,
           status,
           attempt_count,
+          created_at,
           updated_at
         FROM sync_outbox
         WHERE status IN (${placeholders})
-        ORDER BY created_at ASC
-        LIMIT ?
+        ORDER BY updated_at ASC, created_at ASC, id ASC
       `,
-      [...statuses, limit],
+      statuses,
     ) as OutboxRow[]
+
+    return rows
+      .sort((left, right) => this.compareOutboxRowsForPush(left, right))
+      .slice(0, limit)
+  }
+
+  private compareOutboxRowsForPush(left: OutboxRow, right: OutboxRow) {
+    const leftEntity = OUTBOX_ENTITY_TO_SYNC_ENTITY[left.entity]
+    const rightEntity = OUTBOX_ENTITY_TO_SYNC_ENTITY[right.entity]
+    const tierOrder = getSyncEntityDependencyTier(leftEntity) - getSyncEntityDependencyTier(rightEntity)
+
+    if (tierOrder !== 0) {
+      return tierOrder
+    }
+
+    const updatedAtOrder = new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime()
+    if (updatedAtOrder !== 0) {
+      return updatedAtOrder
+    }
+
+    const entityOrder = getSyncEntityStableOrder(leftEntity) - getSyncEntityStableOrder(rightEntity)
+    if (entityOrder !== 0) {
+      return entityOrder
+    }
+
+    const createdAtOrder = new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+    if (createdAtOrder !== 0) {
+      return createdAtOrder
+    }
+
+    return left.id.localeCompare(right.id)
   }
 
   private markOutboxAttempt(rows: OutboxRow[], message: string) {

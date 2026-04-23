@@ -97,7 +97,7 @@ export class UnitOfMeasuresService {
         type: dto.type,
         isDefault: false,
         isActive: true,
-      })
+      } as Partial<UnitOfMeasure>)
       return this.unitsRepo.save(unit)
     } catch (error) {
       return this.handleServiceError('create', error, { businessId, name: dto.name })

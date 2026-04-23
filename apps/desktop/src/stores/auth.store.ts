@@ -43,6 +43,7 @@ type AuthState = {
   refreshToken: string | null
   tokenType: TokenType | null
   businessId: string | null
+  businessName: string | null
   role: BusinessMemberRole | null
   pending: PendingAuth
   setPending: (pending: PendingAuth) => void
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   refreshToken: null,
   tokenType: null,
   businessId: null,
+  businessName: null,
   role: null,
   pending: {},
   setPending: (pending) => set({ pending: { ...get().pending, ...pending } }),
@@ -82,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       tokenType,
       businessId,
       role,
+      businessName: get().businessName,
       isOffline: false,
     })
 
@@ -92,6 +95,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isOffline: true,
       tokenType: 'phase2',
       businessId: businessId ?? null,
+      businessName: get().businessName,
       role: role ?? null,
       accessToken: null,
       refreshToken: null,
@@ -107,6 +111,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       refreshToken: null,
       tokenType: null,
       businessId: null,
+      businessName: null,
       role: null,
     })
 
@@ -123,6 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           refreshToken: tokens.refreshToken,
           tokenType: (payload?.type ?? null) as TokenType | null,
           businessId: (payload?.businessId ?? null) as string | null,
+          businessName: get().businessName,
           role: (payload?.role ?? null) as BusinessMemberRole | null,
         })
       } catch {

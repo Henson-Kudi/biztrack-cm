@@ -1,0 +1,344 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  .shell{font-family:'DM Sans',sans-serif;color:var(--color-text-primary);background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:20px;min-height:540px;display:flex;align-items:flex-start;justify-content:center}
+  .modal{background:var(--color-background-primary);border-radius:16px;border:0.5px solid var(--color-border-secondary);width:100%;max-width:640px;display:flex;flex-direction:column;overflow:hidden;max-height:600px}
+
+  .mh{padding:18px 22px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:flex-start;justify-content:space-between}
+  .mh-left p:first-child{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;letter-spacing:-0.3px}
+  .mh-left p:last-child{font-size:12px;color:var(--color-text-secondary);margin-top:3px}
+  .close-btn{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--color-text-secondary)}
+
+  .mbody{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:18px}
+
+  .sec-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--color-text-secondary);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--color-text-secondary);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;height:36px;border-radius:10px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);padding:0 10px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--color-text-primary)}
+  .field input:focus,.field select:focus{outline:none;border-color:#1D9E75;box-shadow:0 0 0 2px rgba(29,158,117,0.15)}
+  .field input::placeholder,.field select::placeholder{color:var(--color-text-tertiary)}
+
+  /* Add row — always on top, visually distinct */
+  .add-row{border:1.5px dashed var(--color-border-secondary);border-radius:12px;padding:13px 14px;background:transparent;transition:border-color 0.15s,background 0.15s;position:relative}
+  .add-row:focus-within{border-color:#1D9E75;background:rgba(29,158,117,0.03)}
+  .add-row-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .add-row-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--color-text-secondary)}
+  .add-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:10px;background:#1D9E75;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:white;cursor:pointer;transition:background 0.15s}
+  .add-btn:hover{background:#0F6E56}
+  .add-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+  /* Existing line cards */
+  .line-card{background:var(--color-background-secondary);border-radius:12px;border:0.5px solid var(--color-border-tertiary);padding:13px 14px;position:relative}
+  .line-num{position:absolute;top:-10px;left:-10px;width:22px;height:22px;border-radius:50%;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--color-text-secondary)}
+
+  .line-grid{display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end}
+  .subtotal{text-align:right}
+  .sub-label{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--color-text-secondary);font-weight:600}
+  .sub-val{font-size:13px;font-weight:700;color:#0F6E56;margin-top:1px}
+  .del-btn{width:36px;height:36px;border-radius:10px;border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--color-text-secondary);font-size:14px;transition:all 0.15s;flex-shrink:0}
+  .del-btn:hover{background:#FCEBEB;border-color:#F7C1C1;color:#A32D2D}
+  .del-btn:disabled{opacity:0.3;cursor:not-allowed}
+
+  .lines-stack{display:flex;flex-direction:column;gap:10px}
+
+  /* invoice */
+  .invoice-drop{border:1.5px dashed var(--color-border-secondary);border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color 0.15s,background 0.15s}
+  .invoice-drop:hover{border-color:#1D9E75;background:rgba(29,158,117,0.04)}
+  .inv-icon{width:34px;height:34px;border-radius:9px;border:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+  .inv-text p:first-child{font-size:13px;font-weight:500;color:var(--color-text-primary)}
+  .inv-text p:last-child{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+  .invoice-attached{border:0.5px solid #9FE1CB;border-radius:12px;padding:11px 14px;background:#E1F5EE;display:flex;align-items:center;gap:10px}
+  .inv-at-icon{width:30px;height:30px;border-radius:8px;background:#9FE1CB;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .inv-at-name{font-size:13px;font-weight:600;color:#085041}
+  .inv-at-size{font-size:11px;color:#0F6E56;margin-top:1px}
+  .inv-clear{margin-left:auto;width:24px;height:24px;border-radius:6px;background:rgba(4,52,44,0.08);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;color:#085041}
+
+  .note-field{width:100%;border-radius:10px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--color-text-primary);resize:none;height:56px;line-height:1.5}
+  .note-field::placeholder{color:var(--color-text-tertiary)}
+
+  .mfooter{padding:14px 22px;border-top:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+  .total-area{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .total-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--color-text-secondary)}
+  .total-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-0.5px}
+  .invoice-chip{display:inline-flex;align-items:center;gap:4px;background:#E1F5EE;border:0.5px solid #9FE1CB;border-radius:20px;padding:3px 9px;font-size:10px;font-weight:700;color:#085041}
+  .footer-btns{display:flex;gap:8px;flex-shrink:0}
+  .btn{padding:8px 16px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all 0.15s;border:0.5px solid transparent}
+  .btn-ghost{background:transparent;border-color:var(--color-border-secondary);color:var(--color-text-secondary)}
+  .btn-ghost:hover{background:var(--color-background-secondary)}
+  .btn-primary{background:#1D9E75;border-color:#1D9E75;color:white}
+  .btn-primary:hover{background:#0F6E56}
+</style>
+
+<div class="shell">
+  <div class="modal">
+    <div class="mh">
+      <div class="mh-left">
+        <p>Record restock</p>
+        <p>Log an incoming stock delivery. Unit cost and supplier details are optional.</p>
+      </div>
+      <div class="close-btn">✕</div>
+    </div>
+
+    <div class="mbody">
+
+      <!-- Purchase details -->
+      <div>
+        <div class="sec-label">Purchase details</div>
+        <div class="grid-2">
+          <div class="field">
+            <label>Supplier name</label>
+            <input type="text" value="Nestlé Cameroun" />
+          </div>
+          <div class="field">
+            <label>Reference / Invoice no.</label>
+            <input type="text" value="INV-2025-0118" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Products received — add row pinned at top -->
+      <div>
+        <div class="sec-label">
+          Products received
+          <span id="countPill" style="background:var(--color-background-secondary);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--color-text-primary)">2</span>
+        </div>
+
+        <!-- ★ Add row always on top -->
+        <div class="add-row" id="addRow">
+          <div class="add-row-header">
+            <span class="add-row-title">New product</span>
+            <button class="add-btn" id="addBtn" onclick="commitLine()">+ Add to list</button>
+          </div>
+          <div style="margin-bottom:8px">
+            <div class="field">
+              <label>Product</label>
+              <select id="draftProduct">
+                <option value="">Select a product…</option>
+              </select>
+            </div>
+          </div>
+          <div class="line-grid">
+            <div class="field">
+              <label>Qty received</label>
+              <input type="number" id="draftQty" min="0.001" step="0.001" placeholder="0" />
+            </div>
+            <div class="field">
+              <label>Unit cost (XAF)</label>
+              <input type="number" id="draftCost" min="0" step="1" placeholder="Optional" />
+            </div>
+            <div class="subtotal" id="draftSubtotal">
+              <div class="sub-label">Subtotal</div>
+              <div class="sub-val" id="draftSubVal">—</div>
+            </div>
+            <div></div>
+          </div>
+        </div>
+
+        <!-- Committed lines below, newest first -->
+        <div class="lines-stack" id="lineItems" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Invoice -->
+      <div>
+        <div class="sec-label">Invoice / Receipt</div>
+        <div id="invoiceDrop" class="invoice-drop" onclick="attachInvoice()">
+          <div class="inv-icon">📎</div>
+          <div class="inv-text">
+            <p>Attach invoice or receipt</p>
+            <p>PDF, JPG or PNG — drag & drop or click to browse</p>
+          </div>
+        </div>
+        <div id="invoiceAttached" class="invoice-attached" style="display:none">
+          <div class="inv-at-icon">🧾</div>
+          <div>
+            <div class="inv-at-name">facture_nestlé_jan2025.pdf</div>
+            <div class="inv-at-size">342 KB · PDF</div>
+          </div>
+          <button class="inv-clear" onclick="clearInvoice()">✕</button>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <div class="sec-label">Notes</div>
+        <textarea class="note-field" placeholder="Optional delivery notes, batch info, etc."></textarea>
+      </div>
+    </div>
+
+    <div class="mfooter">
+      <div class="total-area">
+        <span class="total-label">Total cost</span>
+        <span class="total-val" id="totalDisplay">—</span>
+        <span class="invoice-chip" id="invoiceChip" style="display:none">📎 Invoice attached</span>
+      </div>
+      <div class="footer-btns">
+        <button class="btn btn-ghost">Cancel</button>
+        <button class="btn btn-primary">Confirm restock</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRODUCTS = [
+  {id:'p1', name:'Eau minérale 1.5L',   sku:'EAU-001'},
+  {id:'p2', name:'Coca-Cola 50cl',       sku:'COC-002'},
+  {id:'p3', name:'Farine de blé 1kg',    sku:'FAR-010'},
+  {id:'p4', name:'Huile de palme 1L',    sku:'HUI-011'},
+  {id:'p5', name:'Savon Lux 100g',       sku:'SAV-020'},
+  {id:'p6', name:'Shampoing Sunsilk',    sku:'SHA-021'},
+  {id:'p7', name:'Câble USB-C 1m',       sku:'CAB-030'},
+];
+
+// Lines stored newest-first; index 0 = most recently added (shown at top of list)
+let lines = [
+  {id:'l2', productId:'p3', qty:'20',  unitCost:'800'},
+  {id:'l1', productId:'p1', qty:'60',  unitCost:'250'},
+];
+
+function uid(){ return 'l' + Math.random().toString(36).slice(2,7); }
+
+function formatXAF(n){
+  return new Intl.NumberFormat('fr-CM',{style:'currency',currency:'XAF',maximumFractionDigits:0}).format(n);
+}
+
+function lineSub(l){
+  const q = parseFloat(l.qty), c = parseFloat(l.unitCost);
+  return (!isNaN(q) && !isNaN(c) && q > 0 && c >= 0) ? q * c : null;
+}
+
+function computeTotal(){
+  let tot = 0, any = false;
+  for(const l of lines){
+    const s = lineSub(l);
+    if(s !== null){ tot += s; any = true; }
+  }
+  return any ? tot : null;
+}
+
+function usedIds(){
+  return new Set(lines.map(l => l.productId).filter(Boolean));
+}
+
+// Numbering: line at index 0 (top of list) gets number = lines.length,
+// line at last index gets number 1 — so numbers read bottom-to-top as 1,2,3…
+function lineNumber(idx){ return lines.length - idx; }
+
+function refreshProductDropdowns(){
+  const used = usedIds();
+  // Draft row
+  const draftSel = document.getElementById('draftProduct');
+  const draftCur = draftSel.value;
+  draftSel.innerHTML = '<option value="">Select a product…</option>' +
+    PRODUCTS.map(p => {
+      const inList = used.has(p.id);
+      return `<option value="${p.id}" ${inList?'disabled':''} ${p.id===draftCur?'selected':''}>
+        ${p.name} (${p.sku})${inList?' — already added':''}
+      </option>`;
+    }).join('');
+  // Disable add btn if all products used
+  document.getElementById('addBtn').disabled = used.size >= PRODUCTS.length;
+}
+
+function renderLines(){
+  const container = document.getElementById('lineItems');
+  container.innerHTML = lines.map((line, idx) => {
+    const sub = lineSub(line);
+    const num = lineNumber(idx);
+    const prod = PRODUCTS.find(p => p.id === line.productId);
+    return `<div class="line-card">
+      <div class="line-num">${num}</div>
+      <div style="margin-bottom:8px">
+        <div class="field">
+          <label>Product</label>
+          <select onchange="updateLine('${line.id}','productId',this.value)">
+            <option value="">Select a product…</option>
+            ${PRODUCTS.map(p => {
+              const otherUsed = lines.some(l => l.id !== line.id && l.productId === p.id);
+              return `<option value="${p.id}" ${otherUsed?'disabled':''} ${p.id===line.productId?'selected':''}>
+                ${p.name} (${p.sku})${otherUsed?' — already added':''}
+              </option>`;
+            }).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="line-grid">
+        <div class="field">
+          <label>Qty received</label>
+          <input type="number" min="0.001" step="0.001" value="${line.qty}" placeholder="0"
+            oninput="updateLine('${line.id}','qty',this.value)" />
+        </div>
+        <div class="field">
+          <label>Unit cost (XAF)</label>
+          <input type="number" min="0" step="1" value="${line.unitCost}" placeholder="Optional"
+            oninput="updateLine('${line.id}','unitCost',this.value)" />
+        </div>
+        <div class="subtotal">
+          <div class="sub-label">Subtotal</div>
+          <div class="sub-val">${sub !== null ? formatXAF(sub) : '—'}</div>
+        </div>
+        <button class="del-btn" onclick="deleteLine('${line.id}')" aria-label="Remove">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('countPill').textContent = lines.length;
+  refreshProductDropdowns();
+  updateTotal();
+}
+
+function updateLine(id, field, val){
+  lines = lines.map(l => l.id === id ? {...l, [field]: val} : l);
+  renderLines();
+}
+
+function deleteLine(id){
+  lines = lines.filter(l => l.id !== id);
+  renderLines();
+}
+
+// Commit the draft row → prepend to list (newest at top)
+function commitLine(){
+  const productId = document.getElementById('draftProduct').value;
+  const qty       = document.getElementById('draftQty').value;
+  const unitCost  = document.getElementById('draftCost').value;
+  if(!productId || !qty || parseFloat(qty) <= 0){ return; }
+  lines = [{id: uid(), productId, qty, unitCost}, ...lines];
+  // Reset draft
+  document.getElementById('draftProduct').value = '';
+  document.getElementById('draftQty').value     = '';
+  document.getElementById('draftCost').value    = '';
+  document.getElementById('draftSubVal').textContent = '—';
+  renderLines();
+}
+
+// Live subtotal preview in draft row
+function updateDraftSub(){
+  const q = parseFloat(document.getElementById('draftQty').value);
+  const c = parseFloat(document.getElementById('draftCost').value);
+  const el = document.getElementById('draftSubVal');
+  el.textContent = (!isNaN(q) && !isNaN(c) && q > 0 && c >= 0) ? formatXAF(q * c) : '—';
+}
+document.getElementById('draftQty').addEventListener('input', updateDraftSub);
+document.getElementById('draftCost').addEventListener('input', updateDraftSub);
+
+function updateTotal(){
+  const tot = computeTotal();
+  document.getElementById('totalDisplay').textContent = tot !== null ? formatXAF(tot) : '—';
+}
+
+function attachInvoice(){
+  document.getElementById('invoiceDrop').style.display    = 'none';
+  document.getElementById('invoiceAttached').style.display = 'flex';
+  document.getElementById('invoiceChip').style.display    = 'inline-flex';
+}
+function clearInvoice(){
+  document.getElementById('invoiceDrop').style.display    = 'flex';
+  document.getElementById('invoiceAttached').style.display = 'none';
+  document.getElementById('invoiceChip').style.display    = 'none';
+}
+
+renderLines();
+</script>

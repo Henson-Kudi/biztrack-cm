@@ -31,7 +31,7 @@ import { Form, FormField, FormItem, FormLabel, FormMessage } from '@/components/
 
 type ProductFormMode = 'create' | 'update'
 
-type ProductFormValues = {
+export type ProductFormValues = {
   name: string
   description: string
   sku: string
@@ -49,11 +49,14 @@ type ProductFormValues = {
   isActive: boolean
 }
 
+export type ProductFormDefaultValues = Partial<ProductFormValues>
+
 type CreateProductFormProps = {
   businessId: string | null
   categories: ProductCategory[]
   units: UnitOfMeasure[]
   defaultUnitId?: string
+  defaultValues?: ProductFormDefaultValues
   mode?: ProductFormMode
   product?: Product | null
   onCancel: () => void
@@ -66,9 +69,10 @@ const textareaClassName =
 function createInitialProductForm(
   defaultUnitId?: string,
   product?: Product | null,
+  defaultValues?: ProductFormDefaultValues,
 ): ProductFormValues {
   if (!product) {
-    return {
+    const emptyValues: ProductFormValues = {
       name: '',
       description: '',
       sku: '',
@@ -85,6 +89,8 @@ function createInitialProductForm(
       trackInventory: true,
       isActive: true,
     }
+
+    return defaultValues ? { ...emptyValues, ...defaultValues } : emptyValues
   }
 
   return {
@@ -336,6 +342,7 @@ export function CreateProductForm({
   categories,
   units,
   defaultUnitId,
+  defaultValues,
   mode = 'create',
   product,
   onCancel,
@@ -344,8 +351,13 @@ export function CreateProductForm({
   const t = useTranslations('app.products')
   const isUpdateMode = mode === 'update'
   const initialValues = useMemo(
-    () => createInitialProductForm(defaultUnitId, isUpdateMode ? product : null),
-    [defaultUnitId, isUpdateMode, product],
+    () =>
+      createInitialProductForm(
+        defaultUnitId,
+        isUpdateMode ? product : null,
+        isUpdateMode ? undefined : defaultValues,
+      ),
+    [defaultUnitId, defaultValues, isUpdateMode, product],
   )
   const categoryOptions = useMemo<CommandSelectOption[]>(
     () => categories.map(toCategoryOption),

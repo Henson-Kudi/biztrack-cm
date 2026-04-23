@@ -1,4 +1,10 @@
 import type { InventoryMovementType, StockAdjustmentType } from './inventory.types'
+import type {
+  CreateSaleItemRequest,
+  CreateSalePaymentRequest,
+  PaymentMethod,
+  SaleStatus,
+} from './sale.types'
 
 export type SyncEntity =
   | 'product'
@@ -7,6 +13,76 @@ export type SyncEntity =
   | 'inventory_threshold'
   | 'inventory_adjustment'
   | 'inventory_restock'
+  | 'sale'
+
+/**
+ * Canonical push-processing dependency plan for sync entities.
+ *
+ * Treat edits here like a migration dependency change:
+ * 1. Desktop uses this order when selecting bounded outbox batches.
+ * 2. The API uses the same order when processing a persisted batch.
+ *
+ * Rules:
+ * - Root reference data with no sync-time dependencies comes first.
+ * - Catalog entities that reference root data come next.
+ * - Transactional/product-scoped entities come last.
+ * - Entities in the same dependency tier must be safe to process in timestamp order.
+ *
+ * Current dependency graph:
+ * - `unit_of_measure`: root lookup for products
+ * - `product_category`: root lookup for products
+ * - `product`: depends on `unit_of_measure`, optionally `product_category`
+ * - `inventory_threshold`: depends on `product`
+ * - `inventory_restock`: depends on `product`
+ * - `inventory_adjustment`: depends on `product`
+ * - `sale`: depends on `product`
+ *
+ * Pull-only child records such as sale items, sale payments, inventory levels,
+ * inventory movements, and restock items are not part of the push entity plan.
+ *
+ * When adding or removing sync entities, update:
+ * - `SyncEntity`
+ * - `SYNC_ENTITY_DEPENDENCY_TIER`
+ * - `SYNC_ENTITY_STABLE_ORDER`
+ * - every local outbox-entity to sync-entity mapper
+ * - every backend entity handler switch
+ */
+export const SYNC_ENTITY_DEPENDENCY_TIER: Record<SyncEntity, number> = {
+  unit_of_measure: 0,
+  product_category: 0,
+  product: 1,
+  inventory_threshold: 2,
+  inventory_restock: 2,
+  inventory_adjustment: 2,
+  sale: 2,
+}
+
+export const SYNC_ENTITY_STABLE_ORDER: Record<SyncEntity, number> = {
+  unit_of_measure: 0,
+  product_category: 1,
+  product: 2,
+  inventory_threshold: 3,
+  inventory_restock: 4,
+  inventory_adjustment: 5,
+  sale: 6,
+}
+
+export function getSyncEntityDependencyTier(entity: SyncEntity): number {
+  return SYNC_ENTITY_DEPENDENCY_TIER[entity]
+}
+
+export function getSyncEntityStableOrder(entity: SyncEntity): number {
+  return SYNC_ENTITY_STABLE_ORDER[entity]
+}
+
+export function compareSyncEntityExecutionOrder(left: SyncEntity, right: SyncEntity): number {
+  const tierDifference = getSyncEntityDependencyTier(left) - getSyncEntityDependencyTier(right)
+  if (tierDifference !== 0) {
+    return tierDifference
+  }
+
+  return getSyncEntityStableOrder(left) - getSyncEntityStableOrder(right)
+}
 
 export type SyncAction = 'UPSERT' | 'DELETE'
 
@@ -90,6 +166,58 @@ export interface RestockItemSyncRecord extends SyncRecord {
   createdAt: string
 }
 
+export interface SaleSyncRecord extends SyncRecord {
+  businessId: string
+  clientId: string
+  cashierId: string
+  cashierName?: string | null
+  saleNumber: string
+  status: SaleStatus
+  subtotal: number
+  discountAmount: number
+  taxAmount: number
+  totalAmount: number
+  amountPaid: number
+  changeGiven: number
+  customerName?: string | null
+  customerPhone?: string | null
+  notes?: string | null
+  priceDriftWarning: boolean
+  saleDate: string
+  soldAt: string
+  syncedAt?: string | null
+  voidedAt?: string | null
+  voidedById?: string | null
+  voidReason?: string | null
+  currency?: string | null
+  paymentMethod?: PaymentMethod | null
+  createdAt: string
+}
+
+export interface SaleItemSyncRecord extends SyncRecord {
+  saleId: string
+  businessId: string
+  productId: string
+  productName: string
+  productSku?: string | null
+  unitOfMeasure?: string | null
+  quantity: number
+  unitPrice: number
+  discountAmount: number
+  lineTotal: number
+  costPrice?: number | null
+  createdAt: string
+}
+
+export interface SalePaymentSyncRecord extends SyncRecord {
+  saleId: string
+  businessId: string
+  method: PaymentMethod
+  amount: number
+  mobileMoneyReference?: string | null
+  createdAt: string
+}
+
 export interface ChangeSet {
   products?: SyncRecord[]
   productCategories?: SyncRecord[]
@@ -98,6 +226,9 @@ export interface ChangeSet {
   inventoryMovements?: InventoryMovementSyncRecord[]
   restockRecords?: RestockRecordSyncRecord[]
   restockItems?: RestockItemSyncRecord[]
+  sales?: SaleSyncRecord[]
+  saleItems?: SaleItemSyncRecord[]
+  salePayments?: SalePaymentSyncRecord[]
 }
 
 export interface InventoryThresholdSyncPayload {
@@ -131,11 +262,37 @@ export interface InventoryRestockSyncPayload {
   items: InventoryRestockSyncItemPayload[]
 }
 
+export interface SaleSyncItemPayload extends CreateSaleItemRequest {
+  id: string
+  movementId?: string | null
+}
+
+export interface SaleSyncPaymentPayload extends CreateSalePaymentRequest {
+  id: string
+}
+
+export interface SaleSyncPayload {
+  saleId: string
+  clientId: string
+  saleNumber: string
+  soldAt: string
+  cashierId?: string | null
+  cashierName?: string | null
+  fallbackCashierId?: string | null
+  customerName?: string
+  customerPhone?: string
+  notes?: string
+  discountAmount?: number
+  payments: SaleSyncPaymentPayload[]
+  items: SaleSyncItemPayload[]
+}
+
 export type SyncPushPayload =
   | SyncRecord
   | InventoryThresholdSyncPayload
   | InventoryAdjustmentSyncPayload
   | InventoryRestockSyncPayload
+  | SaleSyncPayload
   | null
 
 export interface SyncPushOperation {

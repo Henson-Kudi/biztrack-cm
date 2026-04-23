@@ -20,6 +20,8 @@ export type CommandSelectOption = {
   keywords?: string[]
 }
 
+const EMPTY_OPTIONS: CommandSelectOption[] = []
+
 type LoadOptionsParams = {
   search: string
   page: number
@@ -82,6 +84,10 @@ function dedupeOptions(options: CommandSelectOption[]) {
   })
 }
 
+function getOptionSearchValue(option: CommandSelectOption) {
+  return [option.label, option.value, ...(option.keywords ?? [])].join(' ')
+}
+
 function useDebouncedValue(value: string, delayMs: number) {
   const [debouncedValue, setDebouncedValue] = useState(value)
 
@@ -100,8 +106,8 @@ function useDebouncedValue(value: string, delayMs: number) {
 
 export function CommandSelect({
   value,
-  options = [],
-  staticOptions = [],
+  options = EMPTY_OPTIONS,
+  staticOptions = EMPTY_OPTIONS,
   selectedOption,
   placeholder,
   searchPlaceholder,
@@ -127,10 +133,10 @@ export function CommandSelect({
   const debouncedSearch = useDebouncedValue(search, debounceMs)
 
   useEffect(() => {
-    if (!loadOptions || !open) {
+    if (!loadOptions) {
       setAsyncOptions(options)
     }
-  }, [loadOptions, open, options])
+  }, [loadOptions, options])
 
   useEffect(() => {
     if (!open || !loadOptions) {
@@ -175,8 +181,13 @@ export function CommandSelect({
     if (!open) {
       setSearch('')
       setPage(1)
+
+      if (loadOptions) {
+        setAsyncOptions(EMPTY_OPTIONS)
+        setTotalPages(1)
+      }
     }
-  }, [open])
+  }, [loadOptions, open])
 
   useEffect(() => {
     if (!open || !loadOptions) {
@@ -273,7 +284,7 @@ export function CommandSelect({
         align="start"
         onWheelCapture={handleWheelCapture}
       >
-        <Command shouldFilter={!loadOptions}>
+        <Command shouldFilter>
           <CommandInput
             value={search}
             onValueChange={setSearch}
@@ -287,11 +298,7 @@ export function CommandSelect({
               {resolvedOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={
-                    loadOptions
-                      ? option.value
-                      : [option.label, option.value, ...(option.keywords ?? [])].join(' ')
-                  }
+                  value={getOptionSearchValue(option)}
                   onSelect={() => {
                     onChange(option.value, option)
                     setOpen(false)

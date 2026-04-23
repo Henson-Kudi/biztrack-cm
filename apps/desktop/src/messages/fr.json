@@ -8,19 +8,21 @@
     "inventory": "Stock",
     "expenses": "Depenses",
     "reports": "Rapports",
-    "settings": "Parametres"
+    "settings": "Parametres",
+    "profile": "Profil utilisateur",
+    "profile_hint": "Compte et permissions"
   },
   "topbar": {
     "last_sync": "Derniere synchro : {time}",
     "never": "Jamais",
-      "quality_label": "Connexion : {quality}",
-      "status_label": "Synchro : {status}",
-      "pending_label": "En attente : {count}",
-      "realtime_label": "Transport : {mode} ({status})",
-      "realtime_badge": "Canal live",
-      "realtime_status_label": "Canal live : {mode} ({status})",
-      "auto_sync_on": "Auto-sync active",
-      "auto_sync_off": "Auto-sync inactive",
+    "quality_label": "Connexion : {quality}",
+    "status_label": "Synchro : {status}",
+    "pending_label": "En attente : {count}",
+    "realtime_label": "Transport : {mode} ({status})",
+    "realtime_badge": "Canal live",
+    "realtime_status_label": "Canal live : {mode} ({status})",
+    "auto_sync_on": "Auto-sync active",
+    "auto_sync_off": "Auto-sync inactive",
     "auto_sync_label": "Auto-sync",
     "auto_sync_enable": "Activer",
     "auto_sync_disable": "Desactiver",
@@ -38,7 +40,18 @@
     "desktop_only_subtitle": "Les preferences de synchro sont disponibles dans l'application desktop installee.",
     "theme_to_light": "Passer au mode clair",
     "theme_to_dark": "Passer au mode sombre",
-    "user_fallback": "Membre de l'equipe",
+    "language_label": "Langue",
+    "user_fallback": "Utilisateur local",
+    "languages": {
+      "en": "English",
+      "fr": "Francais"
+    },
+    "roles": {
+      "owner": "Proprietaire",
+      "manager": "Gerant",
+      "cashier": "Caissier",
+      "accountant": "Comptable"
+    },
     "quality": {
       "offline": "Hors ligne",
       "weak": "Faible",
@@ -46,28 +59,28 @@
       "strong": "Bonne",
       "very_strong": "Tres bonne"
     },
-      "status": {
-        "idle": "Au repos",
-        "syncing": "En cours",
-        "synced": "Synchronise",
-        "error": "Attention requise",
-        "paused": "En pause",
-        "disabled": "Desactive"
-      },
-      "realtime": {
-        "mode": {
-          "disabled": "Arret",
-          "fallback": "Polling de secours",
-          "realtime": "Websocket live"
-        },
-        "status": {
-          "disconnected": "Deconnecte",
-          "connecting": "Connexion",
-          "connected": "Connecte",
-          "reconnecting": "Reconnexion"
-        }
-      }
+    "status": {
+      "idle": "Au repos",
+      "syncing": "En cours",
+      "synced": "Synchronise",
+      "error": "Attention requise",
+      "paused": "En pause",
+      "disabled": "Desactive"
     },
+    "realtime": {
+      "mode": {
+        "disabled": "Arret",
+        "fallback": "Polling de secours",
+        "realtime": "Websocket live"
+      },
+      "status": {
+        "disconnected": "Deconnecte",
+        "connecting": "Connexion",
+        "connected": "Connecte",
+        "reconnecting": "Reconnexion"
+      }
+    }
+  },
   "app": {
     "title": "BizTrack Desktop",
     "dashboard": {
@@ -77,8 +90,134 @@
       "logout_loading": "Deconnexion..."
     },
     "sell": {
+      "all_categories": "Toutes",
       "title": "Vendre",
-      "subtitle": "Ecran de vente - bientot disponible."
+      "subtitle": "Ecran de vente - bientot disponible.",
+      "pos": "Point de Vente",
+      "shift_open": "Ouvert depuis",
+      "search_placeholder": "Nom du produit ou scanner code-barres…",
+      "scan": "Scanner",
+      "barcode_not_found_title": "Code-barres introuvable",
+      "barcode_not_found_description": "Aucun produit n utilise encore ce code-barres.",
+      "scanned_barcode": "Code-barres scanne",
+      "add_scanned_product": "Ajouter le produit",
+      "product_added_from_scan": "ajoute au panier",
+      "low_stock": "Bas",
+      "out_of_stock": "Rupture",
+      "in_stock": "en stock",
+      "current_sale": "Vente en cours",
+      "sale_no": "Vente",
+      "empty_cart_title": "Panier vide",
+      "empty_cart_hint": "Touchez un produit à gauche pour commencer",
+      "item": "article",
+      "items": "articles",
+      "subtotal": "Sous-total",
+      "discount": "Remise",
+      "add_discount": "Ajouter une remise",
+      "total": "Total",
+      "clear": "Tout vider",
+      "hold": "Mettre en attente",
+      "charge": "Encaisser",
+      "discount_title": "Appliquer une remise",
+      "discount_by": "Type",
+      "percent": "Pourcentage",
+      "amount": "Montant",
+      "custom_value": "Valeur personnalisée",
+      "apply": "Appliquer",
+      "remove_discount": "Retirer la remise",
+      "walk_in": "Client de passage",
+      "no_customer": "Aucun client associé",
+      "add_customer": "Ajouter un client",
+      "change_customer": "Changer de client",
+      "remove": "Retirer",
+      "customer_dialog_title": "Choisir ou créer un client",
+      "customer_dialog_desc": "Associez cette vente à un client pour suivre les reçus et le crédit.",
+      "search_customer": "Rechercher par nom ou téléphone…",
+      "search_tab": "Rechercher",
+      "create_tab": "Nouveau client",
+      "no_customers_found": "Aucun client trouvé",
+      "full_name": "Nom complet",
+      "phone": "Téléphone",
+      "optional_email": "Email (optionnel)",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "select_payment": "Choisir le mode de paiement",
+      "cash": "Espèces",
+      "mtnMomo": "MTN Mobile Money",
+      "orangeMoney": "Orange Money",
+      "card": "Carte",
+      "amount_received": "Montant reçu",
+      "change_due": "Monnaie à rendre",
+      "momo_number": "Numéro MoMo du client",
+      "reference_id": "Référence de transaction",
+      "quick_amounts": "Montants rapides",
+      "confirm_payment": "Confirmer le paiement",
+      "processing": "Traitement…",
+      "payment_complete": "Paiement reçu",
+      "paid_with": "Payé avec",
+      "print": "Imprimer",
+      "new_sale": "Nouvelle vente",
+      "thank_you": "Merci pour votre achat",
+      "held_sales": "Ventes en attente",
+      "no_holds": "Aucune vente en attente",
+      "resume": "Reprendre",
+      "synced": "Synchronisé",
+      "offline": "Hors ligne",
+      "grid_view": "Vue grille",
+      "list_view": "Vue liste",
+      "currency": "FCFA",
+      "products_count": "produits",
+      "owes": "doit",
+      "card_hint": "Traitez le paiement sur votre terminal bancaire, puis confirmez ci-dessous.",
+      "no_products_found": "Aucun produit trouve",
+      "scan_hint": "Scannez ou saisissez un code-barres ici, puis appuyez sur Entree.",
+      "mtn_momo": "MTN MoMo",
+      "orange_money": "Orange Money",
+      "uncategorized": "Sans categorie",
+      "catalogue_title": "Recherche produit rapide",
+      "catalogue_subtitle": "Recherchez dans le catalogue local et encaissez sans attendre l'API.",
+      "customer_coming_soon": "La fonctionnalite client arrive ensuite",
+      "payment_received": "Paiement recu",
+      "payment_saved_hint": "La vente est sauvegardee en local et le stock a ete mis a jour sur cet appareil.",
+      "share_receipt": "Partager le recu",
+      "see_held_sales": "Voir les ventes en attente",
+      "not_tracked": "Non suivi",
+      "thermal_receipt": "Apercu du recu",
+      "cashier": "Caissier",
+      "local_user": "Utilisateur local",
+      "business_fallback": "Business",
+      "receipt": {
+        "title": "RECU DE VENTE",
+        "date": "Date",
+        "customer": "Client",
+        "items": "ARTICLE",
+        "total": "TOTAL",
+        "phone": "Tel",
+        "reference": "Ref",
+        "thanks": "Merci"
+      },
+      "receipt_printed": "Recu envoye a l imprimante.",
+      "receipt_print_unavailable": "L impression thermique est disponible uniquement dans l application desktop. Le PDF du recu a ete telecharge a la place.",
+      "receipt_print_failed": "Impossible d imprimer le recu.",
+      "receipt_shared": "PDF du recu partage.",
+      "receipt_share_unavailable": "Le partage de fichiers n est pas disponible ici. Le PDF du recu a ete telecharge a la place.",
+      "receipt_share_failed": "Impossible de partager le PDF. Le PDF du recu a ete telecharge a la place.",
+      "receipt_share_saved": "Le partage n est pas disponible ici. Le PDF du recu a ete enregistre dans Telechargements.",
+      "sale_saved": "Vente enregistree en local.",
+      "payment_back": "Retour au panier",
+      "business_required": "Selectionnez un business sur cet appareil avant d ouvrir la vente.",
+      "load_error": "Impossible de charger l espace de vente.",
+      "errors": {
+        "SALE_EMPTY": "Ajoutez au moins un article avant de confirmer la vente.",
+        "SALE_QUANTITY_INVALID": "Chaque ligne doit avoir une quantite valide.",
+        "SALE_UNIT_PRICE_INVALID": "Une ligne du panier a un prix unitaire invalide.",
+        "SALE_DISCOUNT_INVALID": "La remise doit etre superieure ou egale a zero.",
+        "SALE_UNDERPAID": "Le montant recu doit couvrir le total.",
+        "SALE_PRODUCT_NOT_FOUND": "Un produit du panier n est plus disponible en local.",
+        "SALE_PRODUCT_INACTIVE": "Un produit du panier est inactif et ne peut pas etre vendu.",
+        "SALE_INSUFFICIENT_STOCK": "Le stock disponible est insuffisant pour cette vente.",
+        "SALE_PAYMENT_METHOD_INVALID": "Choisissez un mode de paiement pris en charge."
+      }
     },
     "products": {
       "eyebrow": "Catalogue",
@@ -475,13 +614,24 @@
       }
     },
     "inventory": {
-      "eyebrow": "Stock",
+      "eyebrow": "Gestion des stocks",
       "title": "Espace inventaire",
-      "subtitle": "Surveillez le stock en direct, traitez les alertes et faites les ajustements depuis le desktop.",
+      "subtitle": "Suivez les niveaux de stock, ajustez les quantités et surveillez les mouvements de produits dans votre boutique.",
       "actions": {
-        "refresh": "Actualiser"
+        "refresh": "Actualiser",
+        "movement_log": "Journal des mouvements",
+        "quick_add": "Ajouter une unite au stock",
+        "quick_remove": "Retirer une unite du stock"
       },
       "metrics": {
+        "total_skus_hint": "Produits suivis",
+        "in_stock": "En stock",
+        "in_stock_hint": "Articles à niveau normal",
+        "low_stock": "Stock faible",
+        "out_of_stock": "En rupture",
+        "out_of_stock_hint": "Articles à traiter",
+        "total_skus": "Total SKU",
+        "low_stock_hint": "Produits qui demandent une attention rapide.",
         "tracked_products": "Produits suivis",
         "tracked_products_hint": "Produits avec une ligne d'inventaire dans ce business.",
         "alerts": "Alertes actives",
@@ -490,6 +640,12 @@
         "page_low_stock_hint": "Elements visibles actuellement signales.",
         "selected_quantity": "Quantite selectionnee"
       },
+      "tabs": {
+        "all_products": "Tous les produits",
+        "low_stock": "Stock faible",
+        "out_of_stock": "En rupture",
+        "reorder_soon": "À réapprovisionner"
+      },
       "alerts": {
         "title": "Alertes de stock faible",
         "description": "Les problemes de stock les plus urgents du business.",
@@ -497,22 +653,52 @@
         "summary": "{currentQuantity} restant pour un seuil de {threshold}"
       },
       "filters": {
+        "search_placeholder": "Rechercher par nom, SKU ou code-barres…",
+        "all_categories": "Toutes les catégories",
         "category": "Categorie",
-        "all_categories": "Toutes les categories",
-        "low_stock_only": "Afficher seulement le stock faible"
+        "low_stock_only": "Afficher seulement le stock faible",
+        "search_categories": "Rechercher une categorie...",
+        "no_categories_found": "Aucune categorie trouvee."
+      },
+      "form": {
+        "product": "Produit",
+        "select_product": "Choisir un produit",
+        "current_quantity": "Quantite actuelle",
+        "search_product": "Rechercher un produit...",
+        "no_products_found": "Aucun produit trouve.",
+        "loading_products": "Chargement des produits...",
+        "load_more_products": "Charger plus de produits"
+      },
+      "table": {
+        "product": "Produit",
+        "category": "Categorie",
+        "in_stock": "En stock",
+        "threshold_reorder": "Seuil / commande",
+        "stock_level": "Niveau de stock",
+        "status": "Statut",
+        "last_restock": "Dernier reappro",
+        "actions": "Actions",
+        "no_identifier": "Aucun SKU ni code-barres"
       },
       "stock": {
+        "uncategorized": "Non catégorisé",
         "title": "Niveaux de stock",
         "description": "Consultez les quantites actuelles et ouvrez un produit pour gerer les seuils ou mouvements.",
         "empty_title": "Aucune ligne de stock",
         "empty_description": "Le stock apparait seulement pour les produits avec suivi active.",
+        "empty_filtered": "Aucun produit ne correspond aux filtres actuels.",
         "low_stock_badge": "Stock faible",
         "healthy_badge": "Correct",
-        "uncategorized": "Sans categorie",
         "no_unit": "Sans unite",
         "quantity": "Quantite",
         "threshold": "Seuil",
-        "last_restock": "Dernier reappro"
+        "last_restock": "Dernier reappro",
+        "badges": {
+          "healthy": "Normal",
+          "low_stock": "Stock faible",
+          "out_of_stock": "En rupture",
+          "reorder": "À réapprovisionner"
+        }
       },
       "detail": {
         "empty_title": "Selectionnez un produit",
@@ -531,36 +717,85 @@
         "movement_summary": "{before} avant, {after} apres"
       },
       "thresholds": {
-        "title": "Seuils",
-        "description": "Ajustez la facon dont le produit apparait dans le suivi de stock faible.",
+        "title": "Seuils de stock",
+        "description": "Définissez les seuils de stock faible et de point de commande pour un produit. Laissez vide pour supprimer un seuil.",
         "low_stock_threshold": "Seuil de stock faible",
         "reorder_point": "Point de commande",
-        "success": "Seuils mis a jour.",
-        "submitting": "Enregistrement...",
-        "submit": "Enregistrer les seuils"
+        "submit": "Enregistrer les seuils",
+        "submitting": "Enregistrement…",
+        "success": "Seuils mis à jour avec succès.",
+        "open": "Seuils"
       },
       "adjustment": {
+        "notes": "Motif / Notes",
+        "submit": "Appliquer l'ajustement",
+        "submitting": "Application…",
+        "quick_add_note": "Ajustement rapide +1",
+        "quick_remove_note": "Ajustement rapide -1",
         "title": "Ajuster le stock",
         "open": "Ajuster le stock",
         "description": "Corrigez le stock apres un comptage, une casse ou un ecart.",
         "type": "Type d'ajustement",
+        "types": {
+          "add": "Entree de stock",
+          "remove": "Sortie de stock",
+          "set": "Définir la quantité exacte"
+        },
         "quantity": "Quantite",
-        "notes": "Notes",
-        "success": "Stock ajuste avec succes.",
-        "submitting": "Ajustement du stock...",
-        "submit": "Ajuster le stock"
+        "success": "Stock ajuste avec succes."
       },
       "restock": {
-        "title": "Reapprovisionnement",
-        "description": "Enregistrez le stock entrant pour le produit selectionne.",
-        "quantity": "Quantite recue",
-        "unit_cost": "Cout unitaire",
-        "supplier": "Fournisseur",
-        "reference": "Numero de reference",
+        "title": "Enregistrer un réapprovisionnement",
+        "description": "Enregistrez une livraison de stock entrant. Le coût unitaire et les informations fournisseur sont facultatifs mais recommandés.",
+        "quantity": "Quantité reçue",
+        "unit_cost": "Coût unitaire (XAF)",
+        "unit_cost_optional": "Optionnel",
+        "supplier": "Nom du fournisseur",
+        "reference": "Numéro de référence",
         "notes": "Notes",
-        "success": "Reappro enregistre avec succes.",
-        "submitting": "Enregistrement du reappro...",
-        "submit": "Enregistrer le reappro"
+        "notes_placeholder": "Notes de livraison, info lot ou commentaire fournisseur.",
+        "submitting": "Enregistrement…",
+        "success": "Réapprovisionnement enregistré avec succès.",
+        "open": "Reappro",
+        "submit": "Confirmer le reappro",
+        "add_products": "Ajouter des produits",
+        "products_added_count": "Produits ajoutes : {count}",
+        "no_products_selected": "Choisissez les produits achetes et leurs quantites dans un selecteur dedie.",
+        "select_products_title": "Ajouter des produits au reappro",
+        "select_products_description": "Construisez la liste des produits achetes, puis confirmez pour revenir au formulaire de reappro.",
+        "confirm_products": "Terminer",
+        "sections": {
+          "purchase_details": "Details d'achat",
+          "products_received": "Produits recus",
+          "invoice": "Facture / Recu"
+        },
+        "new_product": "Nouveau produit",
+        "add_to_list": "Ajouter a la liste",
+        "subtotal": "Sous-total",
+        "total_cost": "Cout total",
+        "attach_invoice": "Joindre une facture ou un recu",
+        "attach_invoice_hint": "PDF, JPG ou PNG - glissez-deposez ou cliquez pour parcourir.",
+        "invoice_attached": "Facture jointe",
+        "remove_line": "Retirer cette ligne de reappro",
+        "product_already_added": "Ce produit est deja dans la liste de reappro.",
+        "replace_existing_confirm": "{product} est deja dans la liste de reappro. Selectionnez OK pour remplacer la ligne existante, ou Annuler pour la conserver.",
+        "empty_items": "Ajoutez un produit ci-dessus pour commencer la liste de reappro."
+      },
+      "movement_log": {
+        "description": "Historique des dernières modifications de stock sur tous les produits.",
+        "empty": "Aucun mouvement de stock enregistré pour l'instant.",
+        "unknown_product": "Produit inconnu",
+        "no_notes": "Aucune note",
+        "title": "Mouvements de stock recents"
+      },
+      "movement_types": {
+        "sale": "Vente",
+        "restock_in": "Reapprovisionnement",
+        "manual_adjustment": "Ajustement manuel",
+        "void_reversal": "Annulation",
+        "opening_stock": "Stock initial",
+        "transfer_in": "Transfert entrant",
+        "transfer_out": "Transfert sortant"
       },
       "dialog": {
         "close": "Fermer la boite de dialogue",
@@ -575,6 +810,7 @@
         "load": "Impossible de charger l'inventaire.",
         "detail": "Impossible de charger les details du stock.",
         "inventory_not_found": "Aucun stock suivi n'a ete trouve pour ce produit.",
+        "product_required": "Choisissez un produit avant de continuer.",
         "thresholds": "Impossible de mettre a jour les seuils.",
         "low_stock_threshold_invalid": "Le seuil de stock faible doit etre superieur ou egal a zero.",
         "reorder_point_invalid": "Le point de commande doit etre superieur ou egal a zero.",

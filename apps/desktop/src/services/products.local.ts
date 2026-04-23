@@ -1584,6 +1584,17 @@ export async function getProductByIdLocal(businessId: string, productId: string)
   return row ? mapProductRow(row) : null
 }
 
+export async function getProductByBarcodeLocal(businessId: string, barcode: string) {
+  const normalizedBusinessId = assertBusinessId(businessId)
+  const normalizedBarcode = barcode.trim()
+  if (!normalizedBarcode) return null
+
+  const rows = await fetchProductRowsForBusiness(normalizedBusinessId)
+  const row = rows.find((item) => item.barcode?.trim() === normalizedBarcode)
+
+  return row ? mapProductRow(row) : null
+}
+
 export async function fetchProductRowsForBusiness(businessId: string) {
   return dbQuery<ProductRow>(
     `

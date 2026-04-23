@@ -12,7 +12,7 @@ import type {
 } from '@biztrack/types'
 import { StockAdjustmentType } from '@biztrack/types'
 import { I18nService } from 'nestjs-i18n'
-import { DataSource, IsNull, Repository } from 'typeorm'
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm'
 import { AppException } from '@/common/exceptions/app.exception'
 import {
   AppBadRequestException,
@@ -29,6 +29,13 @@ import { RestockRecord } from '@/entities/restock-record.entity'
 import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
 import type { InventoryLowStockAlertDigest } from '../constants/inventory.constants'
+
+type SaleInventoryItemInput = {
+  productId: string
+  productName: string
+  quantity: number
+  movementId?: string | null
+}
 
 @Injectable()
 export class InventoryService {
@@ -397,6 +404,161 @@ export class InventoryService {
     }
   }
 
+  async deductForSale(
+    businessId: string,
+    saleId: string,
+    saleNumber: string,
+    userId: string,
+    items: SaleInventoryItemInput[],
+    manager?: EntityManager,
+  ): Promise<void> {
+    try {
+      const inventoryRepo = this.getInventoryRepo(manager)
+      const movementRepo = this.getMovementRepo(manager)
+      const productRepo = this.getProductRepo(manager)
+
+      for (const item of items) {
+        const product = await productRepo.findOne({
+          where: { id: item.productId, businessId, deletedAt: IsNull() },
+        })
+
+        if (!product) {
+          throw new AppNotFoundException(
+            await this.i18n.translate('errors.product_not_found'),
+            'PRODUCT_NOT_FOUND',
+          )
+        }
+
+        if (!product.trackInventory) {
+          continue
+        }
+
+        const level = await this.findInventoryLevelForUpdate(inventoryRepo, businessId, item.productId)
+        const quantityBefore = Number(level?.quantity ?? 0)
+        const quantityAfter = quantityBefore - item.quantity
+
+        if (quantityAfter < 0) {
+          throw new AppBadRequestException(
+            await this.i18n.translate('errors.insufficient_stock', {
+              args: {
+                name: item.productName,
+                available: quantityBefore,
+                requested: item.quantity,
+              },
+            }),
+            'INSUFFICIENT_STOCK',
+            {
+              productId: item.productId,
+              productName: item.productName,
+              available: quantityBefore,
+              requested: item.quantity,
+            },
+          )
+        }
+
+        if (!level) {
+          await inventoryRepo.save(
+            inventoryRepo.create({
+              businessId,
+              productId: item.productId,
+              quantity: quantityAfter,
+            }),
+          )
+        } else {
+          await inventoryRepo.update(level.id, { quantity: quantityAfter })
+        }
+
+        await movementRepo.save(
+          movementRepo.create({
+            id: item.movementId ?? undefined,
+            businessId,
+            productId: item.productId,
+            type: MovementType.SALE,
+            quantityChange: -item.quantity,
+            quantityBefore,
+            quantityAfter,
+            referenceType: 'sale',
+            referenceId: saleId,
+            notes: `Sale ${saleNumber}`,
+            performedById: userId,
+          }),
+        )
+      }
+    } catch (error) {
+      return this.handleServiceError('deductForSale', error, { businessId, saleId, saleNumber, userId })
+    }
+  }
+
+  async reverseForVoidedSale(
+    businessId: string,
+    saleId: string,
+    saleNumber: string,
+    userId: string,
+    items: SaleInventoryItemInput[],
+    manager?: EntityManager,
+  ): Promise<void> {
+    try {
+      const inventoryRepo = this.getInventoryRepo(manager)
+      const movementRepo = this.getMovementRepo(manager)
+      const productRepo = this.getProductRepo(manager)
+
+      for (const item of items) {
+        const product = await productRepo.findOne({
+          where: { id: item.productId, businessId, deletedAt: IsNull() },
+        })
+
+        if (!product) {
+          throw new AppNotFoundException(
+            await this.i18n.translate('errors.product_not_found'),
+            'PRODUCT_NOT_FOUND',
+          )
+        }
+
+        if (!product.trackInventory) {
+          continue
+        }
+
+        const level = await this.findInventoryLevelForUpdate(inventoryRepo, businessId, item.productId)
+        const quantityBefore = Number(level?.quantity ?? 0)
+        const quantityAfter = quantityBefore + item.quantity
+
+        if (!level) {
+          await inventoryRepo.save(
+            inventoryRepo.create({
+              businessId,
+              productId: item.productId,
+              quantity: quantityAfter,
+            }),
+          )
+        } else {
+          await inventoryRepo.update(level.id, { quantity: quantityAfter })
+        }
+
+        await movementRepo.save(
+          movementRepo.create({
+            businessId,
+            productId: item.productId,
+            type: MovementType.VOID_REVERSAL,
+            quantityChange: item.quantity,
+            quantityBefore,
+            quantityAfter,
+            referenceType: 'sale_void',
+            referenceId: saleId,
+            notes: `Void ${saleNumber}`,
+            performedById: userId,
+          }),
+        )
+      }
+    } catch (error) {
+      return this.handleServiceError('reverseForVoidedSale', error, {
+        businessId,
+        saleId,
+        saleNumber,
+        userId,
+      })
+    }
+  }
+
   private calculateAdjustedQuantity(currentQuantity: number, dto: AdjustInventoryRequest) {
     if (dto.type === StockAdjustmentType.ADD) return currentQuantity + dto.quantity
     if (dto.type === StockAdjustmentType.REMOVE) return currentQuantity - dto.quantity
@@ -550,6 +712,35 @@ export class InventoryService {
     }
 
     return level
+  }
+
+  private getInventoryRepo(manager?: EntityManager) {
+    return manager?.getRepository(InventoryLevel) ?? this.inventoryLevelsRepo
+  }
+
+  private getMovementRepo(manager?: EntityManager) {
+    return manager?.getRepository(InventoryMovement) ?? this.inventoryMovementsRepo
+  }
+
+  private getProductRepo(manager?: EntityManager) {
+    return manager?.getRepository(Product) ?? this.productsRepo
+  }
+
+  private async findInventoryLevelForUpdate(
+    inventoryRepo: Repository<InventoryLevel>,
+    businessId: string,
+    productId: string,
+  ) {
+    const qb = inventoryRepo
+      .createQueryBuilder('inventory')
+      .where('inventory.business_id = :businessId', { businessId })
+      .andWhere('inventory.product_id = :productId', { productId })
+
+    if (inventoryRepo.manager.queryRunner?.isTransactionActive) {
+      qb.setLock('pessimistic_write')
+    }
+
+    return qb.getOne()
   }
 
   private async handleServiceError(
