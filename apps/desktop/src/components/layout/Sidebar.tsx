@@ -1,8 +1,11 @@
 'use client'
 
 import { useLocale, useTranslations } from 'next-intl'
+import type { JwtPayload } from '@biztrack/types'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { decodeJwtPayload } from '@/lib/jwt'
+import { useAuthStore } from '@/stores/auth.store'
 
 type NavItem = {
   to: string
@@ -10,10 +13,45 @@ type NavItem = {
   children?: NavItem[]
 }
 
+function initials(value: string) {
+  return value
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
+}
+
+function toTitleCase(value: string) {
+  return value
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function resolveProfileName(payload: JwtPayload | null, fallback: string) {
+  if (payload?.email) {
+    const [localPart] = payload.email.split('@')
+    const label = toTitleCase(localPart||'')
+    if (label) {
+      return label
+    }
+  }
+
+  if (payload?.phone) {
+    return payload.phone
+  }
+
+  return fallback
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const locale = useLocale()
   const t = useTranslations('nav')
+  const accessToken = useAuthStore((state) => state.accessToken)
+  const payload = accessToken ? decodeJwtPayload<JwtPayload>(accessToken) : null
 
   const navItems: NavItem[] = [
     { to: '/', label: t('home') },
@@ -39,6 +77,10 @@ export function Sidebar() {
 
     return pathname === currentPath || (to !== '/' && pathname.startsWith(`${currentPath}/`))
   }
+
+  const profileName = resolveProfileName(payload, t('profile'))
+  const profileSecondary = payload?.email ?? payload?.phone ?? t('profile_hint')
+  const profileInitials = initials(profileName || 'BT')
 
   return (
     <aside className="w-[220px] bg-brand-900 text-white flex flex-col py-4">
@@ -113,6 +155,41 @@ export function Sidebar() {
           )
         })}
       </nav>
+
+      <div className="mt-4 border-t border-brand-800 px-3 pt-4">
+        <button
+          type="button"
+          aria-label={t('profile')}
+          className="flex w-full items-center gap-3 rounded-[18px] border border-white/25 bg-white/[0.04] px-3 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+        >
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[radial-gradient(circle_at_30%_30%,#f472b6_0%,#a855f7_38%,#2563eb_100%)] text-sm font-semibold text-white shadow-[0_0_0_2px_rgba(255,255,255,0.08)]">
+            {profileInitials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold leading-5 text-white">
+              {profileName}
+            </div>
+            <div className="truncate text-[15px] leading-5 text-white/80">
+              {profileSecondary}
+            </div>
+          </div>
+          <svg
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="shrink-0 text-white/85"
+          >
+            <path d="m5 6 3-3 3 3" />
+            <path d="m5 10 3 3 3-3" />
+          </svg>
+        </button>
+      </div>
     </aside>
   )
 }

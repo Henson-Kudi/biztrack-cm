@@ -20,7 +20,7 @@ export class SyncController {
     description: 'Stores client sync operations and queues background processing.',
   })
   pushBatch(@CurrentUser() user: JwtPayload, @Body() dto: PushSyncBatchDto): Promise<SyncPushResponse> {
-    return this.syncService.enqueueBatch(user.businessId as string, dto)
+    return this.syncService.enqueueBatch(user.businessId as string, user, dto)
   }
 
   @Get('batches/:batchId')

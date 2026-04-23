@@ -17,6 +17,7 @@ enum SyncEntityDto {
   INVENTORY_THRESHOLD = 'inventory_threshold',
   INVENTORY_ADJUSTMENT = 'inventory_adjustment',
   INVENTORY_RESTOCK = 'inventory_restock',
+  SALE = 'sale',
 }
 
 enum SyncActionDto {

@@ -11,13 +11,14 @@ import { CreateUnitOfMeasureDto } from '../dto/create-unit-of-measure.dto'
 import { UpdateUnitOfMeasureDto } from '../dto/update-unit-of-measure.dto'
 import { UnitOfMeasureDto } from '../dto/unit-of-measure-response.dto'
 import { UnitOfMeasuresService } from '../services/unit-of-measures.service'
+import { UnitOfMeasure as UnitOfMeasureEntity } from '@/entities/unit-of-measure.entity'
 
 @ApiTags('Unit Of Measures')
 @ApiBearerAuth()
 @UseGuards(Phase2Guard, ResourceGuard)
 @Controller('unit-of-measures')
 export class UnitOfMeasuresController {
-  constructor(private readonly unitOfMeasuresService: UnitOfMeasuresService) {}
+  constructor(private readonly unitOfMeasuresService: UnitOfMeasuresService) { }
 
   @Get()
   @RequireResource(Resource.PRODUCTS_VIEW)
@@ -42,7 +43,7 @@ export class UnitOfMeasuresController {
   ): Promise<UnitOfMeasure> {
     return serializeDto(
       UnitOfMeasureDto.fromEntity(
-        await this.unitOfMeasuresService.create(user.businessId as string, dto),
+        await this.unitOfMeasuresService.create(user.businessId as string, dto) as unknown as UnitOfMeasureEntity,
       )!,
     )
   }

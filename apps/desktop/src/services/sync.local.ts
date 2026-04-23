@@ -10,6 +10,7 @@ export type SyncEntity =
   | 'inventoryThresholds'
   | 'inventoryAdjustments'
   | 'inventoryRestocks'
+  | 'sales'
 
 export function buildOutboxUpsertOperation(
   entity: SyncEntity,
@@ -51,7 +52,7 @@ export function buildOutboxUpsertOperation(
 }
 
 export function buildOutboxEventOperation(
-  entity: Extract<SyncEntity, 'inventoryAdjustments' | 'inventoryRestocks'>,
+  entity: Extract<SyncEntity, 'inventoryAdjustments' | 'inventoryRestocks' | 'sales'>,
   recordId: string,
   payload: unknown,
 ): DbOperation {

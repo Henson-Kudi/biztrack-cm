@@ -30,7 +30,29 @@ declare global {
         onSnapshotChange: (callback: (snapshot: NetworkSnapshot) => void) => void
       }
       print: {
-        receipt: (data: unknown) => Promise<void>
+        receipt: (data: {
+          buffer: number[]
+          filename?: string
+          printerName?: string
+          paperWidthMm?: number
+          silent?: boolean
+        }) => Promise<{
+          success: boolean
+          printerName?: string
+        }>
+      }
+      share: {
+        file: (data: {
+          buffer: number[]
+          filename: string
+          mimeType?: string
+        }) => Promise<{
+          success: boolean
+          shared: boolean
+          path?: string
+          fallback?: 'downloads'
+          error?: string
+        }>
       }
       app: {
         version: () => Promise<string>
@@ -138,7 +160,13 @@ const fallbackIpc: Window['electronAPI'] = {
     onSnapshotChange: () => {},
   },
   print: {
-    receipt: async () => {},
+    receipt: async () => ({ success: false }),
+  },
+  share: {
+    file: async () => ({
+      success: false,
+      shared: false,
+    }),
   },
   app: {
     version: async () => 'web',

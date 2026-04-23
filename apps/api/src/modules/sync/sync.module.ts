@@ -10,6 +10,9 @@ import { ProductCategory } from '@/entities/product-category.entity'
 import { Product } from '@/entities/product.entity'
 import { RestockItem } from '@/entities/restock-item.entity'
 import { RestockRecord } from '@/entities/restock-record.entity'
+import { SaleItem } from '@/entities/sale-item.entity'
+import { SalePayment } from '@/entities/sale-payment.entity'
+import { Sale } from '@/entities/sale.entity'
 import { SyncBatch } from '@/entities/sync-batch.entity'
 import { SyncLog } from '@/entities/sync-log.entity'
 import { SyncOperation } from '@/entities/sync-operation.entity'
@@ -21,6 +24,7 @@ import { ProductsRepository } from '@/modules/products/repositories/products.rep
 import { BarcodeService } from '@/modules/products/services/barcode.service'
 import { SlugService } from '@/modules/products/services/slug.service'
 import { SkuService } from '@/modules/products/services/sku.service'
+import { SalesModule } from '@/modules/sales/sales.module'
 import type { AppConfig } from '@/config/configuration'
 import { SYNC_BATCHES_QUEUE } from './constants/sync.constants'
 import { SyncController } from './sync.controller'
@@ -35,6 +39,7 @@ import { SyncService } from './sync.service'
       name: SYNC_BATCHES_QUEUE,
     }),
     RedisModule,
+    SalesModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig>) => ({
@@ -49,6 +54,9 @@ import { SyncService } from './sync.service'
       ProductCategory,
       RestockRecord,
       RestockItem,
+      Sale,
+      SaleItem,
+      SalePayment,
       SyncBatch,
       SyncLog,
       SyncOperation,

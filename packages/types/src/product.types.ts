@@ -143,7 +143,7 @@ export interface UnitOfMeasuresQuery extends ListQuery {}
 export interface CreateUnitOfMeasureRequest {
   name: string
   abbreviation: string
-  type: UnitOfMeasureType
+  type: UnitOfMeasureType | null
 }
 
 export interface UpdateUnitOfMeasureRequest extends Partial<CreateUnitOfMeasureRequest> {

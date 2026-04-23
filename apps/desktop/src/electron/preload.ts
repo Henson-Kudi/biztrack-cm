@@ -41,7 +41,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Print
   print: {
-    receipt: (data: unknown) => ipcRenderer.invoke('print:receipt', data),
+    receipt: (data: {
+      buffer: number[]
+      filename?: string
+      printerName?: string
+      paperWidthMm?: number
+      silent?: boolean
+    }) => ipcRenderer.invoke('print:receipt', data),
+  },
+  // Native file sharing
+  share: {
+    file: (data: { buffer: number[]; filename: string; mimeType?: string }) =>
+      ipcRenderer.invoke('share:file', data),
   },
   // App info
   app: {

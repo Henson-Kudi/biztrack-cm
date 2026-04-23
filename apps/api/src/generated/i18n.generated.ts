@@ -65,6 +65,7 @@ export type I18nTranslations = {
         "invalid_sku_format": string;
         "sku_in_use": string;
         "product_not_found": string;
+        "product_inactive": string;
         "product_sku_generation_failed": string;
         "product_sku_immutable": string;
         "product_images_limit_reached": string;
@@ -73,10 +74,15 @@ export type I18nTranslations = {
         "category_has_products": string;
         "inventory_not_found": string;
         "inventory_insufficient_stock": string;
+        "insufficient_stock": string;
         "unit_of_measure_exists": string;
         "unit_of_measure_not_found": string;
         "unit_of_measure_in_use": string;
         "unit_of_measure_system_immutable": string;
+        "sale_not_found": string;
+        "underpayment": string;
+        "already_voided": string;
+        "sales_void_forbidden": string;
         "validation_failed": string;
         "server_error": string;
         "rate_limited": string;
