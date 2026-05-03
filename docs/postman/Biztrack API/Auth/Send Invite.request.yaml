@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/invites"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "role": "CASHIER",
+      "phone": "+6237612345649"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

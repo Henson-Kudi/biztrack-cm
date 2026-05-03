@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory/alerts?page=1&limit=20&sortBy=shortfall&sortOrder=DESC"
+method: GET
+queryParams:
+  page: "1"
+  limit: "20"
+  sortBy: shortfall
+  sortOrder: DESC
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

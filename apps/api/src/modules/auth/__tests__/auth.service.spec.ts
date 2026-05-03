@@ -77,7 +77,7 @@ const makeService = () => {
   const businessesRepo = {
     findOne: jest.fn(),
     create: jest.fn((input) => input),
-    save: jest.fn(),
+    save: jest.fn(async (input) => ({ id: 'business-1', ...input })),
   }
   const redis = {
     setex: jest.fn(),
@@ -277,7 +277,7 @@ describe('AuthService flow', () => {
 
       const result = await service.verifyEmail(user.email!, '123456')
 
-      expect(result.nextStep).toBe(AuthNextStep.SETUP_BUSINESS)
+      expect(result.nextStep).toBe(AuthNextStep.SELECT_BUSINESS)
       expect((result as any).tokens).toEqual({
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
@@ -297,7 +297,7 @@ describe('AuthService flow', () => {
 
       const result = await service.verifyEmail(user.email!, '123456')
 
-      expect(result.nextStep).toBe(AuthNextStep.SETUP_BUSINESS)
+      expect(result.nextStep).toBe(AuthNextStep.SELECT_BUSINESS)
       expect((result as any).tokens).toEqual({
         accessToken: 'access-token',
         refreshToken: 'refresh-token',

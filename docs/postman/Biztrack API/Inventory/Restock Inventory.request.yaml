@@ -1,0 +1,26 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory/restock"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "referenceNumber": "DELIVERY-2026-001",
+      "supplierName": "General Supplier SARL",
+      "totalCost": 35000,
+      "notes": "Morning delivery",
+      "items": [
+        {
+          "productId": "{{productId}}",
+          "quantity": 20,
+          "unitCost": 350
+        }
+      ]
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 4000

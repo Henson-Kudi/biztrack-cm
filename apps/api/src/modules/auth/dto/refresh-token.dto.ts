@@ -1,8 +1,10 @@
-import { IsString } from 'class-validator'
+import { IsOptional, IsString } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger'
+import type { RefreshTokenRequest } from '@biztrack/types'
 
-export class RefreshTokenDto {
-  @ApiProperty()
+export class RefreshTokenDto implements RefreshTokenRequest {
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  refreshToken!: string
+  refreshToken?: string
 }

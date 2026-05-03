@@ -1,8 +1,17 @@
-import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, Min, MaxLength, IsUUID } from 'class-validator'
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import type { CreateProductRequest } from '@biztrack/types'
 
-export class CreateProductDto {
+export class CreateProductDto implements CreateProductRequest {
   @ApiProperty({ example: 'Coca-Cola 50cl' })
   @IsString()
   @MaxLength(200)
@@ -11,24 +20,26 @@ export class CreateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(2000)
   description?: string
 
   @ApiPropertyOptional({ example: 'COKE-50CL' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   sku?: string
 
   @ApiPropertyOptional({ example: '5449000000996' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   barcode?: string
 
   @ApiProperty({ example: 500 })
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  price!: number
+  sellingPrice!: number
 
   @ApiPropertyOptional({ example: 350 })
   @IsOptional()
@@ -37,29 +48,51 @@ export class CreateProductDto {
   @Type(() => Number)
   costPrice?: number
 
-  @ApiPropertyOptional({ example: 100, default: 0 })
+  @ApiPropertyOptional({ example: 19.25, default: 0 })
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   @Min(0)
   @Type(() => Number)
-  stockQuantity?: number
+  taxRate?: number
+
+  @ApiPropertyOptional({ example: 100, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  openingStock?: number
 
   @ApiPropertyOptional({ example: 10, default: 5 })
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   @Min(0)
   @Type(() => Number)
   lowStockThreshold?: number
 
-  @ApiPropertyOptional({ enum: ['piece', 'kg', 'litre', 'metre', 'box', 'dozen', 'pack'], default: 'piece' })
-  @IsOptional()
-  @IsString()
-  unit?: string
+  @ApiProperty()
+  @IsUUID()
+  unitOfMeasureId!: string
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
   categoryId?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isService?: boolean
+
+  @ApiPropertyOptional({ description: 'Defaults to false for services and true for physical products.' })
+  @IsOptional()
+  @IsBoolean()
+  trackInventory?: boolean
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()

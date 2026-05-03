@@ -13,7 +13,7 @@ const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
 
 export abstract class BaseRepository<T extends BaseEntity> {
-  protected constructor(protected readonly repo: Repository<T>) {}
+  protected constructor(protected readonly repo: Repository<T>) { }
 
   async findById(id: string, options?: FindOneOptions<T>): Promise<T | null> {
     return this.repo.findOne({ where: { id } as FindOptionsWhere<T>, ...options })
@@ -78,6 +78,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
     const page = Math.max(options?.page ?? 1, 1)
     const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
     const skip = (page - 1) * limit
+
+    console.log('where clauses', where);
+
 
     const [data, total] = await this.repo.findAndCount({
       where,

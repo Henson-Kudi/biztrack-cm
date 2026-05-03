@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEnum } from 'class-validator'
-import { SubscriptionPlan } from '@biztrack/types'
+import { SubscriptionPlan, type SelectPlanRequest } from '@biztrack/types'
 
-export class SelectPlanDto {
+export class SelectPlanDto implements SelectPlanRequest {
   @ApiProperty({ enum: SubscriptionPlan })
   @IsEnum(SubscriptionPlan)
   plan!: SubscriptionPlan

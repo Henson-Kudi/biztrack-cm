@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: d40de9bc-5323-4c09-867e-fa7fa84cf11e
+
+localResources:
+  collections:
+    - ..\Biztrack API

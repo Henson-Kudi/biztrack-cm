@@ -1,5 +1,6 @@
 import { SubscriptionPlan, BusinessMemberRole } from './business.types'
 import type { AuthPermissions } from './permissions.types'
+import type { IsoDateString } from './http.types'
 
 export enum UserRole {
   OWNER = 'OWNER',
@@ -37,17 +38,95 @@ export enum PrefferedPhoneChannel {
 export interface AuthVerification {
   channel: VerificationChannel
   delivery?: PrefferedPhoneChannel
-  expiresAt: Date
+  expiresAt: IsoDateString
   code?: string
+}
+
+export enum OtpType {
+  VERIFY_PHONE = 'VERIFY_PHONE',
+  VERIFY_EMAIL = 'VERIFY_EMAIL',
+  LOGIN = 'LOGIN',
+}
+
+export interface RegisterRequest {
+  name: string
+  phone: string
+  email?: string
+  password: string
+  language?: string
+  locale?: string
+  preferredPhoneChannel?: PrefferedPhoneChannel
+  inviteToken?: string
+}
+
+export interface LoginRequest {
+  identifier: string
+  password: string
+}
+
+export interface RequestLoginRequest {
+  identifier: string
+  preferredOtpChannel?: PrefferedPhoneChannel
+}
+
+export interface RequestLoginOtpRequest {
+  phone: string
+}
+
+export interface LoginOtpRequest {
+  identifier: string
+  code: string
+}
+
+export interface VerifyPhoneRequest {
+  phone: string
+  code: string
+  inviteToken?: string
+}
+
+export interface VerifyEmailRequest {
+  email: string
+  code: string
+  inviteToken?: string
+}
+
+export interface RefreshTokenRequest {
+  refreshToken?: string
+}
+
+export interface SelectBusinessRequest {
+  businessId: string
+}
+
+export interface ResendOtpRequest {
+  identifier: string
+  type: OtpType
+  channel?: PrefferedPhoneChannel
+}
+
+export interface LogoutRequest {
+  refreshToken?: string
+}
+
+export interface LogoutResponse {
+  status: 'logged_out'
+}
+
+export interface SendInviteRequest {
+  role: BusinessMemberRole
+  phone?: string
+  email?: string
 }
 
 export interface AuthNextStepVerifyPhoneResponse {
   nextStep: AuthNextStep.VERIFY_PHONE
+  context: AuthContext
   verification: AuthVerification
 }
 
 export interface AuthNextStepVerifyEmailResponse {
   nextStep: AuthNextStep.VERIFY_EMAIL
+  context: AuthContext
   verification: AuthVerification
 }
 
@@ -83,6 +162,7 @@ export interface AuthNextStepRequestNewOtpResponse {
 
 export interface AuthNextStepConfirmLoginResponse {
   nextStep: AuthNextStep.CONFIRM_LOGIN
+  context: AuthContext
   verification: AuthVerification
 }
 
@@ -107,10 +187,10 @@ export interface User {
   isEmailVerified: boolean
   isPhoneVerified: boolean
   isActive: boolean
-  preferredPhoneChannel?: PrefferedPhoneChannel
+  preferredPhoneChannel?: PrefferedPhoneChannel | null
   businessId?: string | null
-  createdAt: Date
-  updatedAt: Date
+  createdAt: IsoDateString
+  updatedAt: IsoDateString
 }
 
 export interface AuthTokens {
@@ -127,6 +207,38 @@ export interface AuthContext {
   lockUntil?: number
   requiresPlan?: SubscriptionPlan
 }
+
+export interface TokensResponse {
+  tokens: AuthTokens
+}
+
+export interface InvitePreviewResponse {
+  businessName: string
+  role: BusinessMemberRole
+  invitedByName: string | null
+  expiresAt: IsoDateString
+  sentTo: string | null
+}
+
+export interface SendInvitePendingMemberResponse {
+  status: 'pending_member'
+  businessId: string
+  userId: string
+}
+
+export interface SendInvitePendingInviteResponse {
+  status: 'pending_invite'
+  token: string
+  expiresAt: IsoDateString
+}
+
+export type SendInviteResponse = SendInvitePendingMemberResponse | SendInvitePendingInviteResponse
+
+export interface RejectInviteResponse {
+  status: 'rejected'
+}
+
+export type AuthMeResponse = JwtPayload
 
 export interface JwtPayload {
   sub: string

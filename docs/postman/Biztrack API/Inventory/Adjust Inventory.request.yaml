@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory/{{productId}}/adjust"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "type": "ADD",
+      "quantity": 5,
+      "notes": "Physical count correction"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 7000

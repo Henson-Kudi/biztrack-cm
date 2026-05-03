@@ -1,0 +1,16 @@
+$kind: http-request
+url: "{{baseUrl}}/products/{{productId}}/assign-barcode"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "barcode": "5449000000996"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 7000

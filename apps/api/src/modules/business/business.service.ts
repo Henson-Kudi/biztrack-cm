@@ -1,8 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
+import type { CreateBusinessRequest, UpdateBusinessRequest } from '@biztrack/types'
 import { BusinessesRepository } from './repositories/businesses.repository'
 import { BusinessMembersRepository } from './repositories/business-members.repository'
-import { CreateBusinessDto } from './dto/create-business.dto'
-import { UpdateBusinessDto } from './dto/update-business.dto'
 import { generateSlug } from '@biztrack/utils'
 import type { Logger, LogMetadata } from '@biztrack/logger'
 import { LOGGER } from '@/logger/logger.module'
@@ -27,7 +26,7 @@ export class BusinessService {
     this.logger.setContext('BusinessService')
   }
 
-  async create(ownerId: string, dto: CreateBusinessDto) {
+  async create(ownerId: string, dto: CreateBusinessRequest) {
     this.logger.debug('Create business', 'BusinessService', { ownerId, name: dto.name })
 
     try {
@@ -94,7 +93,7 @@ export class BusinessService {
     }
   }
 
-  async update(id: string, ownerId: string, dto: UpdateBusinessDto) {
+  async update(id: string, ownerId: string, dto: UpdateBusinessRequest) {
     this.logger.debug('Update business', 'BusinessService', { id, ownerId })
 
     try {
@@ -124,6 +123,20 @@ export class BusinessService {
     }
   }
 
+  async listMembershipsForUser(userId: string) {
+    this.logger.debug('List memberships for user', 'BusinessService', { userId })
+
+    try {
+      return this.membersRepo.find({
+        where: { userId },
+        relations: ['business'],
+        order: { createdAt: 'ASC' },
+      })
+    } catch (error) {
+      return this.handleServiceError('listMembershipsForUser', error, { userId })
+    }
+  }
+
   private async generateUniqueSlug(base: string): Promise<string> {
     let slug = base
     let counter = 1
@@ -133,7 +146,11 @@ export class BusinessService {
     return slug
   }
 
-  private async handleServiceError(action: string, error: unknown, metadata?: LogMetadata): Promise<never> {
+  private async handleServiceError(
+    action: string,
+    error: unknown,
+    metadata?: LogMetadata,
+  ): Promise<never> {
     if (error instanceof AppException) {
       this.logger.warn('BusinessService error', 'BusinessService', {
         action,

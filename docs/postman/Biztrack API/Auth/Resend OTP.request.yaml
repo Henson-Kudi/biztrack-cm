@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/resend-otp"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "identifier": "+237612345678",
+      "type": "LOGIN",
+      "channel": "WHATSAPP"
+    }
+order: 14000

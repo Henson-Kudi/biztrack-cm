@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/businesses/mine"
+method: GET
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      const res = pm.response.json();
+      const list = res?.data || [];
+      if (Array.isArray(list) && list[0]?.businessId) {
+        pm.collectionVariables.set('businessId', list[0].businessId);
+      }
+    language: text/javascript
+order: 1000

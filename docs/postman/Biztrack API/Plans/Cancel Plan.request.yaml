@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/plans/cancel"
+method: POST
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 5000

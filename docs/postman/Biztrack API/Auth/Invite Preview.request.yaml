@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{baseUrl}}/invites/{{inviteToken}}"
+method: GET
+order: 2000

@@ -1,27 +1,45 @@
+import type { IsoDateString } from './http.types'
+
 export interface Business {
   id: string
   name: string
   slug: string
-  description?: string
-  phone?: string
-  email?: string
-  address?: string
-  city?: string
+  description?: string | null
+  phone?: string | null
+  email?: string | null
+  address?: string | null
+  city?: string | null
   country: string
-  currency: Currency
-  logoUrl?: string
+  type: BusinessType
+  currency: Currency | string
+  logoUrl?: string | null
   ownerId: string
-  subscriptionPlan: SubscriptionPlan
+  plan: SubscriptionPlan
   subscriptionStatus: SubscriptionStatus
-  subscriptionExpiresAt?: Date
-  createdAt: Date
-  updatedAt: Date
+  businessStatus: BusinessStatus
+  trialStartedAt?: IsoDateString | null
+  trialEndsAt?: IsoDateString | null
+  currentPeriodStart?: IsoDateString | null
+  currentPeriodEnd?: IsoDateString | null
+  cancelAtPeriodEnd: boolean
+  createdAt: IsoDateString
+  updatedAt: IsoDateString
 }
 
 export enum Currency {
   XAF = 'XAF',
   USD = 'USD',
   EUR = 'EUR',
+}
+
+export enum BusinessType {
+  EPICERIE = 'EPICERIE',
+  BOUTIQUE = 'BOUTIQUE',
+  RESTAURANT = 'RESTAURANT',
+  PHARMACIE = 'PHARMACIE',
+  SALON = 'SALON',
+  ELECTRONIQUE = 'ELECTRONIQUE',
+  AUTRE = 'AUTRE',
 }
 
 export enum SubscriptionPlan {
@@ -32,11 +50,11 @@ export enum SubscriptionPlan {
 }
 
 export enum SubscriptionStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
   TRIAL = 'TRIAL',
-  EXPIRED = 'EXPIRED',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
   CANCELLED = 'CANCELLED',
+  SUSPENDED = 'SUSPENDED',
 }
 
 export enum BusinessMemberRole {
@@ -56,6 +74,36 @@ export enum BusinessStatus {
   ONBOARDING = 'ONBOARDING',
   PLAN_PENDING = 'PLAN_PENDING',
   ACTIVE = 'ACTIVE',
+}
+
+export interface CreateBusinessRequest {
+  name: string
+  description?: string
+  phone?: string
+  email?: string
+  address?: string
+  city?: string
+  country?: string
+  currency?: Currency | string
+}
+
+export interface UpdateBusinessRequest extends Partial<CreateBusinessRequest> {}
+
+export interface BusinessMembershipBusinessSummary {
+  id: string
+  name: string
+  slug: string
+  city?: string | null
+  type?: BusinessType | null
+  plan?: SubscriptionPlan | null
+  businessStatus?: BusinessStatus | null
+}
+
+export interface BusinessMembershipSummary {
+  businessId: string
+  role: BusinessMemberRole
+  status: BusinessMemberStatus
+  business: BusinessMembershipBusinessSummary | null
 }
 
 export const SUBSCRIPTION_LIMITS: Record<SubscriptionPlan, {

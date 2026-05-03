@@ -1,0 +1,39 @@
+$kind: http-request
+name: List Products
+url: "{{baseUrl}}/products?categoryId={{categoryId}}&isActive=true&trackInventory=true&page=1&limit=20&sortBy=name&sortOrder=ASC"
+method: GET
+queryParams:
+  - key: search
+    value: ""
+    disabled: true
+    $type: ""
+  - key: categoryId
+    value: "{{categoryId}}"
+    $type: ""
+  - key: isActive
+    value: "true"
+    $type: ""
+  - key: isService
+    value: "false"
+    disabled: true
+    $type: ""
+  - key: trackInventory
+    value: "true"
+    $type: ""
+  - key: page
+    value: "1"
+    $type: ""
+  - key: limit
+    value: "20"
+    $type: ""
+  - key: sortBy
+    value: name
+    $type: ""
+  - key: sortOrder
+    value: ASC
+    $type: ""
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

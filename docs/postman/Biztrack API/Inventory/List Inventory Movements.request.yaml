@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory/movements?productId={{productId}}&type=&dateFrom=&dateTo=&page=1&limit=20&sortBy=createdAt&sortOrder=DESC"
+method: GET
+queryParams:
+  productId: "{{productId}}"
+  type: ""
+  dateFrom: ""
+  dateTo: ""
+  page: "1"
+  limit: "20"
+  sortBy: createdAt
+  sortOrder: DESC
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

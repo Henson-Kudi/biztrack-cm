@@ -1,0 +1,31 @@
+$kind: http-request
+name: Create Product
+url: "{{baseUrl}}/products"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Coca-Cola 50cl",
+      "description": "Soft drink",
+      "sku": "COKE-50CL",
+      "barcode": "5449000000996",
+      "sellingPrice": 500,
+      "costPrice": 350,
+      "taxRate": 0,
+      "openingStock": 100,
+      "lowStockThreshold": 5,
+      "unitOfMeasureId": "{{unitOfMeasureId}}",
+      "categoryId": "{{categoryId}}",
+      "imageUrl": "https://cdn.example.com/products/coke-50cl.png",
+      "isService": false,
+      "trackInventory": true,
+      "isActive": true
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 1000

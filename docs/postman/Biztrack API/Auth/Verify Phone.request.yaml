@@ -1,0 +1,26 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/verify-phone"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "phone": "+237612345649",
+      "code": "000000",
+      "inviteToken": "5a6a1825-260c-4e00-a42d-a1b6bc43b83a"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const res = pm.response.json();
+      const tokens = res?.data?.tokens;
+      if (tokens?.accessToken) {
+        pm.collectionVariables.set('accessToken', tokens.accessToken);
+      }
+      if (tokens?.refreshToken) {
+        pm.collectionVariables.set('refreshToken', tokens.refreshToken);
+      }
+    language: text/javascript
+order: 10000

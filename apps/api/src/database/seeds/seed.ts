@@ -4,10 +4,13 @@ import { User } from '../../entities/user.entity'
 import { Business, BusinessType, SubscriptionStatus } from '../../entities/business.entity'
 import { BusinessMember } from '../../entities/business-member.entity'
 import { ProductCategory } from '../../entities/product-category.entity'
+import { InventoryLevel } from '../../entities/inventory-level.entity'
 import { Product } from '../../entities/product.entity'
+import { UnitOfMeasure, UomType } from '../../entities/unit-of-measure.entity'
 import * as bcrypt from 'bcryptjs'
 import { SubscriptionPlan, UserRole, BusinessMemberRole, BusinessMemberStatus } from '@biztrack/types'
 import { Locale } from '@/common/enums/locale.enum'
+import { IsNull } from 'typeorm'
 
 async function seed() {
   await AppDataSource.initialize()
@@ -16,8 +19,10 @@ async function seed() {
   const usersRepo = AppDataSource.getRepository(User)
   const businessRepo = AppDataSource.getRepository(Business)
   const categoriesRepo = AppDataSource.getRepository(ProductCategory)
+  const inventoryLevelsRepo = AppDataSource.getRepository(InventoryLevel)
   const productsRepo = AppDataSource.getRepository(Product)
   const membersRepo = AppDataSource.getRepository(BusinessMember)
+  const unitsRepo = AppDataSource.getRepository(UnitOfMeasure)
 
   const passwordHash = await bcrypt.hash('password123', 12)
 
@@ -64,12 +69,30 @@ async function seed() {
     )
   }
 
+  const pieceUnit = await unitsRepo.findOne({ where: { businessId: IsNull(), name: 'Piece' } })
+    ?? await unitsRepo.save(unitsRepo.create({
+      name: 'Piece',
+      abbreviation: 'pcs',
+      type: UomType.QUANTITY,
+      isDefault: true,
+    }))
+
   // Create demo categories
   const catBoissons = await categoriesRepo.findOne({ where: { id: 'cat-boissons-seed' } })
-    ?? await categoriesRepo.save(categoriesRepo.create({ id: 'cat-boissons-seed', businessId: business.id, name: 'Boissons' }))
+    ?? await categoriesRepo.save(categoriesRepo.create({
+      id: 'cat-boissons-seed',
+      businessId: business.id,
+      name: 'Boissons',
+      slug: 'boissons',
+    }))
 
   const catAlimentaire = await categoriesRepo.findOne({ where: { id: 'cat-alimentaire-seed' } })
-    ?? await categoriesRepo.save(categoriesRepo.create({ id: 'cat-alimentaire-seed', businessId: business.id, name: 'Alimentaire' }))
+    ?? await categoriesRepo.save(categoriesRepo.create({
+      id: 'cat-alimentaire-seed',
+      businessId: business.id,
+      name: 'Alimentaire',
+      slug: 'alimentaire',
+    }))
 
   // Create demo products (skip if already exist by barcode)
   const products: Partial<Product>[] = [
@@ -77,31 +100,31 @@ async function seed() {
       businessId: business.id,
       name: 'Coca-Cola 50cl',
       barcode: '5449000000996',
-      price: 500,
+      slug: 'coca-cola-50cl',
+      sku: 'BOI-COCA-50CL',
+      unitOfMeasureId: pieceUnit.id,
+      sellingPrice: 500,
       costPrice: 350,
-      stockQuantity: 48,
-      lowStockThreshold: 12,
-      unit: 'piece',
       categoryId: catBoissons.id,
     },
     {
       businessId: business.id,
       name: 'Eau Minerale 1.5L',
-      price: 350,
+      slug: 'eau-minerale-15l',
+      sku: 'BOI-EAU-15L',
+      unitOfMeasureId: pieceUnit.id,
+      sellingPrice: 350,
       costPrice: 200,
-      stockQuantity: 72,
-      lowStockThreshold: 24,
-      unit: 'piece',
       categoryId: catBoissons.id,
     },
     {
       businessId: business.id,
       name: 'Pain de mie',
-      price: 1200,
+      slug: 'pain-de-mie',
+      sku: 'ALI-PAIN-MIE',
+      unitOfMeasureId: pieceUnit.id,
+      sellingPrice: 1200,
       costPrice: 900,
-      stockQuantity: 8,
-      lowStockThreshold: 5,
-      unit: 'piece',
       categoryId: catAlimentaire.id,
     },
   ]
@@ -111,7 +134,22 @@ async function seed() {
       ? await productsRepo.findOne({ where: { businessId: business.id, barcode: p.barcode } })
       : null
     if (!existing) {
-      await productsRepo.save(productsRepo.create(p))
+      const created = await productsRepo.save(productsRepo.create(p))
+      const defaults = {
+        'Coca-Cola 50cl': { quantity: 48, lowStockThreshold: 12 },
+        'Eau Minerale 1.5L': { quantity: 72, lowStockThreshold: 24 },
+        'Pain de mie': { quantity: 8, lowStockThreshold: 5 },
+      } as const
+
+      const inventory = defaults[created.name as keyof typeof defaults]
+      if (inventory) {
+        await inventoryLevelsRepo.save(inventoryLevelsRepo.create({
+          businessId: business.id,
+          productId: created.id,
+          quantity: inventory.quantity,
+          lowStockThreshold: inventory.lowStockThreshold,
+        }))
+      }
     }
   }
 

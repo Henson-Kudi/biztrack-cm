@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory?categoryId={{categoryId}}&lowStockOnly=&page=1&limit=20&sortBy=productName&sortOrder=ASC"
+method: GET
+queryParams:
+  categoryId: "{{categoryId}}"
+  lowStockOnly: ""
+  page: "1"
+  limit: "20"
+  sortBy: productName
+  sortOrder: ASC
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 1000

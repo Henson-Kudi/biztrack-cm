@@ -1,0 +1,14 @@
+$kind: collection
+variables:
+  baseUrl: http://localhost:3001/api/v1
+  accessToken: ""
+  refreshToken: ""
+  productId: ""
+  categoryId: ""
+  businessId: ""
+  inviteToken: ""
+  unitOfMeasureId: ""
+  imageId: ""
+  barcode: "5449000000996"
+  sku: COKE-50CL
+  productSlug: coca-cola-50cl

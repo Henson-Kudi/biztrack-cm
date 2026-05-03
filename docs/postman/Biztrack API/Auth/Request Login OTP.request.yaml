@@ -1,0 +1,12 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/request-login-otp"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "phone": "+237612345678"
+    }
+order: 8000

@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{baseUrl}}/business/me"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Boutique Kamga",
+      "description": "Mini market",
+      "phone": "+237612345678",
+      "email": "shop@example.com",
+      "address": "Akwa, Douala",
+      "city": "Douala",
+      "country": "CM",
+      "currency": "XAF"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

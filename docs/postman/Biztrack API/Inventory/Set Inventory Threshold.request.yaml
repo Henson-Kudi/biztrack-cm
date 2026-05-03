@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/inventory/{{productId}}/threshold"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "lowStockThreshold": 5,
+      "reorderPoint": 10
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 6000

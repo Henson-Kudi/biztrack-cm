@@ -1,21 +1,35 @@
 import { z } from 'zod'
 
-export const SaleItemSchema = z.object({
+const PaymentMethodSchema = z.enum(['CASH', 'MTN_MOMO', 'ORANGE_MONEY', 'CARD'])
+
+export const CreateSaleItemSchema = z.object({
   productId: z.string().uuid(),
-  productName: z.string(),
   quantity: z.number().positive(),
-  unitPrice: z.number().positive(),
-  totalPrice: z.number().positive(),
+  unitPrice: z.number().min(0),
+  discountAmount: z.number().min(0).default(0),
+  costPrice: z.number().min(0).optional(),
+})
+
+export const CreateSalePaymentSchema = z.object({
+  method: PaymentMethodSchema,
+  amount: z.number().positive(),
+  mobileMoneyReference: z.string().max(100).optional(),
 })
 
 export const CreateSaleSchema = z.object({
-  items: z.array(SaleItemSchema).min(1),
-  paymentMethod: z.enum(['CASH', 'MTN_MOMO', 'ORANGE_MONEY', 'CARD', 'MIXED']),
+  clientId: z.string().uuid(),
+  soldAt: z.string().datetime(),
+  customerName: z.string().max(200).optional(),
+  customerPhone: z.string().max(30).optional(),
+  notes: z.string().max(1000).optional(),
   discountAmount: z.number().min(0).default(0),
-  taxAmount: z.number().min(0).default(0),
-  momoReference: z.string().optional(),
-  notes: z.string().max(500).optional(),
-  deviceId: z.string().optional(),
+  payments: z.array(CreateSalePaymentSchema).min(1),
+  items: z.array(CreateSaleItemSchema).min(1),
+})
+
+export const VoidSaleSchema = z.object({
+  reason: z.string().trim().min(10).max(1000),
 })
 
 export type CreateSaleInput = z.infer<typeof CreateSaleSchema>
+export type VoidSaleInput = z.infer<typeof VoidSaleSchema>

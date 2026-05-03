@@ -1,0 +1,465 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body-like, .root {
+    font-family: 'DM Sans', sans-serif;
+    color: var(--color-text-primary);
+    background: var(--color-background-tertiary);
+  }
+
+  .page { padding: 0 0 3rem; }
+
+  .topbar {
+    background: var(--color-background-primary);
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    padding: 1rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .logo-dot { width: 28px; height: 28px; background: #1D9E75; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .logo-dot svg { width: 16px; height: 16px; fill: white; }
+  .brand { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
+  .brand span { color: #1D9E75; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+  .header { padding: 1.5rem 1.5rem 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .header-left h1 { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .header-left p { font-size: 13px; color: var(--color-text-secondary); margin-top: 3px; }
+  .btn { padding: 8px 16px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--color-text-primary); display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; }
+  .btn:hover { background: var(--color-background-secondary); }
+  .btn.primary { background: #1D9E75; color: white; border-color: #1D9E75; }
+  .btn.primary:hover { background: #0F6E56; border-color: #0F6E56; }
+  .btn.danger { background: var(--color-background-danger); color: var(--color-text-danger); border-color: var(--color-border-danger); }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 1.25rem 1.5rem; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem; }
+  .metric-label { font-size: 12px; color: var(--color-text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-value { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700; margin-top: 4px; letter-spacing: -0.5px; }
+  .metric-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+  .metric-value.green { color: #0F6E56; }
+  .metric-value.amber { color: #854F0B; }
+  .metric-value.red { color: #A32D2D; }
+
+  .toolbar { padding: 0 1.5rem; display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; }
+  .search-wrap { flex: 1; position: relative; }
+  .search-wrap input { width: 100%; padding: 8px 12px 8px 36px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--color-text-primary); }
+  .search-wrap input:focus { outline: none; border-color: #1D9E75; box-shadow: 0 0 0 2px rgba(29,158,117,0.15); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--color-text-tertiary); font-size: 14px; pointer-events: none; }
+  select.filter { padding: 8px 12px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--color-text-primary); cursor: pointer; }
+
+  .tabs { display: flex; gap: 2px; padding: 0 1.5rem; margin-bottom: 1rem; }
+  .tab { padding: 6px 14px; border-radius: var(--border-radius-md); font-size: 13px; font-weight: 500; cursor: pointer; color: var(--color-text-secondary); background: transparent; border: none; transition: all 0.15s; }
+  .tab.active { background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-tertiary); }
+  .tab:hover:not(.active) { background: var(--color-background-secondary); }
+
+  .table-wrap { margin: 0 1.5rem; background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--color-background-secondary); }
+  thead th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 0.5px solid var(--color-border-tertiary); white-space: nowrap; }
+  tbody tr { border-bottom: 0.5px solid var(--color-border-tertiary); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--color-background-secondary); }
+  tbody td { padding: 11px 14px; color: var(--color-text-primary); vertical-align: middle; }
+  
+  .product-cell { display: flex; align-items: center; gap: 10px; }
+  .prod-icon { width: 32px; height: 32px; border-radius: 6px; background: var(--color-background-info); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .prod-name { font-weight: 500; font-size: 13px; }
+  .prod-sku { font-size: 11px; color: var(--color-text-secondary); }
+
+  .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .badge.in-stock { background: #EAF3DE; color: #27500A; }
+  .badge.low-stock { background: #FAEEDA; color: #633806; }
+  .badge.out-of-stock { background: #FCEBEB; color: #791F1F; }
+  .badge.overstocked { background: #E6F1FB; color: #0C447C; }
+
+  .qty-ctrl { display: flex; align-items: center; gap: 6px; }
+  .qty-btn { width: 24px; height: 24px; border-radius: 4px; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: var(--color-text-primary); transition: background 0.1s; }
+  .qty-btn:hover { background: var(--color-border-tertiary); }
+  .qty-val { font-weight: 600; font-size: 14px; min-width: 30px; text-align: center; }
+
+  .progress-bar { height: 4px; background: var(--color-background-secondary); border-radius: 10px; overflow: hidden; width: 80px; }
+  .progress-fill { height: 100%; border-radius: 10px; transition: width 0.3s; }
+  .progress-fill.green { background: #1D9E75; }
+  .progress-fill.amber { background: #EF9F27; }
+  .progress-fill.red { background: #E24B4A; }
+
+  .actions-cell { display: flex; gap: 6px; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-secondary); width: 420px; max-width: 95vw; overflow: hidden; }
+  .modal-header { padding: 1.25rem; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: center; justify-content: space-between; }
+  .modal-header h2 { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; }
+  .modal-close { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--color-text-secondary); line-height: 1; padding: 0; }
+  .modal-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 14px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group input, .form-group select { width: 100%; padding: 8px 12px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--color-text-primary); }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: #1D9E75; box-shadow: 0 0 0 2px rgba(29,158,117,0.15); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-footer { padding: 1rem 1.25rem; border-top: 0.5px solid var(--color-border-tertiary); display: flex; justify-content: flex-end; gap: 8px; }
+
+  .movement-log { margin: 1.5rem 1.5rem 0; background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); overflow: hidden; display: none; }
+  .movement-log.show { display: block; }
+  .log-header { padding: 1rem 1.25rem; border-bottom: 0.5px solid var(--color-border-tertiary); font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+  .log-item { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; }
+  .log-item:last-child { border-bottom: none; }
+  .log-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .log-icon.in { background: #EAF3DE; color: #27500A; }
+  .log-icon.out { background: #FCEBEB; color: #791F1F; }
+  .log-icon.adj { background: #FAEEDA; color: #633806; }
+  .log-text { font-weight: 500; }
+  .log-sub { font-size: 11px; color: var(--color-text-secondary); }
+  .log-qty { font-weight: 700; font-family: 'Syne', sans-serif; font-size: 14px; }
+  .log-qty.pos { color: #0F6E56; }
+  .log-qty.neg { color: #A32D2D; }
+
+  .empty { text-align: center; padding: 2.5rem; color: var(--color-text-secondary); font-size: 13px; }
+</style>
+
+<div class="page">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-dot">
+        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      </div>
+      <span class="brand">Pos<span>Cam</span></span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn sm" onclick="document.getElementById('logView').classList.toggle('show')">📋 Movement log</button>
+      <button class="btn sm primary" onclick="openModal()">+ Adjust stock</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <div class="header-left">
+      <h1>Inventory management</h1>
+      <p>Track stock levels, adjust quantities, and monitor product movement</p>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Total SKUs</div>
+      <div class="metric-value" id="totalSKUs">8</div>
+      <div class="metric-sub">Tracked products</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">In Stock</div>
+      <div class="metric-value green" id="inStockCount">5</div>
+      <div class="metric-sub">Items healthy</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Low Stock</div>
+      <div class="metric-value amber" id="lowStockCount">2</div>
+      <div class="metric-sub">Need restocking</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Out of Stock</div>
+      <div class="metric-value red" id="outCount">1</div>
+      <div class="metric-sub">Requires action</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="filterTab(this,'all')">All products</button>
+    <button class="tab" onclick="filterTab(this,'low')">Low stock</button>
+    <button class="tab" onclick="filterTab(this,'out')">Out of stock</button>
+    <button class="tab" onclick="filterTab(this,'over')">Overstocked</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" placeholder="Search products by name or SKU..." oninput="filterSearch(this.value)" />
+    </div>
+    <select class="filter" onchange="filterCat(this.value)">
+      <option value="all">All categories</option>
+      <option value="Boissons">Boissons</option>
+      <option value="Alimentaire">Alimentaire</option>
+      <option value="Hygiène">Hygiène</option>
+      <option value="Électronique">Électronique</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Category</th>
+          <th>In stock</th>
+          <th>Min / Max</th>
+          <th>Stock level</th>
+          <th>Status</th>
+          <th>Last updated</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="inventoryTable"></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none;">No products match your filter.</div>
+  </div>
+
+  <div class="movement-log" id="logView">
+    <div class="log-header">Recent stock movements</div>
+    <div id="logItems"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Adjust stock</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Product</label>
+        <select id="adjProduct" onchange="updateAdjRef()">
+          <option value="">Select a product</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Current quantity</label>
+        <input type="text" id="adjCurrent" readonly style="opacity:0.6;" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Movement type</label>
+          <select id="adjType">
+            <option value="in">Stock in ↑</option>
+            <option value="out">Stock out ↓</option>
+            <option value="adj">Adjustment</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input type="number" id="adjQty" min="1" value="1" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Reason / Note</label>
+        <input type="text" id="adjReason" placeholder="e.g. Réapprovisionnement fournisseur" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="applyAdjustment()">Apply adjustment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICONS = {Boissons:'🥤',Alimentaire:'🍞',Hygiène:'🧴',Électronique:'📱'};
+const CAT_COLORS = {Boissons:'#E6F1FB',Alimentaire:'#EAF3DE',Hygiène:'#FAEEDA',Électronique:'#EEEDFE'};
+
+let inventory = [
+  {id:1,name:'Eau minérale 1.5L',sku:'EAU-001',cat:'Boissons',qty:120,min:30,max:200,updated:'Auj. 09:14'},
+  {id:2,name:'Coca-Cola 50cl',sku:'COC-002',cat:'Boissons',qty:14,min:20,max:100,updated:'Auj. 08:50'},
+  {id:3,name:'Farine de blé 1kg',sku:'FAR-010',cat:'Alimentaire',qty:42,min:10,max:80,updated:'Hier 17:30'},
+  {id:4,name:'Huile de palme 1L',sku:'HUI-011',cat:'Alimentaire',qty:0,min:5,max:50,updated:'Hier 11:00'},
+  {id:5,name:'Savon Lux 100g',sku:'SAV-020',cat:'Hygiène',qty:88,min:15,max:120,updated:'Hier 16:20'},
+  {id:6,name:'Shampoing Sunsilk',sku:'SHA-021',cat:'Hygiène',qty:8,min:10,max:60,updated:'Auj. 07:45'},
+  {id:7,name:'Câble USB-C 1m',sku:'CAB-030',cat:'Électronique',qty:55,min:5,max:40,updated:'Lun. 14:00'},
+  {id:8,name:'Piles AA (pack×4)',sku:'PIL-031',cat:'Électronique',qty:33,min:10,max:60,updated:'Lun. 13:30'},
+];
+
+let movements = [
+  {type:'in',product:'Eau minérale 1.5L',qty:60,reason:'Réapprovisionnement',time:'Auj. 09:14'},
+  {type:'out',product:'Huile de palme 1L',qty:5,reason:'Vente en gros',time:'Hier 11:00'},
+  {type:'adj',product:'Savon Lux 100g',qty:8,reason:'Inventaire physique',time:'Hier 16:20'},
+  {type:'in',product:'Câble USB-C 1m',qty:20,reason:'Nouveau stock',time:'Lun. 14:00'},
+];
+
+let currentTab = 'all', currentSearch = '', currentCat = 'all';
+
+function getStatus(item) {
+  if(item.qty === 0) return {label:'out-of-stock',text:'Out of stock'};
+  const pct = item.qty / item.max;
+  if(item.qty < item.min) return {label:'low-stock',text:'Low stock'};
+  if(item.qty > item.max) return {label:'overstocked',text:'Overstocked'};
+  return {label:'in-stock',text:'In stock'};
+}
+
+function getBarClass(item) {
+  if(item.qty === 0) return 'red';
+  if(item.qty < item.min) return 'amber';
+  if(item.qty > item.max) return 'green';
+  return 'green';
+}
+
+function getBarPct(item) {
+  return Math.min(100, Math.round((item.qty / item.max) * 100));
+}
+
+function render() {
+  let rows = inventory.filter(p => {
+    const s = getStatus(p);
+    if(currentTab === 'low' && s.label !== 'low-stock') return false;
+    if(currentTab === 'out' && s.label !== 'out-of-stock') return false;
+    if(currentTab === 'over' && s.label !== 'overstocked') return false;
+    if(currentCat !== 'all' && p.cat !== currentCat) return false;
+    const q = currentSearch.toLowerCase();
+    if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const tb = document.getElementById('inventoryTable');
+  const em = document.getElementById('emptyState');
+  if(rows.length === 0) { tb.innerHTML = ''; em.style.display = 'block'; return; }
+  em.style.display = 'none';
+
+  tb.innerHTML = rows.map(p => {
+    const st = getStatus(p);
+    const pct = getBarPct(p);
+    const bc = getBarClass(p);
+    const icon = ICONS[p.cat] || '📦';
+    const bg = CAT_COLORS[p.cat] || '#F1EFE8';
+    return `<tr>
+      <td>
+        <div class="product-cell">
+          <div class="prod-icon" style="background:${bg}">${icon}</div>
+          <div><div class="prod-name">${p.name}</div><div class="prod-sku">${p.sku}</div></div>
+        </div>
+      </td>
+      <td style="color:var(--color-text-secondary)">${p.cat}</td>
+      <td>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="adjustQty(${p.id},-1)">−</button>
+          <span class="qty-val">${p.qty}</span>
+          <button class="qty-btn" onclick="adjustQty(${p.id},1)">+</button>
+        </div>
+      </td>
+      <td style="color:var(--color-text-secondary); font-size:12px">${p.min} / ${p.max}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="progress-bar"><div class="progress-fill ${bc}" style="width:${pct}%"></div></div>
+          <span style="font-size:11px;color:var(--color-text-secondary)">${pct}%</span>
+        </div>
+      </td>
+      <td><span class="badge ${st.label}">${st.text}</span></td>
+      <td style="color:var(--color-text-secondary);font-size:12px">${p.updated}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn sm" onclick="openModalFor(${p.id})">Adjust</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  updateMetrics();
+  updateLog();
+  updateProductSelect();
+}
+
+function updateMetrics() {
+  const total = inventory.length;
+  let inStock=0,low=0,out=0;
+  inventory.forEach(p => {
+    const s = getStatus(p).label;
+    if(s==='in-stock'||s==='overstocked') inStock++;
+    if(s==='low-stock') low++;
+    if(s==='out-of-stock') out++;
+  });
+  document.getElementById('totalSKUs').textContent = total;
+  document.getElementById('inStockCount').textContent = inStock;
+  document.getElementById('lowStockCount').textContent = low;
+  document.getElementById('outCount').textContent = out;
+}
+
+function updateLog() {
+  document.getElementById('logItems').innerHTML = movements.slice().reverse().slice(0,8).map(m => {
+    const sign = m.type==='in'?'+':m.type==='out'?'-':'~';
+    const cls = m.type==='in'?'pos':m.type==='out'?'neg':'';
+    const ic = m.type==='in'?'↑':m.type==='out'?'↓':'~';
+    return `<div class="log-item">
+      <div class="log-icon ${m.type}">${ic}</div>
+      <div><div class="log-text">${m.product}</div><div class="log-sub">${m.reason} · ${m.time}</div></div>
+      <div class="log-qty ${cls}">${sign}${m.qty}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateProductSelect() {
+  const sel = document.getElementById('adjProduct');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select a product</option>' +
+    inventory.map(p => `<option value="${p.id}" ${p.id==cur?'selected':''}>${p.name} (${p.sku})</option>`).join('');
+  if(cur) updateAdjRef();
+}
+
+function filterTab(el, tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function filterSearch(val) { currentSearch = val; render(); }
+function filterCat(val) { currentCat = val; render(); }
+
+function adjustQty(id, delta) {
+  const p = inventory.find(x=>x.id===id);
+  if(!p) return;
+  const newQty = Math.max(0, p.qty + delta);
+  const old = p.qty;
+  p.qty = newQty;
+  const now = 'Auj. ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  p.updated = now;
+  if(delta !== 0) {
+    movements.push({type:delta>0?'in':'out',product:p.name,qty:Math.abs(delta),reason:'Ajustement rapide',time:now});
+  }
+  render();
+}
+
+function openModal() {
+  document.getElementById('adjProduct').value = '';
+  document.getElementById('adjCurrent').value = '';
+  document.getElementById('adjQty').value = 1;
+  document.getElementById('adjReason').value = '';
+  document.getElementById('modalTitle').textContent = 'Adjust stock';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function openModalFor(id) {
+  openModal();
+  document.getElementById('adjProduct').value = id;
+  updateAdjRef();
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+function updateAdjRef() {
+  const id = document.getElementById('adjProduct').value;
+  const p = inventory.find(x=>x.id==id);
+  document.getElementById('adjCurrent').value = p ? p.qty + ' units' : '';
+}
+
+function applyAdjustment() {
+  const id = document.getElementById('adjProduct').value;
+  const type = document.getElementById('adjType').value;
+  const qty = parseInt(document.getElementById('adjQty').value) || 0;
+  const reason = document.getElementById('adjReason').value || 'Ajustement manuel';
+  if(!id || qty <= 0) { alert('Please select a product and enter a valid quantity.'); return; }
+  const p = inventory.find(x=>x.id==id);
+  if(type==='in') p.qty += qty;
+  else if(type==='out') p.qty = Math.max(0, p.qty - qty);
+  else p.qty = qty;
+  const now = 'Auj. ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  p.updated = now;
+  movements.push({type,product:p.name,qty,reason,time:now});
+  closeModal();
+  render();
+}
+
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if(e.target === this) closeModal();
+});
+
+render();
+</script>

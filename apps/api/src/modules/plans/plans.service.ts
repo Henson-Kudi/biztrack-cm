@@ -20,7 +20,7 @@ export class PlansService {
   ) {}
 
   async listPlans(businessId: string) {
-    const plans = await this.planConfigsRepo.find({ order: { priceXAF: 'ASC' as any } })
+    const plans = await this.planConfigsRepo.find({ order: { priceXAF: 'ASC' } })
     const business = await this.businessesRepo.findOne({ where: { id: businessId } })
 
     const planOrder = [SubscriptionPlan.FREE, SubscriptionPlan.SOLO, SubscriptionPlan.BUSINESS, SubscriptionPlan.PRO]

@@ -1,7 +1,8 @@
 import { IsString, IsOptional, MinLength, MaxLength, IsEmail } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import type { CreateBusinessRequest } from '@biztrack/types'
 
-export class CreateBusinessDto {
+export class CreateBusinessDto implements CreateBusinessRequest {
   @ApiProperty({ example: 'Boutique Kamga' })
   @IsString()
   @MinLength(2)

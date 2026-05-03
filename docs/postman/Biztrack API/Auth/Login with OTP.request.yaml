@@ -1,0 +1,25 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/login-otp"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "identifier": "+237612345678",
+      "code": "123456"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const res = pm.response.json();
+      const tokens = res?.data?.tokens;
+      if (tokens?.accessToken) {
+        pm.collectionVariables.set('accessToken', tokens.accessToken);
+      }
+      if (tokens?.refreshToken) {
+        pm.collectionVariables.set('refreshToken', tokens.refreshToken);
+      }
+    language: text/javascript
+order: 9000

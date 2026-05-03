@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{baseUrl}}/products/categories/{{categoryId}}"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Boissons Fraiches",
+      "color": "#0F4C81",
+      "icon": "cup-soda",
+      "imageUrl": "https://cdn.example.com/categories/boissons-fraiches.png",
+      "sortOrder": 1
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

@@ -1,0 +1,16 @@
+$kind: http-request
+url: "{{baseUrl}}/plans/upgrade"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "plan": "SOLO"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 4000

@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/request-login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "identifier": "+237675890321",
+      "preferredOtpChannel": "WHATSAPP"
+    }
+order: 7000

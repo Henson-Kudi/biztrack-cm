@@ -1,0 +1,23 @@
+$kind: http-request
+name: List Categories
+url: "{{baseUrl}}/products/categories?page=1&limit=20&sortBy=&sortOrder=ASC"
+method: GET
+queryParams:
+  - key: page
+    value: "1"
+    $type: ""
+  - key: limit
+    value: "20"
+    $type: ""
+  - key: sortBy
+    value: ""
+    disabled: true
+    $type: ""
+  - key: sortOrder
+    value: ASC
+    $type: ""
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

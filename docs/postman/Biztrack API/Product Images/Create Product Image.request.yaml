@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/products/{{productId}}/images"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "url": "https://cdn.example.com/products/coke-gallery-1.png",
+      "altText": "Front view of Coca-Cola bottle",
+      "sortOrder": 0
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

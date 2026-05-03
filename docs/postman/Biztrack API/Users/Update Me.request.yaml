@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/users/me"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Jean Dupont",
+      "avatarUrl": "https://example.com/avatar.png",
+      "language": "fr"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

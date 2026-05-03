@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/products/{{productId}}/images/{{imageId}}"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "altText": "Updated front view of Coca-Cola bottle",
+      "sortOrder": 1
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

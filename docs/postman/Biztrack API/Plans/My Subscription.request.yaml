@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/plans/my-subscription"
+method: GET
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 3000

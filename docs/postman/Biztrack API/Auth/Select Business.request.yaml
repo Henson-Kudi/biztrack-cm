@@ -1,0 +1,28 @@
+$kind: http-request
+url: "{{baseUrl}}/auth/select-business"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "businessId": "{{businessId}}"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      const res = pm.response.json();
+      const tokens = res?.data?.tokens;
+      if (tokens?.accessToken) {
+        pm.collectionVariables.set('accessToken', tokens.accessToken);
+      }
+      if (tokens?.refreshToken) {
+        pm.collectionVariables.set('refreshToken', tokens.refreshToken);
+      }
+    language: text/javascript
+order: 13000

@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEmail, IsEnum, IsOptional, IsString, Matches } from 'class-validator'
-import { BusinessMemberRole } from '@biztrack/types'
+import { BusinessMemberRole, type SendInviteRequest } from '@biztrack/types'
 
-export class SendInviteDto {
+export class SendInviteDto implements SendInviteRequest {
   @ApiProperty({ enum: BusinessMemberRole, example: BusinessMemberRole.CASHIER })
   @IsEnum(BusinessMemberRole)
   role!: BusinessMemberRole

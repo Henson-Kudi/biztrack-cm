@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{baseUrl}}/products/categories"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Boissons",
+      "color": "#185FA5",
+      "icon": "glass-water",
+      "imageUrl": "https://cdn.example.com/categories/boissons.png",
+      "sortOrder": 0
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 1000

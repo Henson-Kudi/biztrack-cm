@@ -1,14 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { v4 as uuidv4 } from 'uuid'
-import { RegisterDto } from './dto/register.dto'
-import { LoginDto } from './dto/login.dto'
 import {
   AuthContext,
   AuthNextStep,
   AuthPermissions,
   JwtPayload,
+  LoginRequest,
+  LogoutResponse,
   PrefferedPhoneChannel,
+  RegisterRequest,
+  RequestLoginRequest,
+  ResendOtpRequest,
+  SendInviteRequest,
+  OtpType,
   VerificationChannel,
   BusinessMemberRole,
   BusinessMemberStatus,
@@ -37,10 +42,6 @@ import {
   AppUnauthorizedException,
 } from '@/common/exceptions/app-exceptions'
 import { OnboardingStep, User, UserStatus } from '@/entities/user.entity'
-import type { RequestLoginDto } from './dto/request-login.dto'
-import type { ResendOtpDto } from './dto/resend-otp.dto'
-import { OtpType } from './dto/resend-otp.dto'
-import type { SendInviteDto } from './dto/send-invite.dto'
 import { PermissionsService } from '@/modules/permissions/permissions.service'
 import { DEFAULT_LOCALE } from '@/common/enums/locale.enum'
 import { I18nService } from 'nestjs-i18n'
@@ -72,7 +73,7 @@ export class AuthService {
     logger.log('AuthService initialized')
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterRequest) {
     const email = dto.email?.toLowerCase()
     const phone = dto.phone
     this.logger.debug('Register attempt', 'AuthService', { email, phone })
@@ -97,7 +98,7 @@ export class AuthService {
       }
 
       const passwordHash = await this.passwordManager.hashPassword(dto.password)
-      const language = dto.locale ?? dto.language ?? DEFAULT_LOCALE
+      const language = (dto.locale ?? dto.language ?? DEFAULT_LOCALE) as User['language']
       const user = this.usersRepo.create({
         name: dto.name,
         email,
@@ -123,7 +124,11 @@ export class AuthService {
       this.logger.log('User registered', 'AuthService', { userId: user.id })
       return {
         nextStep: AuthNextStep.VERIFY_PHONE,
-        context: this.buildOtpContext(VerificationChannel.PHONE, verification.expiresAt, user.phone),
+        context: this.buildOtpContext(
+          VerificationChannel.PHONE,
+          verification.expiresAt,
+          user.phone,
+        ),
         verification: {
           channel: VerificationChannel.PHONE,
           delivery: user.preferredPhoneChannel,
@@ -136,7 +141,7 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginRequest) {
     this.logger.debug('Login attempt', 'AuthService', { identifier: dto.identifier })
 
     try {
@@ -205,7 +210,7 @@ export class AuthService {
     }
   }
 
-  async requestLogin(dto: RequestLoginDto) {
+  async requestLogin(dto: RequestLoginRequest) {
     this.logger.debug('Request login', 'AuthService', { identifier: dto.identifier })
 
     try {
@@ -232,7 +237,11 @@ export class AuthService {
 
         return {
           nextStep: AuthNextStep.VERIFY_PHONE,
-          context: this.buildOtpContext(VerificationChannel.PHONE, verification.expiresAt, user.phone),
+          context: this.buildOtpContext(
+            VerificationChannel.PHONE,
+            verification.expiresAt,
+            user.phone,
+          ),
           verification: {
             channel: VerificationChannel.PHONE,
             delivery: user.preferredPhoneChannel,
@@ -251,7 +260,11 @@ export class AuthService {
 
         return {
           nextStep: AuthNextStep.VERIFY_EMAIL,
-          context: this.buildOtpContext(VerificationChannel.EMAIL, verification.expiresAt, user.email),
+          context: this.buildOtpContext(
+            VerificationChannel.EMAIL,
+            verification.expiresAt,
+            user.email,
+          ),
           verification: {
             channel: VerificationChannel.EMAIL,
             expiresAt: verification.expiresAt,
@@ -289,9 +302,14 @@ export class AuthService {
         )
       }
 
-      await this.ensureEmailVerifiedIfRequired(user);
+      await this.ensureEmailVerifiedIfRequired(user)
 
-      await this.verifyCodeOrThrow(user.id, VerificationChannel.PHONE, VerificationPurpose.LOGIN, code);
+      await this.verifyCodeOrThrow(
+        user.id,
+        VerificationChannel.PHONE,
+        VerificationPurpose.LOGIN,
+        code,
+      )
 
       const tokens = await this.generateTokens(
         user.id,
@@ -323,7 +341,12 @@ export class AuthService {
         )
       }
 
-      await this.verifyCodeOrThrow(user.id, VerificationChannel.PHONE, VerificationPurpose.VERIFY_PHONE, code)
+      await this.verifyCodeOrThrow(
+        user.id,
+        VerificationChannel.PHONE,
+        VerificationPurpose.VERIFY_PHONE,
+        code,
+      )
 
       if (!user.isPhoneVerified) {
         await this.usersRepo.update(user.id, {
@@ -345,7 +368,11 @@ export class AuthService {
 
         return {
           nextStep: AuthNextStep.VERIFY_EMAIL,
-          context: this.buildOtpContext(VerificationChannel.EMAIL, verification.expiresAt, user.email),
+          context: this.buildOtpContext(
+            VerificationChannel.EMAIL,
+            verification.expiresAt,
+            user.email,
+          ),
           verification: {
             channel: VerificationChannel.EMAIL,
             expiresAt: verification.expiresAt,
@@ -372,7 +399,12 @@ export class AuthService {
         )
       }
 
-      await this.verifyCodeOrThrow(user.id, VerificationChannel.EMAIL, VerificationPurpose.VERIFY_EMAIL, code)
+      await this.verifyCodeOrThrow(
+        user.id,
+        VerificationChannel.EMAIL,
+        VerificationPurpose.VERIFY_EMAIL,
+        code,
+      )
 
       if (!user.isEmailVerified) {
         await this.usersRepo.update(user.id, {
@@ -408,7 +440,7 @@ export class AuthService {
     }
   }
 
-  async resendOtp(dto: ResendOtpDto) {
+  async resendOtp(dto: ResendOtpRequest) {
     this.logger.debug('Resend OTP', 'AuthService', { identifier: dto.identifier, type: dto.type })
 
     try {
@@ -421,7 +453,7 @@ export class AuthService {
         )
       }
 
-      await this.ensureUserActive(user);
+      await this.ensureUserActive(user)
 
       if (dto.channel && dto.channel !== user.preferredPhoneChannel) {
         await this.usersRepo.update(user.id, { preferredPhoneChannel: dto.channel })
@@ -442,7 +474,11 @@ export class AuthService {
         )
         return {
           nextStep: AuthNextStep.VERIFY_EMAIL,
-          context: this.buildOtpContext(VerificationChannel.EMAIL, verification.expiresAt, user.email),
+          context: this.buildOtpContext(
+            VerificationChannel.EMAIL,
+            verification.expiresAt,
+            user.email,
+          ),
           verification: {
             channel: VerificationChannel.EMAIL,
             expiresAt: verification.expiresAt,
@@ -463,7 +499,11 @@ export class AuthService {
 
       return {
         nextStep,
-        context: this.buildOtpContext(VerificationChannel.PHONE, verification.expiresAt, user.phone),
+        context: this.buildOtpContext(
+          VerificationChannel.PHONE,
+          verification.expiresAt,
+          user.phone,
+        ),
         verification: {
           channel: VerificationChannel.PHONE,
           delivery: user.preferredPhoneChannel,
@@ -472,7 +512,10 @@ export class AuthService {
         },
       }
     } catch (error) {
-      return this.handleServiceError('resendOtp', error, { identifier: dto.identifier, type: dto.type })
+      return this.handleServiceError('resendOtp', error, {
+        identifier: dto.identifier,
+        type: dto.type,
+      })
     }
   }
 
@@ -559,7 +602,7 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string, refreshToken?: string) {
+  async logout(userId: string, refreshToken?: string): Promise<LogoutResponse> {
     this.logger.debug('Logout attempt', 'AuthService', { userId })
 
     try {
@@ -569,6 +612,8 @@ export class AuthService {
       } else {
         await this.refreshTokensRepo.updateByUserId(userId, { revokedAt: new Date() })
       }
+
+      return { status: 'logged_out' } satisfies LogoutResponse
     } catch (error) {
       return this.handleServiceError('logout', error, { userId })
     }
@@ -611,7 +656,9 @@ export class AuthService {
       }
 
       if (membership.status === BusinessMemberStatus.PENDING) {
-        await this.businessMembersRepo.update(membership.id, { status: BusinessMemberStatus.ACTIVE })
+        await this.businessMembersRepo.update(membership.id, {
+          status: BusinessMemberStatus.ACTIVE,
+        })
         membership.status = BusinessMemberStatus.ACTIVE
       }
 
@@ -684,7 +731,7 @@ export class AuthService {
     }
   }
 
-  async sendInvite(userId: string, businessId: string, dto: SendInviteDto) {
+  async sendInvite(userId: string, businessId: string, dto: SendInviteRequest) {
     this.logger.debug('Send invite', 'AuthService', { userId, businessId, role: dto.role })
 
     try {
@@ -800,7 +847,8 @@ export class AuthService {
       }
 
       const matchesContact =
-        (invite.phone && invite.phone === user.phone) || (invite.email && invite.email === user.email)
+        (invite.phone && invite.phone === user.phone) ||
+        (invite.email && invite.email === user.email)
       if (!matchesContact) {
         throw new AppForbiddenException('errors.invite_invalid', 'INVITE_INVALID')
       }
@@ -873,7 +921,8 @@ export class AuthService {
       }
 
       const matchesContact =
-        (invite.phone && invite.phone === user.phone) || (invite.email && invite.email === user.email)
+        (invite.phone && invite.phone === user.phone) ||
+        (invite.email && invite.email === user.email)
       if (!matchesContact) {
         throw new AppForbiddenException('errors.invite_invalid', 'INVITE_INVALID')
       }
@@ -882,7 +931,9 @@ export class AuthService {
         where: { userId, businessId: invite.businessId },
       })
       if (membership && membership.status !== BusinessMemberStatus.REMOVED) {
-        await this.businessMembersRepo.update(membership.id, { status: BusinessMemberStatus.REMOVED })
+        await this.businessMembersRepo.update(membership.id, {
+          status: BusinessMemberStatus.REMOVED,
+        })
       }
 
       await this.pendingInvitesRepo.delete(invite.id)
@@ -901,7 +952,14 @@ export class AuthService {
     tokenType: 'phase1' | 'phase2',
     familyId?: string,
   ) {
-    const payload: JwtPayload = { sub: userId, email, phone, role: role ?? null, businessId, type: tokenType }
+    const payload: JwtPayload = {
+      sub: userId,
+      email,
+      phone,
+      role: role ?? null,
+      businessId,
+      type: tokenType,
+    }
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload),
@@ -1058,7 +1116,8 @@ export class AuthService {
       invite &&
       !invite.acceptedAt &&
       invite.expiresAt > new Date() &&
-      ((invite.phone && invite.phone === user.phone) || (invite.email && invite.email === user.email))
+      ((invite.phone && invite.phone === user.phone) ||
+        (invite.email && invite.email === user.email))
 
     if (inviteValid) {
       const member = this.businessMembersRepo.create({
@@ -1233,7 +1292,11 @@ export class AuthService {
     return this.permissionsService.buildAuthPermissions(businessId)
   }
 
-  private buildOtpContext(channel: VerificationChannel, expiresAt: Date, identifier?: string | null): AuthContext {
+  private buildOtpContext(
+    channel: VerificationChannel,
+    expiresAt: Date,
+    identifier?: string | null,
+  ): AuthContext {
     const context: AuthContext = {
       otpChannel: channel,
       otpExpiresIn: Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)),
@@ -1273,7 +1336,11 @@ export class AuthService {
     return { tokenId }
   }
 
-  private async handleServiceError(action: string, error: unknown, metadata?: LogMetadata): Promise<never> {
+  private async handleServiceError(
+    action: string,
+    error: unknown,
+    metadata?: LogMetadata,
+  ): Promise<never> {
     if (error instanceof AppException) {
       this.logger.warn('AuthService error', 'AuthService', {
         action,

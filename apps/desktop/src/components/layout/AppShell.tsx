@@ -4,11 +4,11 @@ import type { ReactNode } from 'react'
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar />
-        <main style={{ flex: 1, overflow: 'auto', padding: '1.5rem', background: '#f9fafb' }}>
+        <main className="flex-1 overflow-auto p-6 bg-background">
           {children}
         </main>
       </div>

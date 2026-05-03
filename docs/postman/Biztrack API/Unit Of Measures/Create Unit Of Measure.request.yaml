@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/unit-of-measures"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Cuvette",
+      "abbreviation": "cuv",
+      "type": "CUSTOM"
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 2000

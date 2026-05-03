@@ -1,0 +1,21 @@
+$kind: http-request
+url: "{{baseUrl}}/products/{{productId}}"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Coca-Cola 65cl",
+      "sellingPrice": 650,
+      "lowStockThreshold": 8,
+      "imageUrl": "https://cdn.example.com/products/coke-65cl.png",
+      "trackInventory": true,
+      "isActive": true
+    }
+auth:
+  type: bearer
+  credentials:
+    token: "{{accessToken}}"
+order: 9000

@@ -1,10 +1,10 @@
 import { IsEmail, IsString, MinLength, MaxLength, IsOptional, Matches, IsEnum } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { PrefferedPhoneChannel } from '@biztrack/types'
+import { PrefferedPhoneChannel, type RegisterRequest } from '@biztrack/types'
 import { Transform } from 'class-transformer'
 import { Locale } from '@/common/enums/locale.enum'
 
-export class RegisterDto {
+export class RegisterDto implements RegisterRequest {
   @ApiProperty({ example: 'Jean Dupont' })
   @IsString()
   @MinLength(2)
@@ -12,7 +12,7 @@ export class RegisterDto {
   name!: string
 
   @ApiProperty({ example: '+237612345678' })
-  @Matches(/^\+237[6-9]\d{8}$/, { message: 'Invalid Cameroonian phone number' })
+  @Matches(/^\+2376[524789]\d{7}$/, { message: 'Invalid Cameroonian phone number' })
   phone!: string
 
   @ApiPropertyOptional({ example: 'jean@example.com' })

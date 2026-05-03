@@ -1,3 +1,164 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; }
-a { color: inherit; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 248 247 244;
+    --foreground: 31 30 28;
+
+    --card: 255 255 255;
+    --card-foreground: 31 30 28;
+
+    --popover: 255 255 255;
+    --popover-foreground: 31 30 28;
+
+    --primary: 24 95 165;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 239 237 232;
+    --secondary-foreground: 31 30 28;
+
+    --muted: 239 237 232;
+    --muted-foreground: 140 137 128;
+
+    --accent: 230 241 251;
+    --accent-foreground: 12 68 124;
+
+    --destructive: 226 75 74;
+    --destructive-foreground: 255 255 255;
+
+    --border: 217 214 207;
+    --input: 217 214 207;
+    --ring: 55 138 221;
+
+    --radius: 0.5rem;
+
+    --chart-1: 24 95 165;
+    --chart-2: 99 153 34;
+    --chart-3: 186 117 23;
+    --chart-4: 226 75 74;
+    --chart-5: 83 74 183;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 17 17 16;
+    --foreground: 240 239 233;
+
+    --card: 28 28 27;
+    --card-foreground: 240 239 233;
+
+    --popover: 37 37 35;
+    --popover-foreground: 240 239 233;
+
+    --primary: 24 95 165;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 37 37 35;
+    --secondary-foreground: 168 164 156;
+
+    --muted: 28 28 27;
+    --muted-foreground: 107 104 97;
+
+    --accent: 12 30 51;
+    --accent-foreground: 181 212 244;
+
+    --destructive: 163 45 45;
+    --destructive-foreground: 255 255 255;
+
+    --border: 46 45 42;
+    --input: 46 45 42;
+    --ring: 55 138 221;
+
+    --chart-1: 55 138 221;
+    --chart-2: 151 196 89;
+    --chart-3: 250 199 117;
+    --chart-4: 240 149 149;
+    --chart-5: 175 169 236;
+  }
+
+  * {
+    box-sizing: border-box;
+    border-color: rgb(var(--border));
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--primary) / 0.72) rgb(var(--secondary) / 0.92);
+  }
+
+  *::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: rgb(var(--secondary) / 0.92);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--primary) / 0.62);
+    border-radius: 999px;
+    border: 1px solid rgb(var(--background) / 0.92);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--primary) / 0.82);
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    @apply bg-background text-foreground;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .biztrack-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--primary) / 0.68) transparent;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar-button,
+  .biztrack-scrollbar::-webkit-scrollbar-button:single-button,
+  .biztrack-scrollbar::-webkit-scrollbar-button:start:decrement,
+  .biztrack-scrollbar::-webkit-scrollbar-button:end:increment {
+    display: none !important;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 999px;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(var(--primary) / 0.62);
+    border-radius: 999px;
+    border: none;
+  }
+
+  .biztrack-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--primary) / 0.82);
+  }
+}
