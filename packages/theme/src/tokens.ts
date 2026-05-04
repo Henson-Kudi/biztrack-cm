@@ -58,7 +58,47 @@ export const colors = {
 
 // --- Semantic token sets for React Native (mobile) ---
 
-export const light = {
+export type Theme = {
+  bg: Record<
+    | 'base'
+    | 'surface'
+    | 'elevated'
+    | 'subtle'
+    | 'inverse'
+    | 'brand'
+    | 'brandHover'
+    | 'brandMuted'
+    | 'success'
+    | 'warning'
+    | 'danger'
+    | 'info',
+    string
+  >
+  text: Record<
+    | 'primary'
+    | 'secondary'
+    | 'muted'
+    | 'disabled'
+    | 'inverse'
+    | 'brand'
+    | 'brandMuted'
+    | 'success'
+    | 'warning'
+    | 'danger'
+    | 'info',
+    string
+  >
+  border: Record<
+    'default' | 'subtle' | 'strong' | 'brand' | 'success' | 'warning' | 'danger' | 'info',
+    string
+  >
+  icon: Record<
+    'default' | 'muted' | 'brand' | 'inverse' | 'success' | 'warning' | 'danger',
+    string
+  >
+}
+
+export const light: Theme = {
   bg: {
     base: colors.neutral[50],
     surface: '#FFFFFF',
@@ -107,7 +147,7 @@ export const light = {
   },
 }
 
-export const dark: typeof light = {
+export const dark: Theme = {
   bg: {
     base: colors.neutral[950],
     surface: '#1C1C1B',
@@ -156,4 +196,3 @@ export const dark: typeof light = {
   },
 }
 
-export type Theme = typeof light
