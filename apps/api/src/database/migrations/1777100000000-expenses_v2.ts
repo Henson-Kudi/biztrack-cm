@@ -192,6 +192,11 @@ export class ExpensesV21777100000000 implements MigrationInterface {
     `).catch(() => undefined)
 
     await queryRunner.query(`
+      ALTER TABLE "expenses"
+      DROP COLUMN IF EXISTS "category"
+    `)
+
+    await queryRunner.query(`
       WITH monthly_source AS (
         SELECT
           e."business_id" AS business_id,
@@ -263,15 +268,35 @@ export class ExpensesV21777100000000 implements MigrationInterface {
 
     await queryRunner.query(`
       ALTER TABLE "expenses"
-      DROP COLUMN IF EXISTS "category_id",
-      DROP COLUMN IF EXISTS "currency",
-      DROP COLUMN IF EXISTS "vendor",
-      DROP COLUMN IF EXISTS "notes",
-      DROP COLUMN IF EXISTS "is_recurring"
+      ADD COLUMN IF NOT EXISTS "category" character varying
+    `)
+
+    await queryRunner.query(`
+      UPDATE "expenses" expense
+      SET "category" = COALESCE(category_lookup."name", expense."category", 'Divers')
+      FROM "expense_categories" category_lookup
+      WHERE category_lookup."id" = expense."category_id"
+        AND (expense."category" IS NULL OR trim(expense."category") = '')
+    `)
+
+    await queryRunner.query(`
+      UPDATE "expenses"
+      SET "category" = COALESCE("category", 'Divers')
+      WHERE "category" IS NULL OR trim("category") = ''
     `)
 
     await queryRunner.query(`
       ALTER TABLE "expenses"
+      ALTER COLUMN "category" SET NOT NULL
+    `)
+
+    await queryRunner.query(`
+      ALTER TABLE "expenses"
+      DROP COLUMN IF EXISTS "category_id",
+      DROP COLUMN IF EXISTS "currency",
+      DROP COLUMN IF EXISTS "vendor",
+      DROP COLUMN IF EXISTS "notes",
+      DROP COLUMN IF EXISTS "is_recurring",
       ALTER COLUMN "date" TYPE TIMESTAMP WITH TIME ZONE
       USING "date"::timestamptz
     `)

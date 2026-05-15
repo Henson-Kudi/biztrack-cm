@@ -284,10 +284,6 @@ function getDebtStatusBadgeClassName(status: DebtStatus) {
   return 'bg-sky-50 text-sky-700'
 }
 
-function isSameDateLabel(dateA: string, dateB: string) {
-  return dateA === dateB
-}
-
 function sanitizeReceiptFileName(value: string) {
   const cleaned = value
     .trim()
@@ -661,6 +657,7 @@ export default function SalesPage() {
   const t = useTranslations('app.sales')
   const tSell = useTranslations('app.sell')
   const locale = useLocale()
+  console.log('Current locale:', locale)
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)

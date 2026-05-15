@@ -1,5 +1,6 @@
 appId: cm.biztrack.desktop
 productName: BizTrack CM
+npmRebuild: false
 copyright: "Copyright © 2025 BizTrack CM"
 
 directories:
@@ -8,9 +9,12 @@ directories:
 files:
   - dist/**/*
   - node_modules/**/*
+  - assets/**/*
   - package.json
 
 win:
+  artifactName: ${productName}-Setup-${version}.${ext}
+  signAndEditExecutable: false
   target:
     - target: nsis
       arch: [x64]
@@ -20,12 +24,14 @@ mac:
   target:
     - target: dmg
       arch: [x64, arm64]
-  icon: assets/icon.icns
   category: public.app-category.business
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: BizTrack CM
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
 

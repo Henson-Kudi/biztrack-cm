@@ -2,6 +2,8 @@
   "name": "@biztrack/desktop",
   "version": "0.0.1",
   "private": true,
+  "description": "BizTrack CM desktop point of sale application",
+  "author": "BizTrack CM",
   "main": "dist/electron/main.js",
   "scripts": {
     "postinstall": "electron-rebuild -f -w better-sqlite3",
@@ -10,7 +12,10 @@
     "dev:full": "node scripts/dev-full.js",
     "dev:full:compat": "node scripts/dev-full.js",
     "build": "next build && node scripts/copy-renderer-output.js && tsc -p tsconfig.electron.json",
-    "build:dist": "npm run build && electron-builder",
+    "start": "node scripts/start-prod.js",
+    "prepare:icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
+    "prepare:installer": "powershell -ExecutionPolicy Bypass -File scripts/prepare-installer.ps1",
+    "build:dist": "pnpm run build && pnpm run prepare:installer && electron-builder --win nsis",
     "lint": "eslint . --max-warnings 0",
     "type-check": "tsc --noEmit"
   },

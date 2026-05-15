@@ -110,6 +110,7 @@ export async function acceptInvite(token: string): Promise<AuthNextStepResponse>
 
 export async function getBusinesses(): Promise<BusinessMembershipSummary[]> {
   const { data } = await api.get<ApiEnvelope<BusinessMembershipSummary[]>>('/businesses/mine')
+  console.log(data, 'Busineeses')
   return unwrapApiResponse<BusinessMembershipSummary[]>(data)
 }
 

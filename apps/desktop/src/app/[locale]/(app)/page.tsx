@@ -95,7 +95,12 @@ const MAX_ALERTS = 5
 const MAX_CONTACTS = 250
 const MAX_RECENT_SALES = 8
 const MAX_TODAY_CHART_SALES = 250
-const TODAY_HOURS = Array.from({ length: 10 }, (_, index) => index + 8)
+const TODAY_BUCKET_SIZE_HOURS = 3
+const TODAY_BUCKET_START_HOURS = Array.from(
+  { length: 24 / TODAY_BUCKET_SIZE_HOURS },
+  (_, index) => index * TODAY_BUCKET_SIZE_HOURS,
+) as readonly number[]
+const MONTH_BUCKET_START_DAYS = [1, 6, 11, 16, 21, 26] as const
 
 const metricToneStyles: Record<
   DashboardMetricTone,
@@ -207,6 +212,15 @@ function getRangeBounds(range: RangeKey): RangeBounds {
     }
   }
 
+  if (range === 'month') {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1)
+    return {
+      start,
+      end: today,
+      days: countRangeDays(start, today),
+    }
+  }
+
   return {
     start: addDays(today, -29),
     end: today,
@@ -230,11 +244,46 @@ function getPreviousRangeBounds(rangeKey: RangeKey, range: RangeBounds): RangeBo
     }
   }
 
+  if (rangeKey === 'month') {
+    const start = new Date(range.start.getFullYear(), range.start.getMonth() - 1, 1)
+    const previousMonthLastDay = new Date(
+      range.start.getFullYear(),
+      range.start.getMonth(),
+      0,
+    ).getDate()
+    const end = new Date(
+      range.start.getFullYear(),
+      range.start.getMonth() - 1,
+      Math.min(range.end.getDate(), previousMonthLastDay),
+    )
+
+    return {
+      start,
+      end,
+      days: countRangeDays(start, end),
+    }
+  }
+
   return {
     start: addDays(range.start, -range.days),
     end: addDays(range.start, -1),
     days: range.days,
   }
+}
+
+function formatHourBucketLabel(startHour: number, endHour: number) {
+  const toTwelveHour = (hour: number) => {
+    const normalizedHour = ((hour % 24) + 24) % 24
+    const suffix = normalizedHour < 12 ? 'AM' : 'PM'
+    const displayHour = normalizedHour % 12 || 12
+    return `${displayHour}${suffix}`
+  }
+
+  return `${toTwelveHour(startHour)}-${toTwelveHour(endHour)}`
+}
+
+function getHourBucketStart(hour: number) {
+  return Math.floor(hour / TODAY_BUCKET_SIZE_HOURS) * TODAY_BUCKET_SIZE_HOURS
 }
 
 function emptySummaryTotals(): SummaryTotals {
@@ -531,8 +580,8 @@ function buildChartPoints(args: {
   if (range === 'today') {
     const currentDateKey = formatDateKey(currentRange.end)
     const previousDateKey = formatDateKey(previousRange.end)
-    const currentBuckets = new Map(TODAY_HOURS.map((hour) => [hour, 0]))
-    const previousBuckets = new Map(TODAY_HOURS.map((hour) => [hour, 0]))
+    const currentBuckets = new Map(TODAY_BUCKET_START_HOURS.map((hour) => [hour, 0]))
+    const previousBuckets = new Map(TODAY_BUCKET_START_HOURS.map((hour) => [hour, 0]))
 
     for (const sale of chartSales) {
       if (sale.status !== SaleStatus.COMPLETED) {
@@ -540,27 +589,34 @@ function buildChartPoints(args: {
       }
 
       const saleDateKey = resolveSaleDateKey(sale)
-      const saleHour = new Date(sale.soldAt).getHours()
+      const saleBucketStart = getHourBucketStart(new Date(sale.soldAt).getHours())
 
-      if (!currentBuckets.has(saleHour)) {
+      if (!currentBuckets.has(saleBucketStart)) {
         continue
       }
 
       if (saleDateKey === currentDateKey) {
-        currentBuckets.set(saleHour, (currentBuckets.get(saleHour) ?? 0) + sale.totalAmount)
+        currentBuckets.set(
+          saleBucketStart,
+          (currentBuckets.get(saleBucketStart) ?? 0) + sale.totalAmount,
+        )
       }
 
       if (saleDateKey === previousDateKey) {
-        previousBuckets.set(saleHour, (previousBuckets.get(saleHour) ?? 0) + sale.totalAmount)
+        previousBuckets.set(
+          saleBucketStart,
+          (previousBuckets.get(saleBucketStart) ?? 0) + sale.totalAmount,
+        )
       }
     }
 
-    return TODAY_HOURS.map((hour) => {
-      const current = currentBuckets.get(hour) ?? 0
-      const previous = previousBuckets.get(hour) ?? 0
+    return TODAY_BUCKET_START_HOURS.map((startHour) => {
+      const current = currentBuckets.get(startHour) ?? 0
+      const previous = previousBuckets.get(startHour) ?? 0
+      const endHour = startHour + TODAY_BUCKET_SIZE_HOURS - 1
 
       return {
-        label: `${String(hour).padStart(2, '0')}h`,
+        label: formatHourBucketLabel(startHour, endHour),
         current,
         previous,
         currentTitle: formatCurrency(current, localeTag),
@@ -594,6 +650,42 @@ function buildChartPoints(args: {
 
       return {
         label: new Intl.DateTimeFormat(localeTag, { month: 'short' }).format(labelDate),
+        current,
+        previous,
+        currentTitle: formatCurrency(current, localeTag),
+        previousTitle: formatCurrency(previous, localeTag),
+      }
+    })
+  }
+
+  if (range === 'month') {
+    const currentLookup = new Map(currentSummaries.map((summary) => [summary.date, summary.totalRevenue]))
+    const previousLookup = new Map(previousSummaries.map((summary) => [summary.date, summary.totalRevenue]))
+    const currentMonthYear = currentRange.end.getFullYear()
+    const currentMonthIndex = currentRange.end.getMonth()
+    const previousMonthYear = previousRange.end.getFullYear()
+    const previousMonthIndex = previousRange.end.getMonth()
+    const currentEndDay = currentRange.end.getDate()
+    const previousEndDay = previousRange.end.getDate()
+
+    return MONTH_BUCKET_START_DAYS.filter((startDay) => startDay <= currentEndDay).map((startDay) => {
+      const currentBucketEnd = startDay === 26 ? currentEndDay : Math.min(startDay + 4, currentEndDay)
+      const previousBucketEnd = startDay === 26 ? previousEndDay : Math.min(startDay + 4, previousEndDay)
+      let current = 0
+      let previous = 0
+
+      for (let day = startDay; day <= currentBucketEnd; day += 1) {
+        const dateKey = formatDateKey(new Date(currentMonthYear, currentMonthIndex, day))
+        current += currentLookup.get(dateKey) ?? 0
+      }
+
+      for (let day = startDay; day <= previousBucketEnd; day += 1) {
+        const dateKey = formatDateKey(new Date(previousMonthYear, previousMonthIndex, day))
+        previous += previousLookup.get(dateKey) ?? 0
+      }
+
+      return {
+        label: startDay === currentBucketEnd ? `${startDay}` : `${startDay}-${currentBucketEnd}`,
         current,
         previous,
         currentTitle: formatCurrency(current, localeTag),
@@ -1334,7 +1426,9 @@ export default function DashboardPage() {
                     {getInitials(alert.productName)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{alert.productName || t('untitled_product')}</p>
+                    <Link href={`/${locale}/products/detail?productId=${alert.productId}`} className="truncate text-sm font-medium text-foreground">
+                      {alert.productName || t('untitled_product')}
+                    </Link>
                     <p className="mt-1 text-xs text-danger-600 dark:text-danger-400">
                       {t('units_left', { count: alert.currentQuantity })}
                     </p>

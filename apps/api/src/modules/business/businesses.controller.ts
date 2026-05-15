@@ -23,7 +23,7 @@ export class BusinessesController {
   const businesses = serializeDtos(memberships, (membership) =>
     BusinessMembershipSummaryDto.fromEntity(membership),
   )
-  return { businesses }
+  return businesses
 
 
   }

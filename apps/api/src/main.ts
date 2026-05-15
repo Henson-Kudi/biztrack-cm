@@ -65,8 +65,8 @@ async function bootstrap() {
     'Bootstrap',
   )
 
-  const port = config.get('API_PORT', { infer: true }) ?? 3001
-  await app.listen(port, '0.0.0.0')
+  const port = config.get('PORT', { infer: true }) ?? 3001
+  await app.listen(port, '::') // Listen on all interfaces (IPv4 & IPv6)
 
   logger.log(`API is running on port ${port}`, 'Bootstrap');
 }

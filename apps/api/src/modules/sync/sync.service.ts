@@ -1675,18 +1675,40 @@ export class SyncService {
     const alias = DEFAULT_UNIT_ALIASES[normalizedId.toLowerCase()]
 
     if (alias) {
-      const unit = await this.unitsRepo.findOne({
+      const normalizedAliasName = this.normalizeUnitNameCandidate(alias.name)
+      const normalizedAliasAbbreviation = alias.abbreviation.trim().toLowerCase()
+      const candidates = await this.unitsRepo.find({
         where: {
           businessId: IsNull(),
-          name: alias.name,
           type: alias.type,
           deletedAt: IsNull(),
         },
       })
 
+      const unit = candidates.find((candidate) => {
+        const candidateName = this.normalizeUnitNameCandidate(candidate.name)
+        const candidateAbbreviation = candidate.abbreviation.trim().toLowerCase()
+
+        return (
+          candidateName === normalizedAliasName ||
+          candidateAbbreviation === normalizedAliasAbbreviation
+        )
+      })
+
       if (unit) {
         return unit
       }
+
+      return await this.unitsRepo.save(
+        this.unitsRepo.create({
+          businessId: null,
+          name: alias.name,
+          abbreviation: alias.abbreviation,
+          type: alias.type,
+          isDefault: true,
+          isActive: true,
+        }),
+      )
     }
 
     const canonicalName = this.normalizeUnitNameCandidate(normalizedId)

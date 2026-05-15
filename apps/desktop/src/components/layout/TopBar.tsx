@@ -114,24 +114,74 @@ export function TopBar() {
 
   const statusToneClassName =
     snapshot.status === 'synced'
-      ? 'bg-[#E4F3E6] text-[#3B6D11]'
+      ? isDark
+        ? 'border border-emerald-900/70 bg-emerald-950/40 text-emerald-300'
+        : 'bg-[#E4F3E6] text-[#3B6D11]'
       : snapshot.status === 'syncing'
-        ? 'bg-[#E6F1FB] text-[#185FA5]'
+        ? isDark
+          ? 'border border-sky-900/70 bg-sky-950/40 text-sky-300'
+          : 'bg-[#E6F1FB] text-[#185FA5]'
         : snapshot.status === 'error'
-          ? 'bg-[#FCEBEB] text-[#A32D2D]'
+          ? isDark
+            ? 'border border-rose-900/70 bg-rose-950/40 text-rose-300'
+            : 'bg-[#FCEBEB] text-[#A32D2D]'
           : snapshot.status === 'paused'
-            ? 'bg-[#FAEEDA] text-[#854F0B]'
-            : 'bg-white/10 text-white/85'
+            ? isDark
+              ? 'border border-amber-900/70 bg-amber-950/40 text-amber-300'
+              : 'bg-[#FAEEDA] text-[#854F0B]'
+            : isDark
+              ? 'border border-border/70 bg-background/80 text-muted-foreground shadow-sm'
+              : 'bg-white/10 text-white/85'
+
+  const headerClassName = cn(
+    'relative z-40 isolate flex min-h-[68px] flex-wrap items-center gap-3 px-4 py-3',
+    isDark
+      ? 'border-b border-border/70 bg-card/50 text-foreground backdrop-blur-sm'
+      : 'border-b border-primary/20 bg-primary text-primary-foreground',
+  )
+
+  const brandTileClassName = cn(
+    'flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold',
+    isDark ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white',
+  )
+
+  const brandSubtitleClassName = isDark ? 'truncate text-xs text-muted-foreground' : 'truncate text-xs text-primary-foreground/70'
+
+  const passiveChipClassName = cn(
+    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs',
+    isDark
+      ? 'border border-border/70 bg-background/80 text-foreground shadow-sm'
+      : 'bg-white/10 text-white/85',
+  )
+
+  const chromeButtonClassName = cn(
+    'inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition',
+    isDark
+      ? 'border-border/70 bg-background/80 text-foreground shadow-sm hover:bg-secondary/80'
+      : 'border-white/10 bg-white/5 text-white hover:bg-white/10',
+  )
+
+  const iconButtonClassName = cn(
+    'inline-flex h-9 w-9 items-center justify-center rounded-xl border transition',
+    isDark
+      ? 'border-border/70 bg-background/80 text-foreground shadow-sm hover:bg-secondary/80'
+      : 'border-white/10 bg-white/5 text-white hover:bg-white/10',
+  )
+
+  const localeBadgeClassName = cn(
+    'rounded-full px-2.5 py-1 text-xs font-semibold',
+    isDark ? 'bg-secondary text-foreground' : 'bg-white/10 text-white',
+  )
 
   return (
-    <header className="flex min-h-[68px] flex-wrap items-center gap-3 border-b border-black/15 bg-[#042C53] px-4 py-3 text-white">
+    <header className={headerClassName}>
       <div className="flex min-w-[220px] items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#185FA5] text-sm font-bold">
+        <div className={brandTileClassName}>
           BT
         </div>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">BizTrack CM</div>
-          <div className="truncate text-xs text-[#85B7EB]">
+          <div className={brandSubtitleClassName}>
             {isDesktopRuntime ? t('last_sync', { time: lastSyncLabel }) : t('desktop_only_subtitle')}
           </div>
         </div>
@@ -140,7 +190,7 @@ export function TopBar() {
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {isDesktopRuntime ? (
           <>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-white/85">
+            <span className={passiveChipClassName}>
               <span
                 className={cn(
                   'h-2 w-2 rounded-full',
@@ -154,7 +204,7 @@ export function TopBar() {
             </span>
           </>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1.5 text-white/85">
+          <span className={passiveChipClassName}>
             {t('desktop_only_title')}
           </span>
         )}
@@ -175,7 +225,7 @@ export function TopBar() {
                 className={cn(
                   'inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition',
                   snapshot.settings.autoSyncEnabled
-                    ? 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                    ? chromeButtonClassName
                     : 'border-[#FAC775]/40 bg-[#FAEEDA] text-[#854F0B] hover:bg-[#FCE6BC]',
                 )}
               >
@@ -206,7 +256,7 @@ export function TopBar() {
               {snapshot.settings.autoSyncEnabled ? (
                 <div
                   className={cn(
-                    'pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] shadow-sm group-hover:flex group-focus-within:flex',
+                    'pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-[70] hidden rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] shadow-sm group-hover:flex group-focus-within:flex',
                     snapshot.realtime.mode === 'realtime'
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                       : snapshot.realtime.mode === 'fallback'
@@ -219,14 +269,14 @@ export function TopBar() {
               ) : null}
 
               {!snapshot.settings.autoSyncEnabled && !isSyncMenuOpen ? (
-                <div className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden w-80 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs leading-5 text-amber-900 shadow-lg group-hover:block group-focus-within:block">
+                <div className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-[70] hidden w-80 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs leading-5 text-amber-900 shadow-lg group-hover:block group-focus-within:block">
                   {autoSyncWarning}
                 </div>
               ) : null}
             </div>
 
             {isSyncMenuOpen ? (
-              <div className="absolute right-0 top-[calc(100%+0.75rem)] z-30 w-80 rounded-2xl border border-border bg-card p-4 shadow-xl">
+              <div className="absolute right-0 top-[calc(100%+0.75rem)] z-[80] w-80 rounded-2xl border border-border bg-card p-4 shadow-xl">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-card-foreground">{t('settings_title')}</p>
                   <p className="text-xs leading-5 text-muted-foreground">
@@ -316,7 +366,7 @@ export function TopBar() {
             type="button"
             onClick={() => void trigger()}
             disabled={snapshot.status === 'syncing'}
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(chromeButtonClassName, 'disabled:cursor-not-allowed disabled:opacity-60')}
           >
             <svg
               viewBox="0 0 20 20"
@@ -344,7 +394,7 @@ export function TopBar() {
             type="button"
             onClick={toggleTheme}
             aria-label={isDark ? t('theme_to_light') : t('theme_to_dark')}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10"
+            className={iconButtonClassName}
           >
             {isDark ? (
               <svg
@@ -395,7 +445,7 @@ export function TopBar() {
             }}
             aria-expanded={isLocaleMenuOpen}
             aria-haspopup="menu"
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-medium text-white transition hover:bg-white/10"
+            className={chromeButtonClassName}
           >
             <svg
               viewBox="0 0 20 20"
@@ -413,7 +463,7 @@ export function TopBar() {
               <path d="M10 3.5a10.5 10.5 0 0 1 0 13" />
               <path d="M10 3.5a10.5 10.5 0 0 0 0 13" />
             </svg>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
+            <span className={localeBadgeClassName}>
               {localeLabels[currentLocale]}
             </span>
             <svg
@@ -433,7 +483,7 @@ export function TopBar() {
           </button>
 
           {isLocaleMenuOpen ? (
-            <div className="absolute right-0 top-[calc(100%+0.75rem)] z-30 min-w-[210px] rounded-2xl border border-border bg-card p-2 shadow-xl">
+            <div className="absolute right-0 top-[calc(100%+0.75rem)] z-[80] min-w-[210px] rounded-2xl border border-border bg-card p-2 shadow-xl">
               {routing.locales.map((language) => {
                 const active = currentLocale === language
 

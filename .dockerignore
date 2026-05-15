@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.turbo
+.history
+.git
+.gitignore
+dist
+coverage
+*.log
+.env*
+apps/*/.env*
+apps/*/node_modules
+apps/*/dist
+packages/*/node_modules
+packages/*/dist

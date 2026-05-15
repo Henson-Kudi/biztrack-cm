@@ -16,7 +16,27 @@ import {
 import { Badge, Button, Spinner } from '@biztrack/ui'
 import { toast } from 'sonner'
 import { SurfaceCard } from '@/components/catalog/SurfaceCard'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import {
+  buildCompositeReportTemplate,
+  buildDebtorsAgeingReportTemplate,
+  buildGenericReportTemplate,
+  buildProfitLossReportTemplate,
+  buildRevenueTrendReportTemplate,
+  buildStockLevelsReportTemplate,
+  type ReportTemplateDocument,
+  type TemplateSection,
+  type TemplateTone,
+} from '@/reports/templates'
 import { listAllDebtsByDirectionLocal } from '@/services/debts.local'
 import { listExpenseCategoriesLocal, listExpensesLocal } from '@/services/expenses.local'
 import { listInventoryLocal, listInventoryMovementsLocal } from '@/services/inventory.local'
@@ -36,7 +56,6 @@ import { useAuthStore } from '@/stores/auth.store'
 type ReportPreset = 'today' | 'last7' | 'thisMonth' | 'lastMonth' | 'quarter' | 'year' | 'custom'
 type ReportSectionKey = 'sales' | 'inventory' | 'financial' | 'credit'
 type ReportTone = 'default' | 'positive' | 'warning' | 'danger' | 'info'
-type PreviewKind = 'trend' | 'bars' | 'ranked' | 'table' | 'note'
 type TrendMode = 'day' | 'week' | 'month'
 
 type ReportId =
@@ -636,238 +655,45 @@ function getAgeDays(value: string) {
   return Math.max(0, Math.floor((today.getTime() - target.getTime()) / (24 * 60 * 60 * 1000)))
 }
 
-function escapeCsvCell(value: string) {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`
+function toTemplateTone(tone?: ReportTone): TemplateTone | undefined {
+  if (!tone) {
+    return undefined
   }
 
-  return value
-}
-
-function buildCsvContent(model: ExportModel) {
-  const rows: string[][] = [
-    [model.title],
-    [model.description],
-    [],
-    ...model.summaryRows.map((row) => [row.label, row.value]),
-  ]
-
-  if (model.table) {
-    rows.push([])
-    rows.push(model.table.columns)
-    rows.push(...model.table.rows)
+  if (tone === 'positive') {
+    return 'success'
   }
 
-  return rows.map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')).join('\r\n')
+  return tone
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
+function getInitials(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
 
-function buildReportPdfHtml(input: {
-  title: string
-  description: string
-  rangeLabel: string
-  generatedOn: string
-  summaryRows: Array<{ label: string; value: string }>
-  table?: PreviewTable
-}) {
-  const summaryHtml = input.summaryRows
-    .map(
-      (row) => `
-        <div class="summary-row">
-          <span class="summary-label">${escapeHtml(row.label)}</span>
-          <span class="summary-value">${escapeHtml(row.value)}</span>
-        </div>
-      `,
-    )
-    .join('')
-
-  const tableHeadHtml = input.table
-    ? `<thead><tr>${input.table.columns
-        .map((column) => `<th>${escapeHtml(column)}</th>`)
-        .join('')}</tr></thead>`
-    : ''
-  const tableBodyHtml = input.table
-    ? `<tbody>${input.table.rows
-        .map(
-          (row) => `
-            <tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>
-          `,
-        )
-        .join('')}</tbody>`
-    : ''
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(input.title)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 28px;
-      font-family: Inter, Arial, sans-serif;
-      color: #1f1e1c;
-      background: #ffffff;
-    }
-    .shell {
-      border: 1px solid #d9d6cf;
-      border-radius: 20px;
-      overflow: hidden;
-    }
-    .hero {
-      background: linear-gradient(135deg, #042c53 0%, #185fa5 58%, #85b7eb 100%);
-      color: white;
-      padding: 24px 28px;
-    }
-    .hero h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
-    }
-    .hero p {
-      margin: 0;
-      font-size: 13px;
-      opacity: 0.86;
-    }
-    .body {
-      padding: 24px 28px 28px;
-    }
-    .meta {
-      display: flex;
-      gap: 18px;
-      flex-wrap: wrap;
-      margin-bottom: 18px;
-      font-size: 12px;
-      color: #6b6861;
-    }
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 22px;
-    }
-    .summary-row {
-      border: 1px solid #efece7;
-      border-radius: 14px;
-      padding: 12px 14px;
-      background: #faf9f6;
-    }
-    .summary-label {
-      display: block;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #8c8980;
-      margin-bottom: 8px;
-    }
-    .summary-value {
-      display: block;
-      font-size: 16px;
-      font-weight: 600;
-      color: #1f1e1c;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    th {
-      text-align: left;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #8c8980;
-      padding: 10px 12px;
-      border-bottom: 1px solid #d9d6cf;
-      background: #f8f7f4;
-    }
-    td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #efece7;
-      vertical-align: top;
-    }
-  </style>
-</head>
-<body>
-  <div class="shell">
-    <div class="hero">
-      <h1>${escapeHtml(input.title)}</h1>
-      <p>${escapeHtml(input.description)}</p>
-    </div>
-    <div class="body">
-      <div class="meta">
-        <span>Range: ${escapeHtml(input.rangeLabel)}</span>
-        <span>Generated: ${escapeHtml(input.generatedOn)}</span>
-      </div>
-      <div class="summary-grid">${summaryHtml}</div>
-      ${
-        input.table
-          ? `<table>${tableHeadHtml}${tableBodyHtml}</table>`
-          : `<p style="margin: 0; color: #6b6861; font-size: 12px;">No detail rows available for this report preview.</p>`
-      }
-    </div>
-  </div>
-</body>
-</html>`
-}
-
-function toPdfLiteralString(value: string) {
-  const normalized = value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7E]/g, '?')
-
-  return `(${normalized.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')})`
-}
-
-function buildSimplePdfBlob(lines: string[]) {
-  const pageWidth = 595
-  const pageHeight = Math.max(842, 80 + lines.length * 14)
-  const paddingX = 36
-  const topY = pageHeight - 42
-  const lineHeight = 14
-  const content = [
-    'BT',
-    '/F1 10 Tf',
-    ...lines.map((line, index) => `1 0 0 1 ${paddingX} ${(topY - index * lineHeight).toFixed(2)} Tm ${toPdfLiteralString(line)} Tj`),
-    'ET',
-  ].join('\n')
-
-  const objects = [
-    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
-    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
-    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n',
-    `5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`,
-  ]
-
-  const offsets: number[] = []
-  let pdf = '%PDF-1.4\n'
-
-  for (const object of objects) {
-    offsets.push(pdf.length)
-    pdf += object
+  if (parts.length === 0) {
+    return 'NA'
   }
 
-  const xrefOffset = pdf.length
-  pdf += `xref\n0 ${objects.length + 1}\n`
-  pdf += '0000000000 65535 f \n'
+  return parts.map((part) => part.charAt(0).toUpperCase()).join('')
+}
 
-  for (const offset of offsets) {
-    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
-  }
+function formatTimeLabel(value: string, localeTag: string) {
+  return new Intl.DateTimeFormat(localeTag, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
 
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
-
-  return new Blob([pdf], { type: 'application/pdf' })
+function formatMonthKeyLabel(key: string, localeTag: string) {
+  const [year, month] = key.split('-').map(Number)
+  return new Intl.DateTimeFormat(localeTag, {
+    month: 'short',
+    year: '2-digit',
+  }).format(new Date(year || 1970, (month || 1) - 1, 1))
 }
 
 function downloadFile(blob: Blob, filename: string) {
@@ -1007,6 +833,96 @@ function buildAgeingRows(
     count: bucket.count,
     percentage: Number(percentageOf(bucket.amount, totalOutstanding).toFixed(1)),
   }))
+}
+
+function buildRevenueAnalysisRows(
+  sales: ReportSaleRow[],
+  items: ReportSaleItemRow[],
+  localeTag: string,
+  mode: TrendMode,
+) {
+  const costBySaleId = new Map<string, number>()
+  for (const item of items) {
+    costBySaleId.set(
+      item.sale_id,
+      (costBySaleId.get(item.sale_id) ?? 0) + (item.cost_price ?? 0) * item.quantity,
+    )
+  }
+
+  const grouped = new Map<
+    string,
+    {
+      key: string
+      label: string
+      secondaryLabel: string
+      revenue: number
+      cost: number
+      transactions: number
+    }
+  >()
+
+  for (const sale of sales) {
+    if (sale.status !== SaleStatus.COMPLETED) {
+      continue
+    }
+
+    const saleDate =
+      sale.sale_date || (sale.sold_at ? sale.sold_at.slice(0, 10) : sale.created_at.slice(0, 10))
+    const date = parseDateKey(saleDate)
+    let key = saleDate
+    let label = new Intl.DateTimeFormat(localeTag, {
+      day: '2-digit',
+      month: 'short',
+    }).format(date)
+    let secondaryLabel = new Intl.DateTimeFormat(localeTag, {
+      weekday: 'short',
+    }).format(date)
+
+    if (mode === 'week') {
+      key = formatDateKey(startOfWeek(date))
+      const weekStart = parseDateKey(key)
+      label = new Intl.DateTimeFormat(localeTag, {
+        day: '2-digit',
+        month: 'short',
+      }).format(weekStart)
+      secondaryLabel = 'Week'
+    }
+
+    if (mode === 'month') {
+      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      label = new Intl.DateTimeFormat(localeTag, {
+        month: 'short',
+        year: '2-digit',
+      }).format(date)
+      secondaryLabel = 'Month'
+    }
+
+    const current = grouped.get(key) ?? {
+      key,
+      label,
+      secondaryLabel,
+      revenue: 0,
+      cost: 0,
+      transactions: 0,
+    }
+
+    current.revenue += sale.total_amount ?? 0
+    current.cost += costBySaleId.get(sale.id) ?? 0
+    current.transactions += 1
+    grouped.set(key, current)
+  }
+
+  return Array.from(grouped.values())
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .map((row) => {
+      const grossProfit = row.revenue - row.cost
+      return {
+        ...row,
+        grossProfit,
+        marginPercent: Number(percentageOf(grossProfit, row.revenue).toFixed(1)),
+        averageBasket: row.transactions > 0 ? row.revenue / row.transactions : 0,
+      }
+    })
 }
 
 function getReportIconWrapperClassName(tone: ReportDefinition['badgeTone']) {
@@ -1254,35 +1170,6 @@ function DualSeriesTrendChart({
   )
 }
 
-function PreviewTableView({ table }: { table: PreviewTable }) {
-  return (
-    <div className="overflow-auto biztrack-scrollbar">
-      <table className="min-w-full border-separate border-spacing-0 text-sm">
-        <thead>
-          <tr className="text-left text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            {table.columns.map((column) => (
-              <th key={column} className="border-b border-border px-3 py-3 font-semibold">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {table.rows.map((row, rowIndex) => (
-            <tr key={`${rowIndex}-${row.join('-')}`} className="transition hover:bg-background/80">
-              {row.map((cell, cellIndex) => (
-                <td key={`${rowIndex}-${cellIndex}`} className="border-b border-border/70 px-3 py-3 text-foreground">
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function SearchIcon() {
   return (
     <svg
@@ -1302,14 +1189,56 @@ function SearchIcon() {
   )
 }
 
+function DownloadIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M10 3.5v8" />
+      <path d="m6.5 9.5 3.5 3.5 3.5-3.5" />
+      <path d="M4 15.5h12" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="m5 7.5 5 5 5-5" />
+    </svg>
+  )
+}
+
 export default function ReportsPage() {
   const t = useTranslations('app.reports')
   const tSell = useTranslations('app.sell')
   const locale = useLocale()
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
+  const businessName = useAuthStore((state) => state.businessName)
   const defaultRange = useMemo(() => resolvePresetRange('thisMonth'), [])
-  const [selectedReportId, setSelectedReportId] = useState<ReportId>('revenue-trend')
+  const [previewReportId, setPreviewReportId] = useState<ReportId>('revenue-trend')
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
+  const [previewGeneratedAt, setPreviewGeneratedAt] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [appliedRange, setAppliedRange] = useState<AppliedRange>(defaultRange)
@@ -1319,9 +1248,11 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [workspace, setWorkspace] = useState<ReportsWorkspace | null>(null)
-  const [exportingCsv, setExportingCsv] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
-  const [sharingPdf, setSharingPdf] = useState(false)
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+  const [isProfitLossExpanded, setIsProfitLossExpanded] = useState(true)
+  const [isRevenueTrendExpanded, setIsRevenueTrendExpanded] = useState(true)
 
   useEffect(() => {
     if (!businessId) {
@@ -1413,8 +1344,8 @@ export default function ReportsPage() {
   }, [appliedRange.endDate, appliedRange.startDate, businessId, reloadKey, t])
 
   const selectedReport = useMemo<ReportDefinition>(
-    () => REPORT_DEFINITIONS.find((report) => report.id === selectedReportId) ?? DEFAULT_REPORT,
-    [selectedReportId],
+    () => REPORT_DEFINITIONS.find((report) => report.id === previewReportId) ?? DEFAULT_REPORT,
+    [previewReportId],
   )
 
   const sectionLabels = useMemo<Record<ReportSectionKey, string>>(
@@ -1449,17 +1380,6 @@ export default function ReportsPage() {
     })
   }, [deferredSearch, sectionLabels])
 
-  useEffect(() => {
-    const nextSelectedReport = filteredReports[0]
-    if (!nextSelectedReport) {
-      return
-    }
-
-    if (!filteredReports.some((report) => report.id === selectedReportId)) {
-      setSelectedReportId(nextSelectedReport.id)
-    }
-  }, [filteredReports, selectedReportId])
-
   const derived = useMemo(() => {
     const sales = workspace?.sales ?? []
     const saleItems = workspace?.saleItems ?? []
@@ -1468,6 +1388,8 @@ export default function ReportsPage() {
     const inventoryItems = workspace?.inventoryItems ?? []
     const inventoryMovements = workspace?.inventoryMovements ?? []
     const restocks = workspace?.restocks ?? []
+    const restockItems = workspace?.restockItems ?? []
+    const restockPayments = workspace?.restockPayments ?? []
     const receivableDebts = workspace?.receivableDebts ?? []
     const payableDebts = workspace?.payableDebts ?? []
 
@@ -1642,9 +1564,13 @@ export default function ReportsPage() {
       writtenOffReceivable,
       issuedReceivable,
       restocks,
+      restockItems,
+      restockPayments,
       inventoryItems,
       inventoryMovements,
       expenses,
+      receivableDebts,
+      payableDebts,
     }
   }, [appliedRange.endDate, appliedRange.startDate, localeTag, t, workspace])
 
@@ -1710,6 +1636,55 @@ export default function ReportsPage() {
       percent: Math.max(6, Math.round((Math.abs(row.value) / maxMagnitude) * 100)),
     }))
   }, [derived.expenseCategoryRows, derived.grossProfit, derived.netProfit, derived.totalCost, derived.totalExpenses, derived.totalRevenue, t])
+
+  const trendMode = useMemo(() => getGroupMode(appliedRange), [appliedRange])
+
+  const revenueTrendPoints = useMemo(
+    () => buildRevenueTrendPoints(derived.completedSales, localeTag, trendMode),
+    [derived.completedSales, localeTag, trendMode],
+  )
+
+  const revenueAnalysisRows = useMemo(
+    () =>
+      buildRevenueAnalysisRows(
+        derived.completedSales,
+        derived.completedItems,
+        localeTag,
+        trendMode,
+      ),
+    [derived.completedItems, derived.completedSales, localeTag, trendMode],
+  )
+
+  const revenuePaymentRows = useMemo(
+    () => [
+      {
+        label: getPaymentLabel(PaymentMethod.CASH, tSell),
+        amount: derived.paymentTotals.get(PaymentMethod.CASH) ?? 0,
+        tone: 'success' as const,
+      },
+      {
+        label: getPaymentLabel(PaymentMethod.MTN_MOMO, tSell),
+        amount: derived.paymentTotals.get(PaymentMethod.MTN_MOMO) ?? 0,
+        tone: 'warning' as const,
+      },
+      {
+        label: getPaymentLabel(PaymentMethod.ORANGE_MONEY, tSell),
+        amount: derived.paymentTotals.get(PaymentMethod.ORANGE_MONEY) ?? 0,
+        tone: 'info' as const,
+      },
+      {
+        label: getPaymentLabel(PaymentMethod.CARD, tSell),
+        amount: derived.paymentTotals.get(PaymentMethod.CARD) ?? 0,
+        tone: 'default' as const,
+      },
+      {
+        label: 'Unpaid credit',
+        amount: derived.totalCreditIssued,
+        tone: 'danger' as const,
+      },
+    ],
+    [derived.paymentTotals, derived.totalCreditIssued, tSell],
+  )
 
   const reportViewModel = useMemo<ReportViewModel>(() => {
     const rangeLabel = buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag)
@@ -2609,6 +2584,3115 @@ export default function ReportsPage() {
     }
   }, [appliedRange, derived, localeTag, selectedReport, t, tSell])
 
+  const rangeLabel = useMemo(
+    () => buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
+    [appliedRange.endDate, appliedRange.startDate, localeTag],
+  )
+
+  const previewGeneratedLabel = useMemo(
+    () => formatDateTimeLabel(previewGeneratedAt ?? new Date().toISOString(), localeTag),
+    [localeTag, previewGeneratedAt],
+  )
+
+  const activeReportDocument = useMemo<ReportTemplateDocument | null>(() => {
+    const fallbackBusinessName = businessName || 'BizTrack Business'
+    const filenameBase = reportViewModel.exportModel.filenameBase
+    const saleById = new Map(derived.sales.map((sale) => [sale.id, sale]))
+    const inventoryByProductId = new Map(
+      derived.inventoryItems.map((item) => [item.productId, item]),
+    )
+    const restockItemsByRestockId = new Map<string, typeof derived.restockItems>()
+    const latestUnitCostByProductId = new Map<string, number>()
+
+    for (const item of derived.restockItems) {
+      const current = restockItemsByRestockId.get(item.restock_record_id) ?? []
+      current.push(item)
+      restockItemsByRestockId.set(item.restock_record_id, current)
+
+      if (item.unit_cost !== null && item.unit_cost !== undefined) {
+        if (!latestUnitCostByProductId.has(item.product_id)) {
+          latestUnitCostByProductId.set(item.product_id, item.unit_cost)
+        }
+      }
+    }
+
+    if (selectedReport.id === 'profit-loss') {
+      const recurringMap = new Map<string, number>()
+      const oneOffMap = new Map<string, number>()
+
+      for (const expense of derived.expenses) {
+        const key = expense.category?.name || t('uncategorized')
+        const target = expense.isRecurring ? recurringMap : oneOffMap
+        target.set(key, (target.get(key) ?? 0) + expense.amount)
+      }
+
+      const toExpenseGroup = (
+        title: string,
+        source: Map<string, number>,
+        subtotalLabel: string,
+      ) => {
+        const entries = Array.from(source.entries())
+          .sort((left, right) => right[1] - left[1])
+          .map(([label, amount]) => ({
+            label,
+            amount: formatCurrency(amount, localeTag),
+            share: `${formatPercent(percentageOf(amount, derived.totalRevenue), localeTag)}%`,
+          }))
+
+        const subtotal = sumNumbers(entries.map((entry) => {
+          const raw = source.get(entry.label)
+          return raw ?? 0
+        }))
+
+        return {
+          title,
+          rows: entries,
+          subtotalLabel,
+          subtotalAmount: formatCurrency(subtotal, localeTag),
+          subtotalShare: `${formatPercent(percentageOf(subtotal, derived.totalRevenue), localeTag)}%`,
+        }
+      }
+
+      const recurringGroup = toExpenseGroup('Recurring expenses', recurringMap, 'Subtotal recurring')
+      const oneOffGroup = toExpenseGroup('One-off expenses', oneOffMap, 'Subtotal one-off')
+      const netResultAmount =
+        derived.netProfit < 0
+          ? `-${formatCurrency(Math.abs(derived.netProfit), localeTag)}`
+          : formatCurrency(derived.netProfit, localeTag)
+
+      return buildProfitLossReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Financial statement',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Period', value: rangeLabel },
+          {
+            label: 'Transactions',
+            value: formatNumber(derived.completedSales.length, localeTag),
+          },
+          {
+            label: 'Expense categories',
+            value: formatNumber(derived.expenseCategoryRows.length, localeTag),
+          },
+          { label: 'Currency', value: 'XAF', tone: 'info' },
+        ],
+        summaryRows: reportViewModel.exportModel.summaryRows,
+        excelSections: [
+          {
+            title: 'Profit and loss',
+            columns: ['Line item', 'Amount', 'Share'],
+            rows: [
+              ['Completed sales revenue', formatCurrency(derived.totalRevenue, localeTag), '100.0%'],
+              [
+                'Cost of goods sold',
+                formatCurrency(derived.totalCost, localeTag),
+                `${formatPercent(percentageOf(derived.totalCost, derived.totalRevenue), localeTag)}%`,
+              ],
+              [
+                'Gross profit',
+                formatCurrency(derived.grossProfit, localeTag),
+                `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}%`,
+              ],
+              [
+                'Operating expenses',
+                formatCurrency(derived.totalExpenses, localeTag),
+                `${formatPercent(percentageOf(derived.totalExpenses, derived.totalRevenue), localeTag)}%`,
+              ],
+              [
+                derived.netProfit >= 0 ? 'Net profit' : 'Net loss',
+                netResultAmount,
+                `${formatPercent(percentageOf(derived.netProfit, derived.totalRevenue), localeTag)}%`,
+              ],
+            ],
+          },
+          {
+            title: 'Expense breakdown',
+            columns: ['Category', 'Amount', 'Share'],
+            rows: derived.expenseCategoryRows.map((row) => [
+              row.name,
+              formatCurrency(row.amount, localeTag),
+              `${formatPercent(percentageOf(row.amount, derived.totalRevenue), localeTag)}%`,
+            ]),
+          },
+        ],
+        stats: [
+          {
+            label: t('stats.revenue'),
+            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            hint: t('stats.topline_hint'),
+            tone: 'success',
+          },
+          {
+            label: t('stats.gross_profit'),
+            value: formatCurrencyCompact(derived.grossProfit, localeTag),
+            hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
+              'stats.margin_hint',
+            )}`,
+            tone: derived.grossProfit >= 0 ? 'info' : 'danger',
+          },
+          {
+            label: t('stats.expenses'),
+            value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+            hint: t('stats.total_expense_hint'),
+            tone: 'warning',
+          },
+          {
+            label: t('stats.net_profit'),
+            value: formatCurrencyCompact(derived.netProfit, localeTag),
+            hint: `${formatPercent(percentageOf(derived.netProfit, derived.totalRevenue), localeTag)}% ${t(
+              'stats.net_margin_hint',
+            )}`,
+            tone: derived.netProfit >= 0 ? 'success' : 'danger',
+          },
+        ],
+        revenueRows: [
+          {
+            label: 'Completed sales revenue',
+            amount: formatCurrency(derived.totalRevenue, localeTag),
+            share: '100.0%',
+          },
+        ],
+        cogsRows: [
+          {
+            label: 'Cost of goods sold',
+            amount: formatCurrency(derived.totalCost, localeTag),
+            share: `${formatPercent(percentageOf(derived.totalCost, derived.totalRevenue), localeTag)}%`,
+          },
+        ],
+        recurringGroup,
+        oneOffGroup,
+        grossProfit: {
+          amount: formatCurrency(derived.grossProfit, localeTag),
+          share: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}%`,
+          positive: derived.grossProfit >= 0,
+        },
+        totalExpenses: {
+          amount: formatCurrency(derived.totalExpenses, localeTag),
+          share: `${formatPercent(percentageOf(derived.totalExpenses, derived.totalRevenue), localeTag)}%`,
+        },
+        netResult: {
+          label: derived.netProfit >= 0 ? 'Net profit for the period' : 'Net loss for the period',
+          amount: netResultAmount,
+          share: `${formatPercent(percentageOf(derived.netProfit, derived.totalRevenue), localeTag)}%`,
+          positive: derived.netProfit >= 0,
+        },
+        notes: [
+          'Revenue is based on completed sales in the selected range.',
+          'Gross profit is calculated from cost snapshots stored on sale items.',
+          'Operating expenses come from booked expenses on this device for the same period.',
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'revenue-trend') {
+      const highestRevenue = Math.max(...revenueAnalysisRows.map((row) => row.revenue), 0)
+      const lowestRevenue =
+        revenueAnalysisRows.length > 0
+          ? Math.min(...revenueAnalysisRows.map((row) => row.revenue))
+          : 0
+      const paymentTotalBase = Math.max(derived.totalRevenue, 1)
+
+      const detailTable: TemplateSection = {
+        columns: ['Period', 'Group', 'Revenue', 'COGS', 'Gross profit', 'Margin', 'Transactions', 'Avg basket', 'Note'],
+        rows: revenueAnalysisRows.map((row) => [
+          row.label,
+          row.secondaryLabel,
+          formatCurrency(row.revenue, localeTag),
+          formatCurrency(row.cost, localeTag),
+          formatCurrency(row.grossProfit, localeTag),
+          `${formatPercent(row.marginPercent, localeTag)}%`,
+          formatNumber(row.transactions, localeTag),
+          formatCurrency(row.averageBasket, localeTag),
+          row.revenue === highestRevenue
+            ? 'Peak period'
+            : row.revenue === lowestRevenue
+              ? 'Softest period'
+              : '-',
+        ]),
+      }
+
+      return buildRevenueTrendReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Sales analysis',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Period', value: rangeLabel },
+          {
+            label: 'Trading buckets',
+            value: formatNumber(revenueAnalysisRows.length, localeTag),
+          },
+          {
+            label: 'Transactions',
+            value: formatNumber(derived.completedSales.length, localeTag),
+          },
+          { label: 'Currency', value: 'XAF', tone: 'info' },
+        ],
+        summaryRows: reportViewModel.exportModel.summaryRows,
+        excelSections: [
+          detailTable,
+          {
+            title: 'Payment mix',
+            columns: ['Method', 'Amount', 'Share'],
+            rows: revenuePaymentRows.map((row) => [
+              row.label,
+              formatCurrency(row.amount, localeTag),
+              `${formatPercent(percentageOf(row.amount, paymentTotalBase), localeTag)}%`,
+            ]),
+          },
+        ],
+        stats: [
+          {
+            label: t('stats.revenue'),
+            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            hint: `${formatNumber(derived.completedSales.length, localeTag)} ${t(
+              'stats.transactions_hint',
+            )}`,
+            tone: 'success',
+          },
+          {
+            label: t('stats.gross_profit'),
+            value: formatCurrencyCompact(derived.grossProfit, localeTag),
+            hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
+              'stats.margin_hint',
+            )}`,
+            tone: derived.grossProfit >= 0 ? 'info' : 'danger',
+          },
+          {
+            label: t('stats.avg_basket'),
+            value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+            hint: t('stats.avg_basket_hint'),
+            tone: 'default',
+          },
+          {
+            label: t('stats.transactions'),
+            value: formatNumber(derived.completedSales.length, localeTag),
+            hint: 'completed sales in range',
+            tone: 'info',
+          },
+        ],
+        chartPoints: revenueAnalysisRows.map((row) => ({
+          label: row.label,
+          revenue: row.revenue,
+          grossProfit: row.grossProfit,
+          transactions: row.transactions,
+        })),
+        table: detailTable,
+        paymentRows: revenuePaymentRows.map((row) => ({
+          label: row.label,
+          amount: formatCurrency(row.amount, localeTag),
+          share: `${formatPercent(percentageOf(row.amount, paymentTotalBase), localeTag)}% of revenue`,
+          percent: Number(percentageOf(row.amount, paymentTotalBase).toFixed(1)),
+          tone: row.tone,
+        })),
+        notes: [
+          'Revenue excludes voided sales and is grouped by the current report range.',
+          'Gross profit uses cost snapshots stored on sale items at the time of sale.',
+          'Credit issued is part of revenue, but unpaid credit is not part of collected cash.',
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'stock-levels') {
+      const stockRows = derived.inventoryItems
+        .slice()
+        .sort((left, right) => left.quantity - right.quantity)
+        .map((item) => {
+          const threshold = item.lowStockThreshold ?? 0
+          const shortfall = threshold > item.quantity ? threshold - item.quantity : 0
+          const statusTone: TemplateTone =
+            item.quantity <= 0
+              ? 'danger'
+              : item.isLowStock
+                ? 'warning'
+                : 'success'
+
+          return {
+            product: item.productName || t('untitled_product'),
+            sku: item.sku || '-',
+            category: item.categoryName || t('uncategorized'),
+            quantity: formatNumber(item.quantity, localeTag),
+            threshold:
+              item.lowStockThreshold !== null
+                ? formatNumber(item.lowStockThreshold, localeTag)
+                : t('not_set'),
+            reorderPoint:
+              item.reorderPoint !== null
+                ? formatNumber(item.reorderPoint, localeTag)
+                : t('not_set'),
+            shortfall: shortfall > 0 ? formatNumber(shortfall, localeTag) : '-',
+            statusLabel:
+              statusTone === 'danger'
+                ? 'Critical'
+                : statusTone === 'warning'
+                  ? 'Low stock'
+                  : 'Healthy',
+            statusTone,
+          }
+        })
+
+      return buildStockLevelsReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Inventory snapshot',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          {
+            label: 'Tracked products',
+            value: formatNumber(derived.inventoryItems.length, localeTag),
+          },
+          {
+            label: 'Low stock',
+            value: formatNumber(derived.lowStockItems.length, localeTag),
+            tone: 'warning',
+          },
+          {
+            label: 'Out of stock',
+            value: formatNumber(
+              derived.inventoryItems.filter((item) => item.quantity <= 0).length,
+              localeTag,
+            ),
+            tone: 'danger',
+          },
+          { label: 'Range', value: rangeLabel },
+        ],
+        summaryRows: reportViewModel.exportModel.summaryRows,
+        excelSections: [
+          {
+            title: 'Stock levels',
+            columns: ['Product', 'SKU', 'Category', 'In stock', 'Threshold', 'Reorder point', 'Shortfall', 'Status'],
+            rows: stockRows.map((row) => [
+              row.product,
+              row.sku,
+              row.category,
+              row.quantity,
+              row.threshold,
+              row.reorderPoint,
+              row.shortfall,
+              row.statusLabel,
+            ]),
+          },
+        ],
+        stats: [
+          {
+            label: t('stats.tracked_products'),
+            value: formatNumber(derived.inventoryItems.length, localeTag),
+            hint: t('stats.tracked_products_hint'),
+            tone: 'info',
+          },
+          {
+            label: t('stats.low_stock'),
+            value: formatNumber(derived.lowStockItems.length, localeTag),
+            hint: t('stats.low_stock_hint'),
+            tone: 'warning',
+          },
+          {
+            label: t('stats.out_of_stock'),
+            value: formatNumber(
+              derived.inventoryItems.filter((item) => item.quantity <= 0).length,
+              localeTag,
+            ),
+            hint: t('stats.out_of_stock_hint'),
+            tone: 'danger',
+          },
+          {
+            label: t('table.quantity'),
+            value: formatNumber(
+              sumNumbers(derived.inventoryItems.map((item) => item.quantity)),
+              localeTag,
+            ),
+            hint: 'units currently on hand',
+            tone: 'success',
+          },
+        ],
+        rows: stockRows,
+        notes: [
+          'This report uses the current inventory snapshot available on this device.',
+          'Shortfall is shown only when quantity is below the configured threshold.',
+          'Reorder point is informational and does not create purchase orders automatically.',
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'debtors-ageing') {
+      const openDebts = derived.openReceivableDebts
+      const totalOutstanding = sumNumbers(openDebts.map((debt) => debt.outstandingAmount))
+      const overdueCount = openDebts.filter((debt) => getAgeDays(debt.createdAt) > 30).length
+      const collectionRate = percentageOf(
+        derived.collectedReceivable,
+        Math.max(derived.issuedReceivable, 1),
+      )
+
+      return buildDebtorsAgeingReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Credit management',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          {
+            label: 'Total outstanding',
+            value: formatCurrency(totalOutstanding, localeTag),
+            tone: 'danger',
+          },
+          {
+            label: 'Active debtors',
+            value: formatNumber(openDebts.length, localeTag),
+          },
+          {
+            label: 'Overdue',
+            value: formatNumber(overdueCount, localeTag),
+            tone: 'danger',
+          },
+          {
+            label: 'Collection rate',
+            value: `${formatPercent(collectionRate, localeTag)}%`,
+            tone: 'success',
+          },
+        ],
+        summaryRows: reportViewModel.exportModel.summaryRows,
+        excelSections: [
+          {
+            title: 'Ageing buckets',
+            columns: ['Bucket', 'Amount', 'Count', 'Share'],
+            rows: derived.receivableAgeing.map((row) => [
+              row.label,
+              formatCurrency(row.amount, localeTag),
+              formatNumber(row.count, localeTag),
+              `${formatPercent(row.percentage, localeTag)}%`,
+            ]),
+          },
+          {
+            title: 'Receivables detail',
+            columns: ['Customer', 'Reference', 'Sale date', 'Age', 'Original', 'Paid', 'Outstanding', 'Status', 'Collected'],
+            rows: openDebts.map((debt) => {
+              const ageDays = getAgeDays(debt.createdAt)
+              return [
+                debt.contact?.name || debt.sourceReference,
+                debt.sourceReference,
+                formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
+                `${ageDays}d`,
+                formatCurrency(debt.originalAmount, localeTag),
+                formatCurrency(debt.paidAmount, localeTag),
+                formatCurrency(debt.outstandingAmount, localeTag),
+                ageDays > 30
+                  ? 'Overdue'
+                  : debt.status === DebtStatus.PARTIALLY_PAID
+                    ? 'Partial'
+                    : 'Outstanding',
+                `${formatPercent(percentageOf(debt.paidAmount, debt.originalAmount), localeTag)}%`,
+              ]
+            }),
+          },
+        ],
+        stats: [
+          {
+            label: t('stats.open_balances'),
+            value: formatNumber(openDebts.length, localeTag),
+            hint: t('stats.open_balances_hint'),
+            tone: 'info',
+          },
+          {
+            label: t('stats.outstanding'),
+            value: formatCurrencyCompact(totalOutstanding, localeTag),
+            hint: t('stats.current_exposure_hint'),
+            tone: 'danger',
+          },
+          {
+            label: t('stats.oldest_bucket'),
+            value: formatCurrencyCompact(derived.receivableAgeing[3]?.amount ?? 0, localeTag),
+            hint: t('stats.oldest_bucket_hint'),
+            tone: 'warning',
+          },
+          {
+            label: t('stats.collected'),
+            value: formatCurrencyCompact(derived.collectedReceivable, localeTag),
+            hint: `${formatPercent(collectionRate, localeTag)}% collection rate`,
+            tone: 'success',
+          },
+        ],
+        ageingCards: derived.receivableAgeing.map((row, index) => ({
+          label: row.label,
+          value: formatCurrency(row.amount, localeTag),
+          hint: `${formatNumber(row.count, localeTag)} balances · ${formatPercent(
+            row.percentage,
+            localeTag,
+          )}%`,
+          tone:
+            index === 3 ? 'danger' : index === 2 ? 'warning' : index === 1 ? 'info' : 'success',
+        })),
+        rows: openDebts.map((debt) => {
+          const ageDays = getAgeDays(debt.createdAt)
+          return {
+            customer: debt.contact?.name || debt.sourceReference,
+            reference: debt.sourceReference,
+            saleDate: formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
+            age: `${ageDays}d`,
+            originalAmount: formatCurrency(debt.originalAmount, localeTag),
+            paidAmount: formatCurrency(debt.paidAmount, localeTag),
+            outstandingAmount: formatCurrency(debt.outstandingAmount, localeTag),
+            statusLabel:
+              ageDays > 30
+                ? 'Overdue'
+                : debt.status === DebtStatus.PARTIALLY_PAID
+                  ? 'Partial'
+                  : 'Outstanding',
+            statusTone:
+              ageDays > 30
+                ? 'danger'
+                : debt.status === DebtStatus.PARTIALLY_PAID
+                  ? 'info'
+                  : 'warning',
+            collectedLabel: `${formatPercent(
+              percentageOf(debt.paidAmount, debt.originalAmount),
+              localeTag,
+            )}%`,
+          }
+        }),
+        notes: [
+          'Ageing is calculated from the debt creation date stored on this device.',
+          'Only open receivables are included in this report.',
+          'Use the exported detail sheet for collection follow-up and reconciliation.',
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'daily-sales') {
+      const totalCollected = sumNumbers(Array.from(derived.paymentTotals.values()))
+      const creditSalesCount = derived.completedSales.filter(
+        (sale) => (sale.credit_amount ?? 0) > 0,
+      ).length
+      const syncPendingCount = derived.sales.filter((sale) => !sale.synced_at).length
+      const cashierProfiles = derived.cashierRows.slice(0, 4).map((cashier, index) => {
+        const cashierSales = derived.sales.filter((sale) => sale.cashier_id === cashier.cashierId)
+        const cashierCompletedSales = cashierSales.filter(
+          (sale) => sale.status === SaleStatus.COMPLETED,
+        )
+        const cashierPayments = derived.completedPayments.filter(
+          (payment) => saleById.get(payment.sale_id)?.cashier_id === cashier.cashierId,
+        )
+        const paymentMap = new Map<string, number>()
+        for (const payment of cashierPayments) {
+          paymentMap.set(payment.method, (paymentMap.get(payment.method) ?? 0) + payment.amount)
+        }
+
+        return {
+          initials: getInitials(cashier.cashierName),
+          name: cashier.cashierName,
+          subtitle: `${formatNumber(cashierCompletedSales.length, localeTag)} completed sales in range`,
+          value: formatCurrency(cashier.revenue, localeTag),
+          hint: `${formatPercent(percentageOf(cashier.revenue, derived.totalRevenue), localeTag)}% of revenue`,
+          accent:
+            index === 0
+              ? ('success' as const)
+              : index === 1
+                ? ('info' as const)
+                : ('warning' as const),
+          stats: [
+            {
+              label: 'Sales',
+              value: formatNumber(cashier.totalSales, localeTag),
+            },
+            {
+              label: 'Revenue',
+              value: formatCurrencyCompact(cashier.revenue, localeTag),
+            },
+            {
+              label: 'Avg basket',
+              value: formatCurrencyCompact(
+                cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
+                localeTag,
+              ),
+            },
+            {
+              label: 'Voids',
+              value: formatNumber(cashier.voidedSales, localeTag),
+              tone: cashier.voidedSales > 0 ? ('danger' as const) : ('default' as const),
+            },
+          ],
+          rows: [
+            PaymentMethod.CASH,
+            PaymentMethod.MTN_MOMO,
+            PaymentMethod.ORANGE_MONEY,
+          ]
+            .map((method) => {
+              const amount = paymentMap.get(method) ?? 0
+              return {
+                label: getPaymentLabel(method, tSell),
+                value: formatCurrency(amount, localeTag),
+                hint: `${formatPercent(percentageOf(amount, Math.max(cashier.revenue, 1)), localeTag)}% of cashier revenue`,
+                percent: percentageOf(amount, Math.max(cashier.revenue, 1)),
+                tone:
+                  method === PaymentMethod.CASH
+                    ? ('success' as const)
+                    : method === PaymentMethod.MTN_MOMO
+                      ? ('warning' as const)
+                      : ('info' as const),
+              }
+            })
+            .filter((row) => row.percent > 0),
+        }
+      })
+
+      const transactionTable: TemplateSection = {
+        columns: [
+          'Sale no.',
+          'Date',
+          'Time',
+          'Customer',
+          'Cashier',
+          'Total',
+          'Payment',
+          'Credit',
+          'Sync',
+        ],
+        rows: derived.completedSales.slice(0, 30).map((sale) => [
+          sale.sale_number || sale.receipt_number || sale.id,
+          sale.sale_date ? formatDateLabel(sale.sale_date, localeTag) : '-',
+          sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
+          sale.customer_name || t('walk_in'),
+          sale.cashier_name || 'Local user',
+          formatCurrency(sale.total_amount ?? 0, localeTag),
+          getPaymentLabel(sale.payment_method, tSell),
+          formatCurrency(sale.credit_amount ?? 0, localeTag),
+          sale.synced_at ? 'Synced' : 'Pending',
+        ]),
+        footer: [
+          `Total - ${formatNumber(derived.completedSales.length, localeTag)} completed`,
+          '',
+          '',
+          '',
+          '',
+          formatCurrency(derived.totalRevenue, localeTag),
+          '',
+          formatCurrency(derived.totalCreditIssued, localeTag),
+          '',
+        ],
+      }
+
+      const voidedTable: TemplateSection = {
+        columns: ['Sale no.', 'Time', 'Cashier', 'Amount', 'Voided by', 'Reason'],
+        rows: derived.voidedSales.slice(0, 16).map((sale) => [
+          sale.sale_number || sale.receipt_number || sale.id,
+          sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
+          sale.cashier_name || 'Local user',
+          formatCurrency(sale.total_amount ?? 0, localeTag),
+          'Recorded on device',
+          sale.void_reason || t('not_set'),
+        ]),
+        footer: [
+          'Total voided',
+          '',
+          '',
+          formatCurrency(
+            sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)),
+            localeTag,
+          ),
+          '',
+          '',
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Sales operations',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          {
+            label: 'Completed sales',
+            value: formatNumber(derived.completedSales.length, localeTag),
+          },
+          {
+            label: 'Total revenue',
+            value: formatCurrency(derived.totalRevenue, localeTag),
+            tone: 'success',
+          },
+          {
+            label: 'Voided sales',
+            value: formatNumber(derived.voidedSales.length, localeTag),
+            tone: 'danger',
+          },
+          {
+            label: 'Active cashiers',
+            value: formatNumber(derived.cashierRows.length, localeTag),
+          },
+        ],
+        summaryRows: [
+          { label: 'Completed sales', value: formatNumber(derived.completedSales.length, localeTag) },
+          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Collected cash', value: formatCurrency(totalCollected, localeTag) },
+          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+        ],
+        excelSections: [
+          transactionTable,
+          {
+            title: 'Payment breakdown',
+            columns: ['Method', 'Amount', 'Share'],
+            rows: revenuePaymentRows.map((row) => [
+              row.label,
+              formatCurrency(row.amount, localeTag),
+              `${formatPercent(percentageOf(row.amount, Math.max(totalCollected, 1)), localeTag)}%`,
+            ]),
+          },
+          ...(derived.voidedSales.length > 0 ? [voidedTable] : []),
+        ],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.transactions'),
+                value: formatNumber(derived.completedSales.length, localeTag),
+                hint: 'completed sales in range',
+                tone: 'info',
+              },
+              {
+                label: t('stats.revenue'),
+                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+                hint: `${formatCurrency(totalCollected, localeTag)} collected`,
+                tone: 'success',
+              },
+              {
+                label: t('stats.credit_issued'),
+                value: formatCurrencyCompact(derived.totalCreditIssued, localeTag),
+                hint: `${formatNumber(creditSalesCount, localeTag)} credit sales`,
+                tone: 'warning',
+              },
+              {
+                label: t('stats.avg_basket'),
+                value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+                hint: `${formatNumber(syncPendingCount, localeTag)} pending sync`,
+                tone: syncPendingCount > 0 ? 'warning' : 'default',
+              },
+            ],
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Day summary',
+            columns: 5,
+            cards: [
+              {
+                label: 'Revenue',
+                value: formatCurrency(derived.totalRevenue, localeTag),
+                hint: 'completed sales only',
+              },
+              {
+                label: 'Gross profit',
+                value: formatCurrency(derived.grossProfit, localeTag),
+                hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% margin`,
+                tone: derived.grossProfit >= 0 ? 'success' : 'danger',
+              },
+              {
+                label: 'Collected cash',
+                value: formatCurrency(totalCollected, localeTag),
+                hint: 'payments recorded on completed sales',
+                tone: 'success',
+              },
+              {
+                label: 'Credit issued',
+                value: formatCurrency(derived.totalCreditIssued, localeTag),
+                hint: `${formatNumber(creditSalesCount, localeTag)} credit sales`,
+                tone: 'warning',
+              },
+              {
+                label: 'Avg basket',
+                value: formatCurrency(derived.averageOrderValue, localeTag),
+                hint: 'per completed sale',
+              },
+            ],
+          },
+          {
+            kind: 'profiles',
+            title: 'Cashier performance',
+            profiles: cashierProfiles,
+          },
+          {
+            kind: 'table',
+            title: 'All transactions',
+            table: transactionTable,
+          },
+          {
+            kind: 'progress_rows',
+            title: 'Payment method breakdown',
+            rows: revenuePaymentRows
+              .filter((row) => row.amount > 0)
+              .map((row) => ({
+                label: row.label,
+                value: formatCurrency(row.amount, localeTag),
+                hint:
+                  row.label === 'Unpaid credit'
+                    ? 'included in revenue, not in collected cash'
+                    : `${formatPercent(percentageOf(row.amount, Math.max(totalCollected, 1)), localeTag)}% of collected payments`,
+                percent: percentageOf(row.amount, Math.max(totalCollected, 1)),
+                tone: row.tone,
+              })),
+          },
+          ...(derived.voidedSales.length > 0
+            ? [
+                {
+                  kind: 'table' as const,
+                  title: 'Voided transactions',
+                  table: voidedTable,
+                },
+              ]
+            : []),
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: syncPendingCount > 0 ? 'warning' : 'info',
+            lines: [
+              'Credit sales are included in revenue but excluded from collected cash until payment is recorded.',
+              'Voided sales remain visible for audit review and are separated from completed sales in this preview.',
+              syncPendingCount > 0
+                ? `${formatNumber(syncPendingCount, localeTag)} sales are still pending sync on this device.`
+                : 'All visible sales in this range are already synced on this device.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'top-products') {
+      const categoryByProductId = new Map(
+        derived.inventoryItems.map((item) => [item.productId, item.categoryName || t('uncategorized')]),
+      )
+      const bestMarginProduct = derived.topProducts
+        .slice()
+        .sort(
+          (left, right) =>
+            percentageOf(right.revenue - right.cost, Math.max(right.revenue, 1)) -
+            percentageOf(left.revenue - left.cost, Math.max(left.revenue, 1)),
+        )[0]
+
+      const productTable: TemplateSection = {
+        columns: [
+          '#',
+          'Product',
+          'Category',
+          'Units sold',
+          'Unit price',
+          'Revenue',
+          '% of total',
+          'COGS',
+          'Gross profit',
+          'Margin',
+        ],
+        rows: derived.topProducts.slice(0, 15).map((product, index) => {
+          const marginPercent = percentageOf(product.revenue - product.cost, Math.max(product.revenue, 1))
+          return [
+            formatNumber(index + 1, localeTag),
+            product.productName,
+            categoryByProductId.get(product.productId) || t('uncategorized'),
+            formatNumber(product.quantity, localeTag),
+            formatCurrency(product.quantity > 0 ? product.revenue / product.quantity : 0, localeTag),
+            formatCurrency(product.revenue, localeTag),
+            `${formatPercent(percentageOf(product.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+            formatCurrency(product.cost, localeTag),
+            formatCurrency(product.revenue - product.cost, localeTag),
+            `${formatPercent(marginPercent, localeTag)}%`,
+          ]
+        }),
+        footer: [
+          `Total - ${formatNumber(derived.topProducts.length, localeTag)} products`,
+          '',
+          '',
+          formatNumber(sumNumbers(derived.topProducts.map((product) => product.quantity)), localeTag),
+          '',
+          formatCurrency(derived.totalRevenue, localeTag),
+          '100.0%',
+          formatCurrency(sumNumbers(derived.topProducts.map((product) => product.cost)), localeTag),
+          formatCurrency(
+            sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
+            localeTag,
+          ),
+          `${formatPercent(
+            percentageOf(
+              sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
+              Math.max(derived.totalRevenue, 1),
+            ),
+            localeTag,
+          )}%`,
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Sales analysis',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Products analysed', value: formatNumber(derived.topProducts.length, localeTag) },
+          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          {
+            label: 'Units sold',
+            value: formatNumber(
+              sumNumbers(derived.topProducts.map((product) => product.quantity)),
+              localeTag,
+            ),
+          },
+          {
+            label: 'Best margin product',
+            value: bestMarginProduct?.productName || '-',
+          },
+        ],
+        summaryRows: [
+          { label: 'Products analysed', value: formatNumber(derived.topProducts.length, localeTag) },
+          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          {
+            label: 'Units sold',
+            value: formatNumber(
+              sumNumbers(derived.topProducts.map((product) => product.quantity)),
+              localeTag,
+            ),
+          },
+        ],
+        excelSections: [productTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.products'),
+                value: formatNumber(derived.topProducts.length, localeTag),
+                hint: t('stats.products_ranked_hint'),
+                tone: 'info',
+              },
+              {
+                label: t('stats.best_seller'),
+                value: derived.topProducts[0]?.productName || '-',
+                hint: derived.topProducts[0]
+                  ? formatCurrency(derived.topProducts[0].revenue, localeTag)
+                  : t('preview.no_sales_data'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.units_sold'),
+                value: formatNumber(
+                  sumNumbers(derived.topProducts.map((product) => product.quantity)),
+                  localeTag,
+                ),
+                hint: t('stats.units_sold_hint'),
+              },
+              {
+                label: 'Gross contribution',
+                value: formatCurrencyCompact(
+                  sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
+                  localeTag,
+                ),
+                hint: `${formatPercent(
+                  percentageOf(
+                    sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
+                    Math.max(derived.totalRevenue, 1),
+                  ),
+                  localeTag,
+                )}% overall margin`,
+                tone: 'success',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Products ranked by revenue',
+            table: productTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes and methodology',
+            tone: 'info',
+            lines: [
+              'Products are ranked by gross revenue generated from completed sales in the selected range.',
+              'Gross profit per product uses the cost snapshots stored on sale items at the time of sale.',
+              'Contribution percentages are based on the total completed-sales revenue for this range.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'cashier-performance') {
+      const cashierProfiles = derived.cashierRows.slice(0, 6).map((cashier, index) => {
+        const cashierCompletedSales = derived.completedSales.filter(
+          (sale) => sale.cashier_id === cashier.cashierId,
+        )
+        const cashierPayments = derived.completedPayments.filter(
+          (payment) => saleById.get(payment.sale_id)?.cashier_id === cashier.cashierId,
+        )
+        const paymentMap = new Map<string, number>()
+        const hourlyMap = new Map<number, number>()
+
+        for (const payment of cashierPayments) {
+          paymentMap.set(payment.method, (paymentMap.get(payment.method) ?? 0) + payment.amount)
+        }
+
+        for (const sale of cashierCompletedSales) {
+          if (!sale.sold_at) {
+            continue
+          }
+
+          const hour = new Date(sale.sold_at).getHours()
+          const bucketStart = Math.floor(hour / 3) * 3
+          hourlyMap.set(bucketStart, (hourlyMap.get(bucketStart) ?? 0) + 1)
+        }
+
+        const peakBucket = Array.from(hourlyMap.entries()).sort((left, right) => right[1] - left[1])[0]
+        const peakHours = peakBucket
+          ? `${String(peakBucket[0]).padStart(2, '0')}:00-${String((peakBucket[0] + 2) % 24).padStart(2, '0')}:59`
+          : 'N/A'
+
+        return {
+          initials: getInitials(cashier.cashierName),
+          name: cashier.cashierName,
+          subtitle: 'Cashier profile for the selected range',
+          value: formatCurrency(cashier.revenue, localeTag),
+          hint: `${formatPercent(percentageOf(cashier.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}% of period revenue`,
+          accent:
+            index === 0
+              ? ('success' as const)
+              : index === 1
+                ? ('info' as const)
+                : ('warning' as const),
+          stats: [
+            { label: 'Sales', value: formatNumber(cashier.totalSales, localeTag) },
+            {
+              label: 'Avg. basket',
+              value: formatCurrency(
+                cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
+                localeTag,
+              ),
+            },
+            {
+              label: 'Voids',
+              value: formatNumber(cashier.voidedSales, localeTag),
+              tone: cashier.voidedSales > 0 ? ('danger' as const) : ('default' as const),
+            },
+            {
+              label: 'Void rate',
+              value: `${formatPercent(percentageOf(cashier.voidedSales, Math.max(cashier.totalSales, 1)), localeTag)}%`,
+              tone: cashier.voidedSales > 0 ? ('warning' as const) : ('default' as const),
+            },
+            {
+              label: 'Credit issued',
+              value: formatCurrency(
+                sumNumbers(cashierCompletedSales.map((sale) => sale.credit_amount ?? 0)),
+                localeTag,
+              ),
+              tone: 'warning' as const,
+            },
+            {
+              label: 'Peak hours',
+              value: peakHours,
+            },
+          ],
+          rows: [
+            PaymentMethod.CASH,
+            PaymentMethod.MTN_MOMO,
+            PaymentMethod.ORANGE_MONEY,
+          ]
+            .map((method) => {
+              const amount = paymentMap.get(method) ?? 0
+              return {
+                label: getPaymentLabel(method, tSell),
+                value: formatCurrency(amount, localeTag),
+                hint: `${formatPercent(percentageOf(amount, Math.max(cashier.revenue, 1)), localeTag)}% of cashier revenue`,
+                percent: percentageOf(amount, Math.max(cashier.revenue, 1)),
+                tone:
+                  method === PaymentMethod.CASH
+                    ? ('success' as const)
+                    : method === PaymentMethod.MTN_MOMO
+                      ? ('warning' as const)
+                      : ('info' as const),
+              }
+            })
+            .filter((row) => row.percent > 0),
+        }
+      })
+
+      const summaryTable: TemplateSection = {
+        columns: [
+          'Cashier',
+          'Transactions',
+          'Revenue',
+          '% of total',
+          'Avg. basket',
+          'Voids',
+          'Void rate',
+          'Credit issued',
+        ],
+        rows: derived.cashierRows.map((cashier) => [
+          cashier.cashierName,
+          formatNumber(cashier.totalSales, localeTag),
+          formatCurrency(cashier.revenue, localeTag),
+          `${formatPercent(percentageOf(cashier.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+          formatCurrency(
+            cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
+            localeTag,
+          ),
+          formatNumber(cashier.voidedSales, localeTag),
+          `${formatPercent(percentageOf(cashier.voidedSales, Math.max(cashier.totalSales, 1)), localeTag)}%`,
+          formatCurrency(
+            sumNumbers(
+              derived.completedSales
+                .filter((sale) => sale.cashier_id === cashier.cashierId)
+                .map((sale) => sale.credit_amount ?? 0),
+            ),
+            localeTag,
+          ),
+        ]),
+        footer: [
+          'Total',
+          formatNumber(sumNumbers(derived.cashierRows.map((cashier) => cashier.totalSales)), localeTag),
+          formatCurrency(derived.totalRevenue, localeTag),
+          '100.0%',
+          formatCurrency(derived.averageOrderValue, localeTag),
+          formatNumber(sumNumbers(derived.cashierRows.map((cashier) => cashier.voidedSales)), localeTag),
+          `${formatPercent(
+            percentageOf(
+              sumNumbers(derived.cashierRows.map((cashier) => cashier.voidedSales)),
+              Math.max(sumNumbers(derived.cashierRows.map((cashier) => cashier.totalSales)), 1),
+            ),
+            localeTag,
+          )}%`,
+          formatCurrency(derived.totalCreditIssued, localeTag),
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Human resources',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Active cashiers', value: formatNumber(derived.cashierRows.length, localeTag) },
+          {
+            label: 'Total transactions',
+            value: formatNumber(derived.completedSales.length, localeTag),
+          },
+          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          {
+            label: 'Overall void rate',
+            value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
+            tone: 'warning',
+          },
+        ],
+        summaryRows: [
+          { label: 'Active cashiers', value: formatNumber(derived.cashierRows.length, localeTag) },
+          { label: 'Transactions', value: formatNumber(derived.completedSales.length, localeTag) },
+          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+        ],
+        excelSections: [summaryTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.cashiers'),
+                value: formatNumber(derived.cashierRows.length, localeTag),
+                hint: t('stats.active_cashiers_hint'),
+                tone: 'info',
+              },
+              {
+                label: t('stats.top_cashier'),
+                value: derived.cashierRows[0]?.cashierName || '-',
+                hint: derived.cashierRows[0]
+                  ? formatCurrency(derived.cashierRows[0].revenue, localeTag)
+                  : t('preview.no_sales_data'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.avg_basket'),
+                value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+                hint: t('stats.avg_basket_hint'),
+              },
+              {
+                label: 'Void rate',
+                value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
+                hint: `${formatNumber(derived.voidedSales.length, localeTag)} voided sales`,
+                tone: 'warning',
+              },
+            ],
+          },
+          {
+            kind: 'profiles',
+            title: 'Individual cashier profiles',
+            profiles: cashierProfiles,
+          },
+          {
+            kind: 'table',
+            title: 'Comparative summary table',
+            table: summaryTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: 'info',
+            lines: [
+              'Void rate is calculated as voided transactions divided by total transactions recorded by the cashier.',
+              'Revenue is attributed to the cashier who recorded the completed sale on this device.',
+              'Credit issued shows the unpaid portion opened at the moment of sale for that cashier.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'payment-breakdown') {
+      const totalCollected = sumNumbers(Array.from(derived.paymentTotals.values()))
+      const dailyPaymentMap = new Map<
+        string,
+        {
+          date: string
+          revenue: number
+          cash: number
+          mtn: number
+          orange: number
+          card: number
+          credit: number
+        }
+      >()
+
+      for (const sale of derived.completedSales) {
+        const saleDate = sale.sale_date || sale.created_at.slice(0, 10)
+        const current = dailyPaymentMap.get(saleDate) ?? {
+          date: saleDate,
+          revenue: 0,
+          cash: 0,
+          mtn: 0,
+          orange: 0,
+          card: 0,
+          credit: 0,
+        }
+
+        current.revenue += sale.total_amount ?? 0
+        current.credit += sale.credit_amount ?? 0
+        dailyPaymentMap.set(saleDate, current)
+      }
+
+      for (const payment of derived.completedPayments) {
+        const sale = saleById.get(payment.sale_id)
+        if (!sale) {
+          continue
+        }
+
+        const saleDate = sale.sale_date || sale.created_at.slice(0, 10)
+        const current = dailyPaymentMap.get(saleDate)
+        if (!current) {
+          continue
+        }
+
+        if (payment.method === PaymentMethod.CASH) {
+          current.cash += payment.amount
+        } else if (payment.method === PaymentMethod.MTN_MOMO) {
+          current.mtn += payment.amount
+        } else if (payment.method === PaymentMethod.ORANGE_MONEY) {
+          current.orange += payment.amount
+        } else if (payment.method === PaymentMethod.CARD) {
+          current.card += payment.amount
+        }
+      }
+
+      const dailyPaymentTable: TemplateSection = {
+        columns: [
+          'Date',
+          'Revenue',
+          'Cash',
+          'MTN MoMo',
+          'Orange Money',
+          'Card',
+          'Credit issued',
+          '% credit',
+        ],
+        rows: Array.from(dailyPaymentMap.values())
+          .sort((left, right) => left.date.localeCompare(right.date))
+          .map((row) => [
+            formatDateLabel(row.date, localeTag),
+            formatCurrency(row.revenue, localeTag),
+            formatCurrency(row.cash, localeTag),
+            formatCurrency(row.mtn, localeTag),
+            formatCurrency(row.orange, localeTag),
+            formatCurrency(row.card, localeTag),
+            formatCurrency(row.credit, localeTag),
+            `${formatPercent(percentageOf(row.credit, Math.max(row.revenue, 1)), localeTag)}%`,
+          ]),
+        footer: [
+          'Total',
+          formatCurrency(derived.totalRevenue, localeTag),
+          formatCurrency(derived.paymentTotals.get(PaymentMethod.CASH) ?? 0, localeTag),
+          formatCurrency(derived.paymentTotals.get(PaymentMethod.MTN_MOMO) ?? 0, localeTag),
+          formatCurrency(derived.paymentTotals.get(PaymentMethod.ORANGE_MONEY) ?? 0, localeTag),
+          formatCurrency(derived.paymentTotals.get(PaymentMethod.CARD) ?? 0, localeTag),
+          formatCurrency(derived.totalCreditIssued, localeTag),
+          `${formatPercent(percentageOf(derived.totalCreditIssued, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Financial analysis',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Cash collected', value: formatCurrency(totalCollected, localeTag), tone: 'success' },
+          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag), tone: 'warning' },
+          {
+            label: 'Collection rate',
+            value: `${formatPercent(percentageOf(totalCollected, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+          },
+        ],
+        summaryRows: [
+          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Cash collected', value: formatCurrency(totalCollected, localeTag) },
+          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+        ],
+        excelSections: [dailyPaymentTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.revenue'),
+                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+                hint: t('stats.topline_hint'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.collected'),
+                value: formatCurrencyCompact(totalCollected, localeTag),
+                hint: t('stats.cash_in_hand_hint'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.credit_issued'),
+                value: formatCurrencyCompact(derived.totalCreditIssued, localeTag),
+                hint: t('stats.unpaid_credit_hint'),
+                tone: 'warning',
+              },
+              {
+                label: 'Collection rate',
+                value: `${formatPercent(percentageOf(totalCollected, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+                hint: 'cash collected versus total revenue',
+              },
+            ],
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Payment method summary',
+            columns: 4,
+            cards: revenuePaymentRows.map((row) => ({
+              label: row.label,
+              value: formatCurrency(row.amount, localeTag),
+              hint:
+                row.label === 'Unpaid credit'
+                  ? `${formatPercent(percentageOf(row.amount, Math.max(derived.totalRevenue, 1)), localeTag)}% of revenue`
+                  : `${formatPercent(percentageOf(row.amount, Math.max(totalCollected, 1)), localeTag)}% of collected cash`,
+              tone: row.tone,
+            })),
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Credit analysis',
+            columns: 2,
+            cards: [
+              {
+                label: 'Credit issued',
+                value: formatCurrency(derived.totalCreditIssued, localeTag),
+                hint: `${formatPercent(percentageOf(derived.totalCreditIssued, Math.max(derived.totalRevenue, 1)), localeTag)}% of revenue`,
+                tone: 'warning',
+              },
+              {
+                label: 'Credit collected',
+                value: formatCurrency(derived.collectedReceivable, localeTag),
+                hint: `${formatPercent(
+                  percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, 1)),
+                  localeTag,
+                )}% of receivables recovered`,
+                tone: 'success',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Daily payment breakdown',
+            table: dailyPaymentTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: 'info',
+            lines: [
+              'Credit issued is included in revenue but excluded from collected cash until payment is recorded.',
+              'Mobile money totals come from completed sale payments stored on this device for the selected period.',
+              'Collection rate compares cash collected in period against total completed-sales revenue.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'voided-sales') {
+      const voidReversalRefs = new Set(
+        derived.inventoryMovements
+          .filter((movement) => movement.type === InventoryMovementType.VOID_REVERSAL)
+          .map((movement) => movement.referenceId)
+          .filter((value): value is string => Boolean(value)),
+      )
+      const totalVoidedValue = sumNumbers(
+        derived.voidedSales.map((sale) => sale.total_amount ?? 0),
+      )
+      const confirmedReversals = derived.voidedSales.filter((sale) =>
+        voidReversalRefs.has(sale.id),
+      ).length
+      const voidedTable: TemplateSection = {
+        columns: [
+          'Sale no.',
+          'Date',
+          'Time',
+          'Cashier',
+          'Amount',
+          'Voided by',
+          'Reason',
+          'Inventory',
+        ],
+        rows: derived.voidedSales.slice(0, 20).map((sale) => [
+          sale.sale_number || sale.receipt_number || sale.id,
+          sale.sale_date ? formatDateLabel(sale.sale_date, localeTag) : '-',
+          sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
+          sale.cashier_name || 'Local user',
+          formatCurrency(sale.total_amount ?? 0, localeTag),
+          'Recorded on device',
+          sale.void_reason || t('not_set'),
+          voidReversalRefs.has(sale.id) ? 'Confirmed' : 'Pending review',
+        ]),
+        footer: [
+          `Total value reversed - ${formatNumber(derived.voidedSales.length, localeTag)} sales`,
+          '',
+          '',
+          '',
+          formatCurrency(totalVoidedValue, localeTag),
+          '',
+          '',
+          `${formatNumber(confirmedReversals, localeTag)} / ${formatNumber(derived.voidedSales.length, localeTag)} confirmed`,
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Audit and compliance',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Total voided', value: formatNumber(derived.voidedSales.length, localeTag), tone: 'danger' },
+          { label: 'Value reversed', value: formatCurrency(totalVoidedValue, localeTag), tone: 'danger' },
+          {
+            label: 'Void rate',
+            value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
+            tone: 'warning',
+          },
+          {
+            label: 'Inventory reversed',
+            value: `${formatNumber(confirmedReversals, localeTag)} / ${formatNumber(derived.voidedSales.length, localeTag)}`,
+            tone: confirmedReversals === derived.voidedSales.length ? 'success' : 'warning',
+          },
+        ],
+        summaryRows: [
+          { label: 'Voided sales', value: formatNumber(derived.voidedSales.length, localeTag) },
+          { label: 'Value reversed', value: formatCurrency(totalVoidedValue, localeTag) },
+          {
+            label: 'Inventory reversals confirmed',
+            value: formatNumber(confirmedReversals, localeTag),
+          },
+        ],
+        excelSections: [voidedTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.voided'),
+                value: formatNumber(derived.voidedSales.length, localeTag),
+                hint: t('stats.voided_sales_hint'),
+                tone: 'danger',
+              },
+              {
+                label: t('stats.voided_value'),
+                value: formatCurrencyCompact(totalVoidedValue, localeTag),
+                hint: t('stats.reversed_value_hint'),
+                tone: 'warning',
+              },
+              {
+                label: 'Void rate',
+                value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
+                hint: `${formatNumber(derived.sales.length, localeTag)} total recorded sales`,
+                tone: 'warning',
+              },
+              {
+                label: 'Inventory reversed',
+                value: `${formatNumber(confirmedReversals, localeTag)} / ${formatNumber(derived.voidedSales.length, localeTag)}`,
+                hint: 'void reversal movements logged',
+                tone: confirmedReversals === derived.voidedSales.length ? 'success' : 'warning',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'All voided transactions',
+            table: voidedTable,
+          },
+          {
+            kind: 'note',
+            title: 'Audit notes',
+            tone: 'danger',
+            lines: [
+              'Voided sales remain separated from completed sales and should be reviewed alongside their reasons.',
+              'Inventory reversal status is based on VOID_REVERSAL movements logged against the sale reference on this device.',
+              'Any sale marked pending review should be checked against the inventory movement log before closeout.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'stock-movements') {
+      const movementsTable: TemplateSection = {
+        columns: [
+          'Product',
+          'Date',
+          'Type',
+          'Reference',
+          'Performed by',
+          'Change',
+          'Before',
+          'After',
+          'Balance',
+          'Notes',
+        ],
+        rows: derived.inventoryMovements.slice(0, 40).map((movement) => [
+          inventoryByProductId.get(movement.productId)?.productName || movement.productId,
+          formatDateTimeLabel(movement.createdAt, localeTag),
+          getMovementTypeLabel(movement.type),
+          movement.referenceLabel || movement.referenceId || '-',
+          movement.performedBy?.name || 'System',
+          formatNumber(movement.quantityChange, localeTag),
+          formatNumber(movement.quantityBefore, localeTag),
+          formatNumber(movement.quantityAfter, localeTag),
+          formatNumber(movement.quantityAfter, localeTag),
+          movement.notes || '-',
+        ]),
+      }
+      const unitsSoldOut = sumNumbers(
+        derived.inventoryMovements
+          .filter((movement) => movement.type === InventoryMovementType.SALE)
+          .map((movement) => Math.abs(movement.quantityChange)),
+      )
+      const unitsRestockedIn = sumNumbers(
+        derived.inventoryMovements
+          .filter((movement) => movement.type === InventoryMovementType.RESTOCK_IN)
+          .map((movement) => Math.abs(movement.quantityChange)),
+      )
+      const netChange = sumNumbers(
+        derived.inventoryMovements.map((movement) => movement.quantityChange),
+      )
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Inventory management',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Total movements', value: formatNumber(derived.inventoryMovements.length, localeTag) },
+          { label: 'Units sold out', value: formatNumber(unitsSoldOut, localeTag), tone: 'danger' },
+          { label: 'Units restocked', value: formatNumber(unitsRestockedIn, localeTag), tone: 'success' },
+          {
+            label: 'Net change',
+            value: formatNumber(netChange, localeTag),
+            tone: netChange >= 0 ? 'success' : 'warning',
+          },
+        ],
+        summaryRows: [
+          { label: 'Total movements', value: formatNumber(derived.inventoryMovements.length, localeTag) },
+          { label: 'Units sold out', value: formatNumber(unitsSoldOut, localeTag) },
+          { label: 'Units restocked', value: formatNumber(unitsRestockedIn, localeTag) },
+          { label: 'Net change', value: formatNumber(netChange, localeTag) },
+        ],
+        excelSections: [movementsTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.movements'),
+                value: formatNumber(derived.inventoryMovements.length, localeTag),
+                hint: t('stats.movements_hint'),
+                tone: 'info',
+              },
+              {
+                label: 'Units sold out',
+                value: formatNumber(unitsSoldOut, localeTag),
+                hint: 'sale deductions',
+                tone: 'danger',
+              },
+              {
+                label: 'Units restocked',
+                value: formatNumber(unitsRestockedIn, localeTag),
+                hint: 'restock inflow',
+                tone: 'success',
+              },
+              {
+                label: 'Net change',
+                value: formatNumber(netChange, localeTag),
+                hint: `${formatNumber(derived.movementRows.length, localeTag)} movement types`,
+                tone: netChange >= 0 ? 'success' : 'warning',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Movement log by product',
+            table: movementsTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: 'info',
+            lines: [
+              'Movement types include sale deductions, restocks, manual adjustments, void reversals and opening stock changes.',
+              'This preview shows the most recent movement rows while Excel export includes the same detailed section.',
+              'Reference labels come from the stored movement record and may reflect sales, restocks or manual actions.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'low-stock-alerts') {
+      const alertRows = derived.lowStockItems.slice(0, 20).map((item) => {
+        const threshold = Math.max(item.lowStockThreshold ?? 0, 1)
+        const targetQuantity = Math.max(item.reorderPoint ?? 0, threshold * 2)
+        const restockQty = Math.max(targetQuantity - item.quantity, threshold - item.quantity, 0)
+        const unitCost = latestUnitCostByProductId.get(item.productId) ?? 0
+        const estimatedCost = restockQty * unitCost
+        const stockPercent = percentageOf(item.quantity, threshold)
+        const tone: TemplateTone =
+          item.quantity <= 0 ? 'danger' : stockPercent < 30 ? 'danger' : 'warning'
+
+        return {
+          product: item.productName || t('untitled_product'),
+          category: item.categoryName || t('uncategorized'),
+          quantity: formatNumber(item.quantity, localeTag),
+          threshold: formatNumber(threshold, localeTag),
+          shortfall: formatNumber(Math.max(threshold - item.quantity, 0), localeTag),
+          thresholdShare: `${formatPercent(stockPercent, localeTag)}%`,
+          urgency: item.quantity <= 0 ? 'Out of stock' : stockPercent < 30 ? 'Critical' : 'Low stock',
+          restockQty: formatNumber(restockQty, localeTag),
+          estimatedCost,
+          estimatedCostLabel:
+            estimatedCost > 0 ? formatCurrency(estimatedCost, localeTag) : 'No cost history',
+          tone,
+        }
+      })
+      const totalRestockCost = sumNumbers(alertRows.map((row) => row.estimatedCost))
+      const alertTable: TemplateSection = {
+        columns: [
+          'Product',
+          'Category',
+          'In stock',
+          'Threshold',
+          'Shortfall',
+          '% of threshold',
+          'Urgency',
+          'Est. restock qty',
+          'Est. cost',
+        ],
+        rows: alertRows.map((row) => [
+          row.product,
+          row.category,
+          row.quantity,
+          row.threshold,
+          row.shortfall,
+          row.thresholdShare,
+          row.urgency,
+          row.restockQty,
+          row.estimatedCostLabel,
+        ]),
+        footer: [
+          `Total alerts - ${formatNumber(alertRows.length, localeTag)} products`,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          formatCurrency(totalRestockCost, localeTag),
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Inventory alert',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Products below threshold', value: formatNumber(alertRows.length, localeTag), tone: 'danger' },
+          {
+            label: 'Out of stock',
+            value: formatNumber(
+              derived.inventoryItems.filter((item) => item.quantity <= 0).length,
+              localeTag,
+            ),
+            tone: 'danger',
+          },
+          { label: 'Est. restock cost', value: formatCurrency(totalRestockCost, localeTag) },
+          { label: 'Highest urgency', value: alertRows[0]?.product || '-' },
+        ],
+        summaryRows: [
+          { label: 'Low-stock alerts', value: formatNumber(alertRows.length, localeTag) },
+          { label: 'Out of stock', value: formatNumber(derived.inventoryItems.filter((item) => item.quantity <= 0).length, localeTag) },
+          { label: 'Estimated restock cost', value: formatCurrency(totalRestockCost, localeTag) },
+        ],
+        excelSections: [alertTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.alerts'),
+                value: formatNumber(alertRows.length, localeTag),
+                hint: t('stats.current_alerts_hint'),
+                tone: 'danger',
+              },
+              {
+                label: t('stats.out_of_stock'),
+                value: formatNumber(
+                  derived.inventoryItems.filter((item) => item.quantity <= 0).length,
+                  localeTag,
+                ),
+                hint: t('stats.out_of_stock_hint'),
+                tone: 'danger',
+              },
+              {
+                label: 'Restock estimate',
+                value: formatCurrencyCompact(totalRestockCost, localeTag),
+                hint: 'based on latest known unit cost',
+                tone: 'warning',
+              },
+              {
+                label: t('stats.tracked_products'),
+                value: formatNumber(derived.inventoryItems.length, localeTag),
+                hint: t('stats.tracked_products_hint'),
+                tone: 'info',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Alert listing - sorted by urgency',
+            table: alertTable,
+          },
+          {
+            kind: 'note',
+            title: 'Action required',
+            tone: 'warning',
+            lines: [
+              alertRows[0]
+                ? `${alertRows[0].product} currently has the highest urgency in this range.`
+                : 'No critical stock alerts are available for this range.',
+              totalRestockCost > 0
+                ? `Estimated restock investment is ${formatCurrency(totalRestockCost, localeTag)} across visible alert products.`
+                : 'Estimated restock costs are unavailable until at least one unit-cost history exists for the affected products.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'restock-costs') {
+      const supplierMap = new Map<
+        string,
+        { supplier: string; deliveries: number; units: number; totalCost: number; onCredit: number }
+      >()
+      const restockTable: TemplateSection = {
+        columns: [
+          'Reference',
+          'Date',
+          'Supplier',
+          'Products',
+          'Units',
+          'Total cost',
+          'Paid',
+          'On credit',
+        ],
+        rows: derived.restocks.map((restock) => {
+          const items = restockItemsByRestockId.get(restock.id) ?? []
+          const supplier = restock.supplier_name || t('not_set')
+          const units = sumNumbers(items.map((item) => item.quantity))
+          const totalCost = restock.total_cost ?? restock.total_amount ?? 0
+          const onCredit = restock.credit_amount ?? Math.max(totalCost - (restock.amount_paid ?? 0), 0)
+          const summary = supplierMap.get(supplier) ?? {
+            supplier,
+            deliveries: 0,
+            units: 0,
+            totalCost: 0,
+            onCredit: 0,
+          }
+
+          summary.deliveries += 1
+          summary.units += units
+          summary.totalCost += totalCost
+          summary.onCredit += onCredit
+          supplierMap.set(supplier, summary)
+
+          return [
+            restock.reference_number || restock.id,
+            formatDateLabel(restock.created_at.slice(0, 10), localeTag),
+            supplier,
+            items
+              .slice(0, 3)
+              .map((item) => item.product_name || item.product_id)
+              .join(', ') || '-',
+            formatNumber(units, localeTag),
+            formatCurrency(totalCost, localeTag),
+            formatCurrency(restock.amount_paid ?? 0, localeTag),
+            formatCurrency(onCredit, localeTag),
+          ]
+        }),
+      }
+      const supplierTable: TemplateSection = {
+        title: 'Supplier summary',
+        columns: ['Supplier', 'Deliveries', 'Units', 'Total cost', 'On credit'],
+        rows: Array.from(supplierMap.values())
+          .sort((left, right) => right.totalCost - left.totalCost)
+          .map((row) => [
+            row.supplier,
+            formatNumber(row.deliveries, localeTag),
+            formatNumber(row.units, localeTag),
+            formatCurrency(row.totalCost, localeTag),
+            formatCurrency(row.onCredit, localeTag),
+          ]),
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Purchasing',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Restock records', value: formatNumber(derived.restocks.length, localeTag) },
+          {
+            label: 'Units received',
+            value: formatNumber(
+              sumNumbers(derived.restockItems.map((item) => item.quantity)),
+              localeTag,
+            ),
+          },
+          {
+            label: 'Total cost',
+            value: formatCurrency(
+              sumNumbers(
+                derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
+              ),
+              localeTag,
+            ),
+            tone: 'warning',
+          },
+          {
+            label: 'On credit',
+            value: formatCurrency(
+              sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)),
+              localeTag,
+            ),
+            tone: 'danger',
+          },
+        ],
+        summaryRows: [
+          { label: 'Restock records', value: formatNumber(derived.restocks.length, localeTag) },
+          {
+            label: 'Units received',
+            value: formatNumber(
+              sumNumbers(derived.restockItems.map((item) => item.quantity)),
+              localeTag,
+            ),
+          },
+          {
+            label: 'Total cost',
+            value: formatCurrency(
+              sumNumbers(
+                derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
+              ),
+              localeTag,
+            ),
+          },
+        ],
+        excelSections: [restockTable, supplierTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.restocks'),
+                value: formatNumber(derived.restocks.length, localeTag),
+                hint: t('stats.restocks_hint'),
+                tone: 'info',
+              },
+              {
+                label: t('stats.total_cost'),
+                value: formatCurrencyCompact(
+                  sumNumbers(
+                    derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
+                  ),
+                  localeTag,
+                ),
+                hint: t('stats.stock_investment_hint'),
+                tone: 'warning',
+              },
+              {
+                label: t('stats.credit_issued'),
+                value: formatCurrencyCompact(
+                  sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)),
+                  localeTag,
+                ),
+                hint: t('stats.supplier_credit_hint'),
+                tone: 'danger',
+              },
+              {
+                label: 'Units received',
+                value: formatNumber(
+                  sumNumbers(derived.restockItems.map((item) => item.quantity)),
+                  localeTag,
+                ),
+                hint: 'sum of restock item quantities',
+                tone: 'success',
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Restock records detail',
+            table: restockTable,
+          },
+          {
+            kind: 'table',
+            title: 'Supplier summary',
+            table: supplierTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: 'info',
+            lines: [
+              'Product summaries are based on restock item rows linked to each restock record.',
+              'On-credit amounts come from the stored credit balance for the restock, or are inferred from paid versus total cost.',
+              'Supplier totals help identify where the current purchasing exposure is concentrated.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'expense-breakdown') {
+      const recurringTotal = sumNumbers(
+        derived.expenses
+          .filter((expense) => expense.isRecurring)
+          .map((expense) => expense.amount),
+      )
+      const oneOffTotal = derived.totalExpenses - recurringTotal
+      const largestExpenseCategory = derived.expenseCategoryRows[0]
+      const expenseTable: TemplateSection = {
+        columns: ['Description', 'Date', 'Category', 'Vendor', 'Amount', 'Type', 'Recorded by'],
+        rows: derived.expenses
+          .slice()
+          .sort((left, right) => right.expenseDate.localeCompare(left.expenseDate))
+          .slice(0, 40)
+          .map((expense) => [
+            expense.description,
+            formatDateLabel(expense.expenseDate, localeTag),
+            expense.category?.name || t('uncategorized'),
+            expense.vendor || '-',
+            formatCurrency(expense.amount, localeTag),
+            expense.isRecurring ? 'Recurring' : 'One-off',
+            expense.recordedBy?.name || 'Local user',
+          ]),
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Financial',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag), tone: 'danger' },
+          {
+            label: 'Recurring',
+            value: `${formatCurrency(recurringTotal, localeTag)} (${formatPercent(
+              percentageOf(recurringTotal, Math.max(derived.totalExpenses, 1)),
+              localeTag,
+            )}%)`,
+          },
+          {
+            label: 'One-off',
+            value: `${formatCurrency(oneOffTotal, localeTag)} (${formatPercent(
+              percentageOf(oneOffTotal, Math.max(derived.totalExpenses, 1)),
+              localeTag,
+            )}%)`,
+          },
+          {
+            label: 'Categories',
+            value: formatNumber(derived.expenseCategoryRows.length, localeTag),
+          },
+        ],
+        summaryRows: [
+          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag) },
+          { label: 'Recurring', value: formatCurrency(recurringTotal, localeTag) },
+          { label: 'One-off', value: formatCurrency(oneOffTotal, localeTag) },
+        ],
+        excelSections: [
+          {
+            title: 'Expense by category',
+            columns: ['Category', 'Amount', 'Share', 'Entries'],
+            rows: derived.expenseCategoryRows.map((row) => [
+              row.name,
+              formatCurrency(row.amount, localeTag),
+              `${formatPercent(percentageOf(row.amount, Math.max(derived.totalExpenses, 1)), localeTag)}%`,
+              formatNumber(row.count, localeTag),
+            ]),
+          },
+          expenseTable,
+        ],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.expenses'),
+                value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+                hint: `${formatNumber(derived.expenses.length, localeTag)} ${t('stats.entries_hint')}`,
+                tone: 'warning',
+              },
+              {
+                label: t('stats.recurring'),
+                value: formatCurrencyCompact(recurringTotal, localeTag),
+                hint: t('stats.recurring_expenses_hint'),
+                tone: 'info',
+              },
+              {
+                label: 'One-off',
+                value: formatCurrencyCompact(oneOffTotal, localeTag),
+                hint: 'variable or one-time entries',
+                tone: 'default',
+              },
+              {
+                label: t('stats.categories'),
+                value: formatNumber(derived.expenseCategoryRows.length, localeTag),
+                hint: t('stats.categories_hint'),
+              },
+            ],
+          },
+          {
+            kind: 'progress_rows',
+            title: 'Expense by category',
+            rows: derived.expenseCategoryRows.map((row) => ({
+              label: row.name,
+              value: formatCurrency(row.amount, localeTag),
+              hint: `${formatPercent(percentageOf(row.amount, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses · ${formatNumber(row.count, localeTag)} entries`,
+              percent: percentageOf(row.amount, Math.max(derived.totalExpenses, 1)),
+              tone: row.recurringAmount > 0 ? 'warning' : 'info',
+            })),
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Expense mix',
+            columns: 2,
+            cards: [
+              {
+                label: 'Fixed / recurring total',
+                value: formatCurrency(recurringTotal, localeTag),
+                hint: `${formatPercent(percentageOf(recurringTotal, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses`,
+                tone: 'info',
+              },
+              {
+                label: 'Variable / one-off total',
+                value: formatCurrency(oneOffTotal, localeTag),
+                hint: `${formatPercent(percentageOf(oneOffTotal, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses`,
+              },
+            ],
+          },
+          {
+            kind: 'table',
+            title: 'Full expense listing',
+            table: expenseTable,
+          },
+          {
+            kind: 'note',
+            title: 'Notes',
+            tone: 'info',
+            lines: [
+              'Recurring flags are informational and depend on how the expense was recorded on this device.',
+              largestExpenseCategory
+                ? `Largest expense category in range is ${largestExpenseCategory.name} at ${formatCurrency(largestExpenseCategory.amount, localeTag)}.`
+                : 'No expense categories were recorded in this range.',
+              'Use the exported detail sheet to review vendors, categories and one-off spending outliers.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'revenue-vs-expenses') {
+      const costBySaleId = new Map<string, number>()
+      for (const item of derived.completedItems) {
+        costBySaleId.set(
+          item.sale_id,
+          (costBySaleId.get(item.sale_id) ?? 0) + (item.cost_price ?? 0) * item.quantity,
+        )
+      }
+
+      const monthlyMap = new Map<
+        string,
+        { key: string; label: string; revenue: number; cogs: number; expenses: number }
+      >()
+
+      for (const sale of derived.completedSales) {
+        const saleDate = sale.sale_date || sale.created_at.slice(0, 10)
+        const key = saleDate.slice(0, 7)
+        const current = monthlyMap.get(key) ?? {
+          key,
+          label: formatMonthKeyLabel(key, localeTag),
+          revenue: 0,
+          cogs: 0,
+          expenses: 0,
+        }
+        current.revenue += sale.total_amount ?? 0
+        current.cogs += costBySaleId.get(sale.id) ?? 0
+        monthlyMap.set(key, current)
+      }
+
+      for (const expense of derived.expenses) {
+        const key = expense.expenseDate.slice(0, 7)
+        const current = monthlyMap.get(key) ?? {
+          key,
+          label: formatMonthKeyLabel(key, localeTag),
+          revenue: 0,
+          cogs: 0,
+          expenses: 0,
+        }
+        current.expenses += expense.amount
+        monthlyMap.set(key, current)
+      }
+
+      const monthlyRows = Array.from(monthlyMap.values()).sort((left, right) =>
+        left.key.localeCompare(right.key),
+      )
+      const highestRevenueRow = monthlyRows.slice().sort((left, right) => right.revenue - left.revenue)[0]
+      const weakestNetRow = monthlyRows
+        .slice()
+        .sort(
+          (left, right) =>
+            left.revenue - left.cogs - left.expenses - (right.revenue - right.cogs - right.expenses),
+        )[0]
+      const trendTable: TemplateSection = {
+        columns: ['Month', 'Revenue', 'COGS', 'Gross profit', 'Margin', 'Expenses', 'Net profit', 'Net margin'],
+        rows: monthlyRows.map((row) => {
+          const grossProfit = row.revenue - row.cogs
+          const netProfit = grossProfit - row.expenses
+          return [
+            row.label,
+            formatCurrency(row.revenue, localeTag),
+            formatCurrency(row.cogs, localeTag),
+            formatCurrency(grossProfit, localeTag),
+            `${formatPercent(percentageOf(grossProfit, Math.max(row.revenue, 1)), localeTag)}%`,
+            formatCurrency(row.expenses, localeTag),
+            formatCurrency(netProfit, localeTag),
+            `${formatPercent(percentageOf(netProfit, Math.max(row.revenue, 1)), localeTag)}%`,
+          ]
+        }),
+        footer: [
+          'Total / Avg.',
+          formatCurrency(sumNumbers(monthlyRows.map((row) => row.revenue)), localeTag),
+          formatCurrency(sumNumbers(monthlyRows.map((row) => row.cogs)), localeTag),
+          formatCurrency(
+            sumNumbers(monthlyRows.map((row) => row.revenue - row.cogs)),
+            localeTag,
+          ),
+          `${formatPercent(percentageOf(derived.grossProfit, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+          formatCurrency(sumNumbers(monthlyRows.map((row) => row.expenses)), localeTag),
+          formatCurrency(
+            sumNumbers(monthlyRows.map((row) => row.revenue - row.cogs - row.expenses)),
+            localeTag,
+          ),
+          `${formatPercent(percentageOf(derived.netProfit, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Financial trend',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Period', value: rangeLabel },
+          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag), tone: 'success' },
+          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag), tone: 'danger' },
+          {
+            label: 'Net result',
+            value: formatCurrency(derived.netProfit, localeTag),
+            tone: derived.netProfit >= 0 ? 'success' : 'danger',
+          },
+        ],
+        summaryRows: [
+          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'COGS', value: formatCurrency(derived.totalCost, localeTag) },
+          { label: 'Expenses', value: formatCurrency(derived.totalExpenses, localeTag) },
+          { label: 'Net profit', value: formatCurrency(derived.netProfit, localeTag) },
+        ],
+        excelSections: [trendTable],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.revenue'),
+                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+                hint: t('stats.topline_hint'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.gross_profit'),
+                value: formatCurrencyCompact(derived.grossProfit, localeTag),
+                hint: `${formatPercent(percentageOf(derived.grossProfit, Math.max(derived.totalRevenue, 1)), localeTag)}% gross margin`,
+                tone: derived.grossProfit >= 0 ? 'info' : 'danger',
+              },
+              {
+                label: t('stats.expenses'),
+                value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+                hint: t('stats.total_expense_hint'),
+                tone: 'warning',
+              },
+              {
+                label: t('stats.net_profit'),
+                value: formatCurrencyCompact(derived.netProfit, localeTag),
+                hint: t('stats.range_result_hint'),
+                tone: derived.netProfit >= 0 ? 'success' : 'danger',
+              },
+            ],
+          },
+          {
+            kind: 'chart',
+            title: 'Monthly P&L trend',
+            legend: [
+              { label: 'Revenue', tone: 'success' },
+              { label: 'Gross profit', tone: 'info' },
+              { label: 'Expenses', tone: 'danger' },
+            ],
+            points: monthlyRows.map((row) => ({
+              label: row.label,
+              revenue: row.revenue,
+              grossProfit: row.revenue - row.cogs,
+              expenses: row.expenses,
+            })),
+          },
+          {
+            kind: 'table',
+            title: 'Monthly breakdown table',
+            table: trendTable,
+          },
+          {
+            kind: 'note',
+            title: 'Analysis',
+            tone: derived.netProfit >= 0 ? 'info' : 'warning',
+            lines: [
+              highestRevenueRow
+                ? `Highest revenue month in range: ${highestRevenueRow.label} with ${formatCurrency(highestRevenueRow.revenue, localeTag)}.`
+                : 'No monthly revenue row is available for the selected range.',
+              weakestNetRow
+                ? `Weakest net month in range: ${weakestNetRow.label} with ${formatCurrency(
+                    weakestNetRow.revenue - weakestNetRow.cogs - weakestNetRow.expenses,
+                    localeTag,
+                  )}.`
+                : 'No monthly expense row is available for the selected range.',
+              'Use this report to compare gross profit generation against expense pressure month over month.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'creditors-ageing') {
+      const openDebts = derived.openPayableDebts
+      const totalOutstanding = sumNumbers(openDebts.map((debt) => debt.outstandingAmount))
+      const todayKey = formatDateKey(startOfLocalDay(new Date()))
+      const overdueCount = openDebts.filter((debt) => {
+        if (debt.dueDate) {
+          return debt.dueDate < todayKey
+        }
+
+        return getAgeDays(debt.createdAt) > 30
+      }).length
+      const dueWithinSevenDays = sumNumbers(
+        openDebts
+          .filter((debt) => debt.dueDate && debt.dueDate >= todayKey)
+          .filter((debt) => daysBetweenInclusive(todayKey, debt.dueDate || todayKey) <= 7)
+          .map((debt) => debt.outstandingAmount),
+      )
+      const detailTable: TemplateSection = {
+        columns: [
+          'Supplier',
+          'Reference',
+          'Restock date',
+          'Age',
+          'Original',
+          'Paid',
+          'Outstanding',
+          'Status',
+          'Due date',
+        ],
+        rows: openDebts.map((debt) => {
+          const ageDays = getAgeDays(debt.createdAt)
+          const isOverdue = debt.dueDate ? debt.dueDate < todayKey : ageDays > 30
+          return [
+            debt.contact?.name || debt.sourceReference,
+            debt.sourceReference,
+            formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
+            `${ageDays}d`,
+            formatCurrency(debt.originalAmount, localeTag),
+            formatCurrency(debt.paidAmount, localeTag),
+            formatCurrency(debt.outstandingAmount, localeTag),
+            isOverdue
+              ? 'Overdue'
+              : debt.status === DebtStatus.PARTIALLY_PAID
+                ? 'Partial'
+                : 'Outstanding',
+            debt.dueDate ? formatDateLabel(debt.dueDate, localeTag) : '-',
+          ]
+        }),
+        footer: [
+          'Total outstanding',
+          '',
+          '',
+          '',
+          formatCurrency(sumNumbers(openDebts.map((debt) => debt.originalAmount)), localeTag),
+          formatCurrency(sumNumbers(openDebts.map((debt) => debt.paidAmount)), localeTag),
+          formatCurrency(totalOutstanding, localeTag),
+          '',
+          '',
+        ],
+      }
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Credit management',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Total payable', value: formatCurrency(totalOutstanding, localeTag), tone: 'danger' },
+          { label: 'Active creditors', value: formatNumber(openDebts.length, localeTag) },
+          { label: 'Overdue', value: formatNumber(overdueCount, localeTag), tone: 'danger' },
+          { label: 'Due within 7 days', value: formatCurrency(dueWithinSevenDays, localeTag), tone: 'warning' },
+        ],
+        summaryRows: [
+          { label: 'Total payable', value: formatCurrency(totalOutstanding, localeTag) },
+          { label: 'Active creditors', value: formatNumber(openDebts.length, localeTag) },
+          { label: 'Overdue', value: formatNumber(overdueCount, localeTag) },
+        ],
+        excelSections: [
+          {
+            title: 'Ageing buckets',
+            columns: ['Bucket', 'Amount', 'Count', 'Share'],
+            rows: derived.payableAgeing.map((row) => [
+              row.label,
+              formatCurrency(row.amount, localeTag),
+              formatNumber(row.count, localeTag),
+              `${formatPercent(row.percentage, localeTag)}%`,
+            ]),
+          },
+          detailTable,
+        ],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.open_balances'),
+                value: formatNumber(openDebts.length, localeTag),
+                hint: t('stats.open_balances_hint'),
+                tone: 'info',
+              },
+              {
+                label: t('stats.outstanding'),
+                value: formatCurrencyCompact(totalOutstanding, localeTag),
+                hint: t('stats.current_exposure_hint'),
+                tone: 'warning',
+              },
+              {
+                label: 'Overdue',
+                value: formatNumber(overdueCount, localeTag),
+                hint: 'payables past due date or older than 30 days',
+                tone: 'danger',
+              },
+              {
+                label: 'Due soon',
+                value: formatCurrencyCompact(dueWithinSevenDays, localeTag),
+                hint: 'due within the next 7 days',
+                tone: 'warning',
+              },
+            ],
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Payables by age bucket',
+            columns: 4,
+            cards: derived.payableAgeing.map((row, index) => ({
+              label: row.label,
+              value: formatCurrency(row.amount, localeTag),
+              hint: `${formatNumber(row.count, localeTag)} debts · ${formatPercent(row.percentage, localeTag)}%`,
+              tone:
+                index === 3 ? ('danger' as const) : index === 2 ? ('warning' as const) : ('info' as const),
+            })),
+          },
+          {
+            kind: 'table',
+            title: 'Detailed payables listing',
+            table: detailTable,
+          },
+          {
+            kind: 'note',
+            title: 'Action required',
+            tone: overdueCount > 0 ? 'danger' : 'warning',
+            lines: [
+              overdueCount > 0
+                ? `${formatNumber(overdueCount, localeTag)} supplier balances are currently overdue and should be prioritised.`
+                : 'No supplier balances are currently overdue on this device.',
+              dueWithinSevenDays > 0
+                ? `${formatCurrency(dueWithinSevenDays, localeTag)} is due within the next 7 days.`
+                : 'No supplier balances are falling due within the next 7 days.',
+            ],
+          },
+        ],
+      })
+    }
+
+    if (selectedReport.id === 'contact-statement') {
+      const primaryDebt =
+        derived.receivableDebts
+          .slice()
+          .sort((left, right) => right.outstandingAmount - left.outstandingAmount)[0] ||
+        derived.payableDebts
+          .slice()
+          .sort((left, right) => right.outstandingAmount - left.outstandingAmount)[0]
+
+      if (primaryDebt) {
+        const statementDirection = primaryDebt.direction
+        const sourceDebts =
+          statementDirection === DebtDirection.RECEIVABLE
+            ? derived.receivableDebts
+            : derived.payableDebts
+        const contactKey = primaryDebt.contactId || primaryDebt.contact?.name || primaryDebt.sourceReference
+        const contactDebts = sourceDebts.filter((debt) => {
+          const debtKey = debt.contactId || debt.contact?.name || debt.sourceReference
+          return debtKey === contactKey
+        })
+
+        const events: Array<{
+          date: string
+          reference: string
+          type: string
+          description: string
+          debit: number
+          credit: number
+        }> = []
+
+        for (const debt of contactDebts) {
+          events.push({
+            date: debt.createdAt.slice(0, 10),
+            reference: debt.sourceReference,
+            type: 'Debt created',
+            description:
+              statementDirection === DebtDirection.RECEIVABLE
+                ? 'Credit sale recorded'
+                : 'Supplier credit recorded',
+            debit: statementDirection === DebtDirection.RECEIVABLE ? debt.originalAmount : 0,
+            credit: statementDirection === DebtDirection.PAYABLE ? debt.originalAmount : 0,
+          })
+
+          for (const payment of debt.payments ?? []) {
+            events.push({
+              date: payment.paymentDate,
+              reference: debt.sourceReference,
+              type: 'Payment',
+              description:
+                statementDirection === DebtDirection.RECEIVABLE
+                  ? 'Payment received'
+                  : 'Payment made',
+              debit: statementDirection === DebtDirection.PAYABLE ? payment.amount : 0,
+              credit: statementDirection === DebtDirection.RECEIVABLE ? payment.amount : 0,
+            })
+          }
+
+          if (debt.writtenOffAt && debt.status === DebtStatus.WRITTEN_OFF) {
+            events.push({
+              date: debt.writtenOffAt.slice(0, 10),
+              reference: debt.sourceReference,
+              type: 'Write-off',
+              description: debt.writtenOffReason || 'Written off',
+              debit: statementDirection === DebtDirection.PAYABLE ? debt.outstandingAmount : 0,
+              credit: statementDirection === DebtDirection.RECEIVABLE ? debt.outstandingAmount : 0,
+            })
+          }
+        }
+
+        events.sort((left, right) => left.date.localeCompare(right.date))
+
+        let openingBalance = 0
+        for (const event of events) {
+          if (event.date < appliedRange.startDate) {
+            openingBalance += event.debit - event.credit
+          }
+        }
+
+        let runningBalance = openingBalance
+        const statementRows = events
+          .filter((event) => event.date >= appliedRange.startDate && event.date <= appliedRange.endDate)
+          .map((event) => {
+            runningBalance += event.debit - event.credit
+            return [
+              formatDateLabel(event.date, localeTag),
+              event.reference,
+              event.type,
+              event.description,
+              event.debit > 0 ? formatCurrency(event.debit, localeTag) : '-',
+              event.credit > 0 ? formatCurrency(event.credit, localeTag) : '-',
+              formatCurrency(Math.abs(runningBalance), localeTag),
+            ]
+          })
+
+        const closingBalance = sumNumbers(contactDebts.map((debt) => debt.outstandingAmount))
+        const statementTable: TemplateSection = {
+          columns: ['Date', 'Reference', 'Type', 'Description', 'Debit', 'Credit', 'Balance'],
+          rows: statementRows,
+          footer: [
+            `Closing balance - ${formatDateLabel(appliedRange.endDate, localeTag)}`,
+            '',
+            '',
+            '',
+            '',
+            '',
+            formatCurrency(closingBalance, localeTag),
+          ],
+        }
+
+        return buildCompositeReportTemplate({
+          businessName: fallbackBusinessName,
+          reportLabel: 'Account statement',
+          title: selectedReport.name,
+          description: selectedReport.description,
+          rangeLabel,
+          generatedLabel: previewGeneratedLabel,
+          filenameBase,
+          meta: [
+            {
+              label: 'Contact type',
+              value:
+                statementDirection === DebtDirection.RECEIVABLE ? 'Customer' : 'Supplier',
+            },
+            { label: 'Phone', value: primaryDebt.contact?.phone || '-' },
+            { label: 'Opening balance', value: formatCurrency(Math.abs(openingBalance), localeTag) },
+            {
+              label: 'Closing balance',
+              value: formatCurrency(closingBalance, localeTag),
+              tone: closingBalance > 0 ? 'danger' : 'success',
+            },
+          ],
+          summaryRows: [
+            { label: 'Contact', value: primaryDebt.contact?.name || primaryDebt.sourceReference },
+            { label: 'Opening balance', value: formatCurrency(Math.abs(openingBalance), localeTag) },
+            { label: 'Closing balance', value: formatCurrency(closingBalance, localeTag) },
+          ],
+          excelSections: [statementTable],
+          sections: [
+            {
+              kind: 'stats',
+              cards: [
+                {
+                  label: t('stats.contacts'),
+                  value: primaryDebt.contact?.name || primaryDebt.sourceReference,
+                  hint:
+                    statementDirection === DebtDirection.RECEIVABLE
+                      ? 'largest receivable contact in range'
+                      : 'largest payable contact in range',
+                  tone: 'info',
+                },
+                {
+                  label: 'Entries',
+                  value: formatNumber(statementRows.length, localeTag),
+                  hint: 'ledger rows in selected range',
+                },
+                {
+                  label: t('stats.outstanding'),
+                  value: formatCurrencyCompact(closingBalance, localeTag),
+                  hint:
+                    statementDirection === DebtDirection.RECEIVABLE
+                      ? 'still owed to the business'
+                      : 'still owed to supplier',
+                  tone: 'warning',
+                },
+                {
+                  label: 'Opening balance',
+                  value: formatCurrencyCompact(Math.abs(openingBalance), localeTag),
+                  hint: 'balance brought into range',
+                },
+              ],
+            },
+            {
+              kind: 'table',
+              title: `Account ledger - ${primaryDebt.contact?.name || primaryDebt.sourceReference}`,
+              table: statementTable,
+            },
+            {
+              kind: 'note',
+              title: 'Statement notes',
+              tone: 'warning',
+              lines: [
+                statementDirection === DebtDirection.RECEIVABLE
+                  ? 'Debit rows increase what the contact owes to the business; credit rows reduce it.'
+                  : 'Credit rows increase what the business owes to the supplier; debit rows reduce it.',
+                'This preview is generated from the contact with the largest current balance available on this device.',
+              ],
+            },
+          ],
+        })
+      }
+    }
+
+    if (selectedReport.id === 'credit-activity') {
+      const receivableOutstanding = sumNumbers(
+        derived.openReceivableDebts.map((debt) => debt.outstandingAmount),
+      )
+      const payableIssued = sumNumbers(
+        derived.payableDebts
+          .filter(
+            (debt) =>
+              debt.createdAt.slice(0, 10) >= appliedRange.startDate &&
+              debt.createdAt.slice(0, 10) <= appliedRange.endDate,
+          )
+          .map((debt) => debt.originalAmount),
+      )
+      const payableCollected = sumNumbers(
+        derived.payableDebts.flatMap((debt) =>
+          (debt.payments ?? [])
+            .filter(
+              (payment) =>
+                payment.paymentDate >= appliedRange.startDate &&
+                payment.paymentDate <= appliedRange.endDate,
+            )
+            .map((payment) => payment.amount),
+        ),
+      )
+      const payableOutstanding = sumNumbers(
+        derived.openPayableDebts.map((debt) => debt.outstandingAmount),
+      )
+      const avgReceivableDays = (() => {
+        const ages = derived.receivableDebts
+          .map((debt) => {
+            const settledAt = debt.settledAt || debt.writtenOffAt
+            if (!settledAt) {
+              return null
+            }
+            return Math.max(
+              0,
+              Math.floor(
+                (new Date(settledAt).getTime() - new Date(debt.createdAt).getTime()) /
+                  (24 * 60 * 60 * 1000),
+              ),
+            )
+          })
+          .filter((value): value is number => value !== null)
+
+        return ages.length > 0 ? sumNumbers(ages) / ages.length : 0
+      })()
+      const avgPayableDays = (() => {
+        const ages = derived.payableDebts
+          .map((debt) => {
+            const settledAt = debt.settledAt || debt.writtenOffAt
+            if (!settledAt) {
+              return null
+            }
+            return Math.max(
+              0,
+              Math.floor(
+                (new Date(settledAt).getTime() - new Date(debt.createdAt).getTime()) /
+                  (24 * 60 * 60 * 1000),
+              ),
+            )
+          })
+          .filter((value): value is number => value !== null)
+
+        return ages.length > 0 ? sumNumbers(ages) / ages.length : 0
+      })()
+
+      const receivableByContact = new Map<
+        string,
+        { label: string; original: number; paid: number; outstanding: number; count: number }
+      >()
+      for (const debt of derived.receivableDebts) {
+        const key = debt.contactId || debt.contact?.name || debt.sourceReference
+        const current = receivableByContact.get(key) ?? {
+          label: debt.contact?.name || debt.sourceReference,
+          original: 0,
+          paid: 0,
+          outstanding: 0,
+          count: 0,
+        }
+        current.original += debt.originalAmount
+        current.paid += debt.paidAmount
+        current.outstanding += debt.outstandingAmount
+        current.count += 1
+        receivableByContact.set(key, current)
+      }
+      const collectionRows = Array.from(receivableByContact.values())
+        .sort((left, right) => right.outstanding - left.outstanding)
+        .slice(0, 6)
+        .map((row) => ({
+          label: row.label,
+          value: formatCurrency(row.outstanding, localeTag),
+          hint: `${formatNumber(row.count, localeTag)} debts · ${formatPercent(
+            percentageOf(row.paid, Math.max(row.original, 1)),
+            localeTag,
+          )}% collected`,
+          percent: percentageOf(row.paid, Math.max(row.original, 1)),
+          tone:
+            row.outstanding > 0
+              ? row.paid > 0
+                ? ('warning' as const)
+                : ('danger' as const)
+              : ('success' as const),
+        }))
+
+      return buildCompositeReportTemplate({
+        businessName: fallbackBusinessName,
+        reportLabel: 'Credit overview',
+        title: selectedReport.name,
+        description: selectedReport.description,
+        rangeLabel,
+        generatedLabel: previewGeneratedLabel,
+        filenameBase,
+        meta: [
+          { label: 'Credit issued', value: formatCurrency(derived.issuedReceivable, localeTag), tone: 'warning' },
+          { label: 'Collected', value: formatCurrency(derived.collectedReceivable, localeTag), tone: 'success' },
+          {
+            label: 'Collection rate',
+            value: `${formatPercent(
+              percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, 1)),
+              localeTag,
+            )}%`,
+          },
+          {
+            label: 'Avg. days to settle',
+            value: `${formatNumber(avgReceivableDays, localeTag)} days`,
+          },
+        ],
+        summaryRows: [
+          { label: 'Credit issued', value: formatCurrency(derived.issuedReceivable, localeTag) },
+          { label: 'Collected', value: formatCurrency(derived.collectedReceivable, localeTag) },
+          { label: 'Outstanding', value: formatCurrency(receivableOutstanding, localeTag) },
+          { label: 'Written off', value: formatCurrency(derived.writtenOffReceivable, localeTag) },
+        ],
+        excelSections: [
+          {
+            title: 'Collection by customer',
+            columns: ['Contact', 'Original', 'Paid', 'Outstanding', 'Collection rate'],
+            rows: Array.from(receivableByContact.values()).map((row) => [
+              row.label,
+              formatCurrency(row.original, localeTag),
+              formatCurrency(row.paid, localeTag),
+              formatCurrency(row.outstanding, localeTag),
+              `${formatPercent(percentageOf(row.paid, Math.max(row.original, 1)), localeTag)}%`,
+            ]),
+          },
+        ],
+        sections: [
+          {
+            kind: 'stats',
+            cards: [
+              {
+                label: t('stats.credit_issued'),
+                value: formatCurrencyCompact(derived.issuedReceivable, localeTag),
+                hint: t('stats.new_credit_hint'),
+                tone: 'warning',
+              },
+              {
+                label: t('stats.collected'),
+                value: formatCurrencyCompact(derived.collectedReceivable, localeTag),
+                hint: t('stats.collection_hint'),
+                tone: 'success',
+              },
+              {
+                label: t('stats.written_off'),
+                value: formatCurrencyCompact(derived.writtenOffReceivable, localeTag),
+                hint: t('stats.write_off_hint'),
+                tone: 'danger',
+              },
+              {
+                label: 'Avg. days to settle',
+                value: `${formatNumber(avgReceivableDays, localeTag)} days`,
+                hint: 'settled receivable balances',
+              },
+            ],
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Receivables activity',
+            columns: 4,
+            cards: [
+              {
+                label: 'Credit issued',
+                value: formatCurrency(derived.issuedReceivable, localeTag),
+                hint: `${formatNumber(
+                  derived.receivableDebts.filter(
+                    (debt) =>
+                      debt.createdAt.slice(0, 10) >= appliedRange.startDate &&
+                      debt.createdAt.slice(0, 10) <= appliedRange.endDate,
+                  ).length,
+                  localeTag,
+                )} receivable debts`,
+                tone: 'warning',
+              },
+              {
+                label: 'Collected',
+                value: formatCurrency(derived.collectedReceivable, localeTag),
+                hint: `${formatPercent(
+                  percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, 1)),
+                  localeTag,
+                )}% recovery`,
+                tone: 'success',
+              },
+              {
+                label: 'Still outstanding',
+                value: formatCurrency(receivableOutstanding, localeTag),
+                hint: `${formatNumber(derived.openReceivableDebts.length, localeTag)} open debts`,
+                tone: 'warning',
+              },
+              {
+                label: 'Written off',
+                value: formatCurrency(derived.writtenOffReceivable, localeTag),
+                hint: 'receivables written off in range',
+                tone: 'danger',
+              },
+            ],
+          },
+          {
+            kind: 'progress_rows',
+            title: 'Collection rate by customer',
+            rows: collectionRows,
+          },
+          {
+            kind: 'mini_cards',
+            title: 'Payables activity',
+            columns: 4,
+            cards: [
+              {
+                label: 'Credit taken',
+                value: formatCurrency(payableIssued, localeTag),
+                hint: `${formatNumber(
+                  derived.payableDebts.filter(
+                    (debt) =>
+                      debt.createdAt.slice(0, 10) >= appliedRange.startDate &&
+                      debt.createdAt.slice(0, 10) <= appliedRange.endDate,
+                  ).length,
+                  localeTag,
+                )} payable debts`,
+                tone: 'warning',
+              },
+              {
+                label: 'Paid to suppliers',
+                value: formatCurrency(payableCollected, localeTag),
+                hint: `${formatPercent(
+                  percentageOf(payableCollected, Math.max(payableIssued, 1)),
+                  localeTag,
+                )}% settled`,
+                tone: 'success',
+              },
+              {
+                label: 'Still owed',
+                value: formatCurrency(payableOutstanding, localeTag),
+                hint: `${formatNumber(derived.openPayableDebts.length, localeTag)} open payables`,
+                tone: 'warning',
+              },
+              {
+                label: 'Avg. days to pay',
+                value: `${formatNumber(avgPayableDays, localeTag)} days`,
+                hint: `vs ${formatNumber(avgReceivableDays, localeTag)} days to collect`,
+              },
+            ],
+          },
+          {
+            kind: 'note',
+            title: 'Credit health insight',
+            tone: 'warning',
+            lines: [
+              avgPayableDays > 0 && avgReceivableDays > 0 && avgPayableDays < avgReceivableDays
+                ? 'The business is paying suppliers faster than it collects from customers, which can widen the cash gap.'
+                : 'Supplier and customer credit cycles are relatively aligned in the visible data range.',
+              `Open customer exposure is ${formatCurrency(receivableOutstanding, localeTag)} while open supplier exposure is ${formatCurrency(payableOutstanding, localeTag)}.`,
+            ],
+          },
+        ],
+      })
+    }
+
+    return buildGenericReportTemplate({
+      businessName: fallbackBusinessName,
+      reportLabel: selectedReport.badge,
+      title: selectedReport.name,
+      description: selectedReport.description,
+      rangeLabel,
+      generatedLabel: previewGeneratedLabel,
+      filenameBase,
+      meta: [
+        { label: 'Period', value: rangeLabel },
+        { label: 'Report', value: selectedReport.badge },
+        { label: 'Source', value: selectedReport.source },
+        { label: 'Currency', value: 'XAF', tone: 'info' },
+      ],
+      summaryRows: reportViewModel.exportModel.summaryRows,
+      excelSections: reportViewModel.exportModel.table
+        ? [reportViewModel.exportModel.table]
+        : [],
+      stats: reportViewModel.stats.map((stat) => ({
+        label: stat.label,
+        value: stat.value,
+        hint: stat.hint,
+        tone: toTemplateTone(stat.tone) ?? 'default',
+      })),
+      table: reportViewModel.exportModel.table,
+      emptyMessage: reportViewModel.kind === 'note' ? reportViewModel.note : reportViewModel.empty,
+    })
+  }, [
+    appliedRange.endDate,
+    appliedRange.startDate,
+    businessName,
+    derived.collectedReceivable,
+    derived.completedItems,
+    derived.completedPayments,
+    derived.completedSales,
+    derived.cashierRows,
+    derived.expenseCategoryRows,
+    derived.expenses,
+    derived.grossProfit,
+    derived.inventoryItems,
+    derived.inventoryMovements,
+    derived.lowStockItems,
+    derived.netProfit,
+    derived.openPayableDebts,
+    derived.openReceivableDebts,
+    derived.payableAgeing,
+    derived.payableDebts,
+    derived.paymentTotals,
+    derived.receivableDebts,
+    derived.receivableAgeing,
+    derived.restockItems,
+    derived.totalCost,
+    derived.totalCreditIssued,
+    derived.totalExpenses,
+    derived.totalRevenue,
+    derived.averageOrderValue,
+    derived.issuedReceivable,
+    derived.movementRows,
+    derived.restocks,
+    derived.sales,
+    derived.voidedSales,
+    derived.writtenOffReceivable,
+    localeTag,
+    previewGeneratedLabel,
+    rangeLabel,
+    reportViewModel,
+    revenueAnalysisRows,
+    revenuePaymentRows,
+    selectedReport,
+    t,
+    tSell,
+  ])
+
+  const revenueTrendInlineStats = useMemo<ReportStat[]>(
+    () => [
+      {
+        label: t('stats.revenue'),
+        value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+        hint: `${formatNumber(derived.completedSales.length, localeTag)} ${t(
+          'stats.transactions_hint',
+        )}`,
+        tone: 'positive',
+      },
+      {
+        label: t('stats.gross_profit'),
+        value: formatCurrencyCompact(derived.grossProfit, localeTag),
+        hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
+          'stats.margin_hint',
+        )}`,
+        tone: derived.grossProfit >= 0 ? 'info' : 'danger',
+      },
+      {
+        label: t('stats.avg_basket'),
+        value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+        hint: t('stats.avg_basket_hint'),
+        tone: 'default',
+      },
+    ],
+    [
+      derived.averageOrderValue,
+      derived.completedSales.length,
+      derived.grossProfit,
+      derived.totalRevenue,
+      localeTag,
+      t,
+    ],
+  )
+
   const handlePresetSelect = (preset: Exclude<ReportPreset, 'custom'>) => {
     const nextRange = resolvePresetRange(preset)
     setDraftStartDate(nextRange.startDate)
@@ -2634,41 +5718,59 @@ export default function ReportsPage() {
     })
   }
 
-  const handleExportCsv = async () => {
-    const csv = buildCsvContent(reportViewModel.exportModel)
-    const filename = `${reportViewModel.exportModel.filenameBase}.csv`
-    setExportingCsv(true)
+  const handleOpenReportPreview = (reportId: ReportId) => {
+    setPreviewReportId(reportId)
+    setPreviewGeneratedAt(new Date().toISOString())
+    setIsExportMenuOpen(false)
+    setIsPreviewDialogOpen(true)
+  }
+
+  const handleExportExcel = async () => {
+    if (!activeReportDocument) {
+      return
+    }
+
+    setExportingExcel(true)
 
     try {
       if (hasDesktopIpc()) {
         const result = await ipc.documents.exportFile({
-          content: csv,
-          filename,
+          content: activeReportDocument.excelContent,
+          filename: activeReportDocument.excelFilename,
           filters: [{ name: 'CSV file', extensions: ['csv'] }],
         })
 
         if (result.success) {
-          toast.success(t('export.csv_ready'))
+          toast.success(t('export.excel_ready'))
           return
         }
 
         if (!result.canceled) {
-          toast.error(result.error || t('export.csv_error'))
+          toast.error(result.error || t('export.excel_error'))
         }
 
         return
       }
 
-      downloadFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), filename)
-      toast.success(t('export.csv_ready'))
+      downloadFile(
+        new Blob([activeReportDocument.excelContent], {
+          type: 'text/csv;charset=utf-8',
+        }),
+        activeReportDocument.excelFilename,
+      )
+      toast.success(t('export.excel_ready'))
     } catch (exportError) {
-      toast.error(exportError instanceof Error ? exportError.message : t('export.csv_error'))
+      toast.error(exportError instanceof Error ? exportError.message : t('export.excel_error'))
     } finally {
-      setExportingCsv(false)
+      setExportingExcel(false)
     }
   }
 
   const handleExportPdf = async () => {
+    if (!activeReportDocument) {
+      return
+    }
+
     if (!hasDesktopIpc()) {
       toast.error(t('export.pdf_desktop_only'))
       return
@@ -2677,17 +5779,9 @@ export default function ReportsPage() {
     setExportingPdf(true)
 
     try {
-      const html = buildReportPdfHtml({
-        title: reportViewModel.exportModel.title,
-        description: reportViewModel.exportModel.description,
-        rangeLabel: buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
-        generatedOn: formatDateTimeLabel(new Date().toISOString(), localeTag),
-        summaryRows: reportViewModel.exportModel.summaryRows,
-        table: reportViewModel.exportModel.table,
-      })
       const result = await ipc.documents.exportPdf({
-        html,
-        filename: `${reportViewModel.exportModel.filenameBase}.pdf`,
+        html: activeReportDocument.html,
+        filename: activeReportDocument.pdfFilename,
       })
 
       if (result.success) {
@@ -2702,54 +5796,6 @@ export default function ReportsPage() {
       toast.error(exportError instanceof Error ? exportError.message : t('export.pdf_error'))
     } finally {
       setExportingPdf(false)
-    }
-  }
-
-  const handleSharePdf = async () => {
-    setSharingPdf(true)
-
-    try {
-      const lines = [
-        reportViewModel.exportModel.title,
-        reportViewModel.exportModel.description,
-        `Range: ${buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag)}`,
-        `Generated: ${formatDateTimeLabel(new Date().toISOString(), localeTag)}`,
-        '',
-        ...reportViewModel.exportModel.summaryRows.map((row) => `${row.label}: ${row.value}`),
-        '',
-      ]
-
-      if (reportViewModel.exportModel.table) {
-        lines.push(reportViewModel.exportModel.table.columns.join(' | '))
-        lines.push(...reportViewModel.exportModel.table.rows.map((row) => row.join(' | ')))
-      }
-
-      const pdfBlob = buildSimplePdfBlob(lines)
-      const filename = `${reportViewModel.exportModel.filenameBase}.pdf`
-
-      if (hasDesktopIpc()) {
-        const pdfBytes = Array.from(new Uint8Array(await pdfBlob.arrayBuffer()))
-        const result = await ipc.share.file({
-          buffer: pdfBytes,
-          filename,
-          mimeType: 'application/pdf',
-        })
-
-        if (result.shared) {
-          toast.success(t('export.share_ready'))
-          return
-        }
-
-        toast.success(t('export.share_saved'))
-        return
-      }
-
-      downloadFile(pdfBlob, filename)
-      toast.success(t('export.share_fallback'))
-    } catch (shareError) {
-      toast.error(shareError instanceof Error ? shareError.message : t('export.share_error'))
-    } finally {
-      setSharingPdf(false)
     }
   }
 
@@ -2859,93 +5905,132 @@ export default function ReportsPage() {
             {t('run_report')}
           </Button>
         </div>
-
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="reports-search">
-              {t('search.label')}
-            </label>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                <SearchIcon />
-              </span>
-              <input
-                id="reports-search"
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t('search.placeholder')}
-                className="block h-11 w-full rounded-2xl border border-input bg-background pl-10 pr-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-background/80 px-4 py-3 shadow-sm lg:min-w-[280px]">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">
-                {t('search.results', {
-                  count: filteredReports.length,
-                  total: REPORT_DEFINITIONS.length,
-                })}
-              </p>
-              <p className="text-xs text-muted-foreground">{t('search.hint')}</p>
-            </div>
-            {search.trim() ? (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
-              >
-                {t('search.clear')}
-              </button>
-            ) : null}
-          </div>
-        </div>
       </section>
 
-      <SurfaceCard
-        title={t('waterfall.title')}
-        description={t('waterfall.description', {
-          range: buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
-        })}
-      >
-        <div className="space-y-3">
-          {pnlRows.map((row, index) => (
-            <div key={`${row.label}-${index}`} className="space-y-2">
-              {row.total ? <div className="h-px bg-border" /> : null}
-              <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px] md:items-center">
-                <div className={cn('text-sm text-muted-foreground md:text-right', row.total && 'font-semibold text-foreground')}>
-                  {row.label}
-                </div>
-                <div className="h-6 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      'flex h-full items-center justify-end rounded-full px-3 text-[11px] font-semibold text-white',
-                      row.tone === 'positive' && 'bg-success-400',
-                      row.tone === 'warning' && 'bg-warning-400',
-                      row.tone === 'danger' && 'bg-danger-400',
-                    )}
-                    style={{ width: `${row.percent}%` }}
-                  >
-                    {row.value >= 0 ? '' : '-'}
-                    {formatPercent(Math.abs(percentageOf(row.value, Math.max(derived.totalRevenue, 1))), localeTag)}%
+      <Collapsible open={isProfitLossExpanded} onOpenChange={setIsProfitLossExpanded}>
+        <SurfaceCard
+          title={t('waterfall.title')}
+          description={t('waterfall.description', {
+            range: buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
+          })}
+          action={
+            <CollapsibleTrigger
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
+              aria-label={`${isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')} ${t('waterfall.title')}`}
+            >
+              <span>{isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
+              <ChevronDownIcon
+                className={cn(
+                  'transition-transform duration-300 ease-in-out',
+                  isProfitLossExpanded && 'rotate-180',
+                )}
+              />
+            </CollapsibleTrigger>
+          }
+        >
+          <CollapsibleContent>
+            <div className="space-y-3 pt-1">
+              {pnlRows.map((row, index) => (
+                <div key={`${row.label}-${index}`} className="space-y-2">
+                  {row.total ? <div className="h-px bg-border" /> : null}
+                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px] md:items-center">
+                    <div className={cn('text-sm text-muted-foreground md:text-right', row.total && 'font-semibold text-foreground')}>
+                      {row.label}
+                    </div>
+                    <div className="h-6 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          'flex h-full items-center justify-end rounded-full px-3 text-[11px] font-semibold text-white',
+                          row.tone === 'positive' && 'bg-success-400',
+                          row.tone === 'warning' && 'bg-warning-400',
+                          row.tone === 'danger' && 'bg-danger-400',
+                        )}
+                        style={{ width: `${row.percent}%` }}
+                      >
+                        {row.value >= 0 ? '' : '-'}
+                        {formatPercent(Math.abs(percentageOf(row.value, Math.max(derived.totalRevenue, 1))), localeTag)}%
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        'text-sm font-semibold md:text-right',
+                        row.tone === 'positive' && 'text-success-600 dark:text-success-400',
+                        row.tone === 'warning' && 'text-warning-600 dark:text-warning-400',
+                        row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
+                      )}
+                    >
+                      {formatCurrency(row.value, localeTag)}
+                    </div>
                   </div>
                 </div>
-                <div
-                  className={cn(
-                    'text-sm font-semibold md:text-right',
-                    row.tone === 'positive' && 'text-success-600 dark:text-success-400',
-                    row.tone === 'warning' && 'text-warning-600 dark:text-warning-400',
-                    row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
-                  )}
-                >
-                  {formatCurrency(row.value, localeTag)}
-                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </SurfaceCard>
+      </Collapsible>
+
+      <Collapsible open={isRevenueTrendExpanded} onOpenChange={setIsRevenueTrendExpanded}>
+        <SurfaceCard
+          title="Revenue trend analysis"
+          description={`${REPORT_DEFINITIONS.find((report) => report.id === 'revenue-trend')?.description || ''} Range: ${rangeLabel}.`}
+          action={
+            <CollapsibleTrigger
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
+              aria-label={`${isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')} Revenue trend analysis`}
+            >
+              <span>{isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
+              <ChevronDownIcon
+                className={cn(
+                  'transition-transform duration-300 ease-in-out',
+                  isRevenueTrendExpanded && 'rotate-180',
+                )}
+              />
+            </CollapsibleTrigger>
+          }
+        >
+          <CollapsibleContent>
+            <div className="pt-1">
+              <div className="grid gap-3 md:grid-cols-3">
+                {revenueTrendInlineStats.map((stat) => (
+                  <ReportMetricCard key={`inline-revenue-${stat.label}`} stat={stat} />
+                ))}
+              </div>
+
+              <div className="mt-6">
+                {revenueTrendPoints.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full bg-success-400" />
+                        {t('preview.legend_revenue')}
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full bg-[#A29F97]" />
+                        {t('preview.legend_transactions')}
+                      </span>
+                    </div>
+                    <DualSeriesTrendChart
+                      points={revenueTrendPoints}
+                      primaryMaxLabel={formatCurrencyCompact(
+                        Math.max(...revenueTrendPoints.map((point) => point.primary), 0),
+                        localeTag,
+                      )}
+                      secondaryMaxLabel={formatNumber(
+                        Math.max(...revenueTrendPoints.map((point) => point.secondary), 0),
+                        localeTag,
+                      )}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
+                    {t('preview.no_sales_data')}
+                  </div>
+                )}
               </div>
             </div>
-          ))}
-        </div>
-      </SurfaceCard>
+          </CollapsibleContent>
+        </SurfaceCard>
+      </Collapsible>
 
       {visibleSections.length > 0 ? (
         <>
@@ -2956,203 +6041,39 @@ export default function ReportsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                {section.reports.map((report) => {
-                  const isActive = report.id === selectedReportId
-
-                  return (
-                    <button
-                      key={report.id}
-                      type="button"
-                      onClick={() => setSelectedReportId(report.id)}
-                      className={cn(
-                        'rounded-[22px] border bg-card p-4 text-left shadow-sm transition',
-                        isActive
-                          ? 'border-success-400 ring-2 ring-success-400/20'
-                          : 'border-border hover:border-border/80 hover:shadow-md',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className={cn('flex h-10 w-10 items-center justify-center rounded-2xl', getReportIconWrapperClassName(report.badgeTone))}>
-                          <ReportIcon name={report.icon} />
-                        </div>
-                        <Badge variant={report.badgeTone}>{report.badge}</Badge>
+                {section.reports.map((report) => (
+                  <button
+                    key={report.id}
+                    type="button"
+                    onClick={() => handleOpenReportPreview(report.id)}
+                    className="rounded-[22px] border border-border bg-card p-4 text-left shadow-sm transition hover:border-border/80 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div
+                        className={cn(
+                          'flex h-10 w-10 items-center justify-center rounded-2xl',
+                          getReportIconWrapperClassName(report.badgeTone),
+                        )}
+                      >
+                        <ReportIcon name={report.icon} />
                       </div>
+                      <Badge variant={report.badgeTone}>{report.badge}</Badge>
+                    </div>
 
-                      <div className="mt-4 space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="text-sm font-semibold text-foreground">{report.name}</h3>
-                          {isActive ? (
-                            <span className="rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-success-600">
-                              {t('selected')}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-sm leading-6 text-muted-foreground">{report.description}</p>
-                      </div>
+                    <div className="mt-4 space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">{report.name}</h3>
+                      <p className="text-sm leading-6 text-muted-foreground">{report.description}</p>
+                    </div>
 
-                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
-                        <span className="text-[11px] text-muted-foreground">{report.source}</span>
-                        <span className="text-sm font-medium text-primary">{t('generate')}</span>
-                      </div>
-                    </button>
-                  )
-                })}
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
+                      <span className="text-[11px] text-muted-foreground">{report.source}</span>
+                      <span className="text-sm font-medium text-primary">{t('generate')}</span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </section>
           ))}
-
-          <SurfaceCard
-            title={reportViewModel.title}
-            description={`${reportViewModel.description} ${t('preview.source')}: ${selectedReport.source}`}
-          >
-            <div className="grid gap-3 md:grid-cols-3">
-              {reportViewModel.stats.map((stat) => (
-                <ReportMetricCard key={`${reportViewModel.title}-${stat.label}`} stat={stat} />
-              ))}
-            </div>
-
-            <div className="mt-6">
-              {reportViewModel.kind === 'trend' ? (
-                reportViewModel.points.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-success-400" />
-                        {reportViewModel.legend.primary}
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-[#A29F97]" />
-                        {reportViewModel.legend.secondary}
-                      </span>
-                    </div>
-                    <DualSeriesTrendChart
-                      points={reportViewModel.points}
-                      primaryMaxLabel={reportViewModel.primaryMaxLabel}
-                      secondaryMaxLabel={reportViewModel.secondaryMaxLabel}
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    {reportViewModel.empty}
-                  </div>
-                )
-              ) : null}
-
-              {reportViewModel.kind === 'bars' ? (
-                reportViewModel.bars.length > 0 ? (
-                  <div className="space-y-4">
-                    {reportViewModel.bars.map((bar) => (
-                      <div key={`${reportViewModel.title}-${bar.label}`} className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-muted-foreground">{bar.label}</span>
-                          <span className="font-medium text-foreground">{bar.percentage}%</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={cn(
-                              'h-full rounded-full',
-                              bar.tone === 'positive' && 'bg-success-400',
-                              bar.tone === 'warning' && 'bg-warning-400',
-                              bar.tone === 'danger' && 'bg-danger-400',
-                              bar.tone === 'info' && 'bg-brand-400',
-                              bar.tone === 'default' && 'bg-foreground/70',
-                            )}
-                            style={{ width: `${Math.max(bar.percentage, bar.percentage > 0 ? 6 : 0)}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                          <span>{bar.valueLabel}</span>
-                          <span>{bar.meta}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    {reportViewModel.empty}
-                  </div>
-                )
-              ) : null}
-
-              {reportViewModel.kind === 'ranked' ? (
-                reportViewModel.rows.length > 0 ? (
-                  <div className="space-y-3">
-                    {reportViewModel.rows.map((row) => (
-                      <div
-                        key={`${reportViewModel.title}-${row.label}`}
-                        className="flex items-start justify-between gap-4 rounded-2xl border border-border/70 bg-background/70 px-4 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{row.label}</p>
-                          {row.meta ? <p className="mt-1 text-xs text-muted-foreground">{row.meta}</p> : null}
-                        </div>
-                        <p
-                          className={cn(
-                            'shrink-0 text-sm font-semibold',
-                            row.tone === 'positive' && 'text-success-600 dark:text-success-400',
-                            row.tone === 'warning' && 'text-warning-600 dark:text-warning-400',
-                            row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
-                            (!row.tone || row.tone === 'default' || row.tone === 'info') && 'text-foreground',
-                          )}
-                        >
-                          {row.valueLabel}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    {reportViewModel.empty}
-                  </div>
-                )
-              ) : null}
-
-              {reportViewModel.kind === 'table' ? (
-                reportViewModel.table.rows.length > 0 ? (
-                  <PreviewTableView table={reportViewModel.table} />
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    {reportViewModel.empty}
-                  </div>
-                )
-              ) : null}
-
-              {reportViewModel.kind === 'note' ? (
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                    {reportViewModel.note}
-                  </div>
-                  <div className="space-y-3">
-                    {reportViewModel.bullets.map((bullet) => (
-                      <div key={bullet} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-foreground">
-                        {bullet}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </SurfaceCard>
-
-          <section className="flex flex-col gap-4 rounded-[24px] border border-border bg-card px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-foreground">{t('export.title')}</h3>
-              <p className="text-sm text-muted-foreground">
-                {selectedReport.name} · {buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag)}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={handleExportPdf} disabled={exportingPdf} variant="secondary">
-                {exportingPdf ? t('export.exporting_pdf') : t('export.pdf')}
-              </Button>
-              <Button onClick={handleExportCsv} disabled={exportingCsv} variant="secondary">
-                {exportingCsv ? t('export.exporting_csv') : t('export.csv')}
-              </Button>
-              <Button onClick={handleSharePdf} disabled={sharingPdf} variant="primary">
-                {sharingPdf ? t('export.sharing') : t('export.share')}
-              </Button>
-            </div>
-          </section>
         </>
       ) : (
         <SurfaceCard
@@ -3176,6 +6097,88 @@ export default function ReportsPage() {
           </p>
         </SurfaceCard>
       )}
+
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent
+          className="h-[calc(100vh-2rem)] max-h-[90vh] max-w-6xl overflow-hidden p-0 sm:h-[90vh] sm:max-h-[calc(100vh-3rem)]"
+          closeLabel="Close"
+        >
+          <Popover open={isExportMenuOpen} onOpenChange={setIsExportMenuOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('export.title')}
+                disabled={!activeReportDocument || exportingExcel || exportingPdf}
+                className={cn(
+                  'absolute right-20 top-5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors',
+                  !activeReportDocument || exportingExcel || exportingPdf
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:border-primary/30 hover:text-foreground',
+                )}
+              >
+                <DownloadIcon />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-1">
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  disabled={exportingPdf || !activeReportDocument}
+                  onClick={() => {
+                    setIsExportMenuOpen(false)
+                    void handleExportPdf()
+                  }}
+                  className={cn(
+                    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                    exportingPdf || !activeReportDocument
+                      ? 'cursor-not-allowed text-muted-foreground/50'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                  )}
+                >
+                  {exportingPdf ? t('export.exporting_pdf') : t('export.pdf')}
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingExcel || !activeReportDocument}
+                  onClick={() => {
+                    setIsExportMenuOpen(false)
+                    void handleExportExcel()
+                  }}
+                  className={cn(
+                    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                    exportingExcel || !activeReportDocument
+                      ? 'cursor-not-allowed text-muted-foreground/50'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                  )}
+                >
+                  {exportingExcel ? t('export.exporting_excel') : t('export.excel')}
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <DialogHeader className="shrink-0 pr-32">
+            <DialogTitle>{selectedReport.name}</DialogTitle>
+            <DialogDescription>
+              {selectedReport.description} Range: {rangeLabel}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-hidden bg-[#ece8df] p-4">
+            {activeReportDocument ? (
+              <iframe
+                title={selectedReport.name}
+                srcDoc={activeReportDocument.html}
+                className="h-full w-full rounded-[20px] border border-border bg-white"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[20px] border border-dashed border-border bg-background text-sm text-muted-foreground">
+                {t('load_error')}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -12,11 +12,15 @@ import { registerSecureStoreIpc } from './ipc/secure-store.ipc'
 import { registerShareIpc } from './ipc/share.ipc'
 import { registerPrintIpc } from './ipc/print.ipc'
 import { registerDocumentIpc } from './ipc/document.ipc'
+import { startRendererServer } from './renderer-server'
 
-const isDev = !app.isPackaged
+const isForcedProduction =
+  process.env.NODE_ENV === 'production' || process.env.DESKTOP_FORCE_PRODUCTION === '1'
+const isDev = !app.isPackaged && !isForcedProduction
 
 let networkService: NetworkService | null = null
 let syncService: SyncService | null = null
+let rendererServer: Awaited<ReturnType<typeof startRendererServer>> | null = null
 
 function getSystemTheme() {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
@@ -28,12 +32,17 @@ function broadcastTheme(theme: 'light' | 'dark') {
   }
 }
 
+function getWindowIconPath() {
+  return join(app.getAppPath(), 'assets', 'icon.png')
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 600,
+    icon: getWindowIconPath(),
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -51,8 +60,24 @@ function createWindow() {
     win.loadURL(rendererUrl)
     win.webContents.openDevTools()
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    if (!rendererServer) {
+      throw new Error('Renderer server is not running for the production desktop app.')
+    }
+
+    win.loadURL(rendererServer.url)
   }
+
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    if (!isMainFrame) {
+      return
+    }
+
+    console.error('[Electron] Failed to load renderer', {
+      errorCode,
+      errorDescription,
+      validatedUrl,
+    })
+  })
 
   win.webContents.on('did-finish-load', () => {
     win.webContents.send('theme-changed', getSystemTheme())
@@ -62,6 +87,10 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('cm.biztrack.desktop')
+  }
+
   const databaseService = new DatabaseService()
   networkService = new NetworkService()
   const secureStoreService = new SecureStoreService()
@@ -87,6 +116,10 @@ app.whenReady().then(async () => {
   networkService.start()
   await syncService.start()
 
+  if (!isDev) {
+    rendererServer = await startRendererServer(join(__dirname, '../renderer'))
+  }
+
   createWindow()
 
   if (!isDev) {
@@ -101,5 +134,14 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   networkService?.stop()
   syncService?.stop()
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    void rendererServer?.close()
+    rendererServer = null
+    app.quit()
+  }
+})
+
+app.on('before-quit', () => {
+  void rendererServer?.close()
+  rendererServer = null
 })

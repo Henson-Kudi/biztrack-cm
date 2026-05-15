@@ -19,11 +19,15 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>
 }) {
   const { locale } = await params
-  setRequestLocale(locale as Locale)
+  const activeLocale: Locale = routing.locales.includes(locale as Locale)
+    ? (locale as Locale)
+    : routing.defaultLocale
+
+  setRequestLocale(activeLocale)
   const messages = await getMessages()
 
   return (
-    <NextIntlClientProvider messages={messages}>
+    <NextIntlClientProvider locale={activeLocale} messages={messages}>
       <AuthProvider>
         {children}
         <Toaster />

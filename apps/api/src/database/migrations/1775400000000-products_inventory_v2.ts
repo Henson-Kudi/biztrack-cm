@@ -50,8 +50,9 @@ export class ProductsInventoryV21775400000000 implements MigrationInterface {
       VALUES
         ('Piece', 'pcs', 'QUANTITY', true),
         ('Kilogram', 'kg', 'WEIGHT', true),
-        ('Litre', 'L', 'VOLUME', true),
-        ('Metre', 'm', 'LENGTH', true),
+        ('Liter', 'L', 'VOLUME', true),
+        ('Meter', 'm', 'LENGTH', true),
+        ('Service', 'svc', 'CUSTOM', true),
         ('Box', 'box', 'QUANTITY', true),
         ('Packet', 'pkt', 'QUANTITY', true),
         ('Bottle', 'btl', 'QUANTITY', true),

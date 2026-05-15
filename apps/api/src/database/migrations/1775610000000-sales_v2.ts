@@ -122,10 +122,20 @@ export class SalesV21775610000000 implements MigrationInterface {
       ON "sales" ("business_id", "status")
     `)
     await queryRunner.query(`
-      ALTER TABLE "sales"
-      ADD CONSTRAINT "fk_sales_voided_by"
-      FOREIGN KEY ("voided_by") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'sales'
+            AND constraint_name = 'fk_sales_voided_by'
+        ) THEN
+          ALTER TABLE "sales"
+          ADD CONSTRAINT "fk_sales_voided_by"
+          FOREIGN KEY ("voided_by") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
 
     await queryRunner.query(`
       ALTER TABLE "sale_items"
@@ -170,10 +180,20 @@ export class SalesV21775610000000 implements MigrationInterface {
       ON "sale_items" ("business_id")
     `)
     await queryRunner.query(`
-      ALTER TABLE "sale_items"
-      ADD CONSTRAINT "fk_sale_items_business_id"
-      FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'sale_items'
+            AND constraint_name = 'fk_sale_items_business_id'
+        ) THEN
+          ALTER TABLE "sale_items"
+          ADD CONSTRAINT "fk_sale_items_business_id"
+          FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "sale_payments" (
@@ -196,15 +216,35 @@ export class SalesV21775610000000 implements MigrationInterface {
       ON "sale_payments" ("business_id")
     `)
     await queryRunner.query(`
-      ALTER TABLE "sale_payments"
-      ADD CONSTRAINT "fk_sale_payments_sale_id"
-      FOREIGN KEY ("sale_id") REFERENCES "sales"("id") ON DELETE CASCADE ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'sale_payments'
+            AND constraint_name = 'fk_sale_payments_sale_id'
+        ) THEN
+          ALTER TABLE "sale_payments"
+          ADD CONSTRAINT "fk_sale_payments_sale_id"
+          FOREIGN KEY ("sale_id") REFERENCES "sales"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
     await queryRunner.query(`
-      ALTER TABLE "sale_payments"
-      ADD CONSTRAINT "fk_sale_payments_business_id"
-      FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'sale_payments'
+            AND constraint_name = 'fk_sale_payments_business_id'
+        ) THEN
+          ALTER TABLE "sale_payments"
+          ADD CONSTRAINT "fk_sale_payments_business_id"
+          FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
 
     await queryRunner.query(`
       INSERT INTO "sale_payments" (
@@ -253,10 +293,20 @@ export class SalesV21775610000000 implements MigrationInterface {
       ON "daily_sale_summaries" ("business_id", "summary_date")
     `)
     await queryRunner.query(`
-      ALTER TABLE "daily_sale_summaries"
-      ADD CONSTRAINT "fk_daily_sale_summaries_business_id"
-      FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'daily_sale_summaries'
+            AND constraint_name = 'fk_daily_sale_summaries_business_id'
+        ) THEN
+          ALTER TABLE "daily_sale_summaries"
+          ADD CONSTRAINT "fk_daily_sale_summaries_business_id"
+          FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "sale_number_sequences" (
@@ -267,10 +317,20 @@ export class SalesV21775610000000 implements MigrationInterface {
       )
     `)
     await queryRunner.query(`
-      ALTER TABLE "sale_number_sequences"
-      ADD CONSTRAINT "fk_sale_number_sequences_business_id"
-      FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION
-    `).catch(() => undefined)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_name = 'sale_number_sequences'
+            AND constraint_name = 'fk_sale_number_sequences_business_id'
+        ) THEN
+          ALTER TABLE "sale_number_sequences"
+          ADD CONSTRAINT "fk_sale_number_sequences_business_id"
+          FOREIGN KEY ("business_id") REFERENCES "businesses"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
+    `)
 
     await queryRunner.query(`
       INSERT INTO "sale_number_sequences" ("business_id", "sale_date", "last_sequence")

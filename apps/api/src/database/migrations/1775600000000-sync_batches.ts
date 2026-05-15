@@ -48,7 +48,7 @@ export class SyncBatches1775600000000 implements MigrationInterface {
         "client_operation_id" character varying NOT NULL,
         "entity" character varying(40) NOT NULL,
         "action" character varying(20) NOT NULL,
-        "record_id" uuid NOT NULL,
+        "record_id" text NOT NULL,
         "record_updated_at" TIMESTAMP WITH TIME ZONE NOT NULL,
         "payload" jsonb,
         "status" character varying(20) NOT NULL DEFAULT 'pending',

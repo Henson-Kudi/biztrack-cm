@@ -40,7 +40,7 @@ export class SyncOperation extends BaseEntity {
   @Column({ type: 'varchar', length: 20 })
   action!: string
 
-  @Column({ name: 'record_id' })
+  @Column({ name: 'record_id', type: 'text' })
   recordId!: string
 
   @Column({ name: 'record_updated_at', type: 'timestamptz', transformer: dateTransformer })
