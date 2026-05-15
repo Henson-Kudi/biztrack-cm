@@ -35,6 +35,19 @@ import { HealthController } from './health.controller'
 const entitiesPath = join(__dirname, '**', '*.entity.{ts,js}').replace(/\\/g, '/')
 const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').replace(/\\/g, '/')
 
+function resolveI18nPath() {
+  const srcPath = resolve(process.cwd(), 'src', 'i18n')
+  const candidates =
+    process.env.NODE_ENV === NodeEnv.PRODUCTION
+      ? [join(__dirname, 'i18n'), join(__dirname, 'i18n', 'i18n'), srcPath]
+      : [srcPath, join(__dirname, 'i18n'), join(__dirname, 'i18n', 'i18n')]
+
+  const hasTranslations = (basePath: string) =>
+    existsSync(join(basePath, 'en')) || existsSync(join(basePath, 'fr'))
+
+  return candidates.find(hasTranslations) ?? srcPath
+}
+
 @Module({
   controllers: [HealthController],
   imports: [
@@ -42,14 +55,12 @@ const migrationsPath = join(__dirname, 'database', 'migrations', '*{.ts,.js}').r
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     I18nModule.forRootAsync({
       useFactory: () => {
-        const srcPath = resolve(process.cwd(), 'src', 'i18n')
-        const distPath = join(__dirname, 'i18n')
-        const useDist = process.env.NODE_ENV === 'production' && existsSync(distPath)
+        const i18nPath = resolveI18nPath()
 
         return {
           fallbackLanguage: 'fr',
           loaderOptions: {
-            path: useDist ? distPath : srcPath,
+            path: i18nPath,
             watch: process.env.NODE_ENV === 'development',
           },
           typesOutputPath: join(__dirname, '..', 'src', 'generated', 'i18n.generated.ts'),

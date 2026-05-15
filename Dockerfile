@@ -28,6 +28,7 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/package.json ./package.json
+COPY --from=build /app/apps/api/src/i18n ./src/i18n
 COPY --from=build /app/packages/logger /app/packages/logger
 COPY --from=build /app/packages/types /app/packages/types
 COPY --from=build /app/packages/utils /app/packages/utils
