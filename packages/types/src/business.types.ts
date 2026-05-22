@@ -85,6 +85,7 @@ export interface CreateBusinessRequest {
   city?: string
   country?: string
   currency?: Currency | string
+  type?: BusinessType
 }
 
 export interface UpdateBusinessRequest extends Partial<CreateBusinessRequest> {}

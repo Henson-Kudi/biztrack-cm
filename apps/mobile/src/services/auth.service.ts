@@ -140,8 +140,20 @@ export interface SetupBusinessDto {
   city: string
 }
 
-export const setupBusiness = (dto: SetupBusinessDto): Promise<AuthStepResponse> =>
-  apiClient.post<AuthStepResponse>('/businesses/setup', dto)
+// POST /businesses/setup returns the raw Business entity, not an AuthStepResponse
+export interface BusinessEntity {
+  id: string
+  name: string
+  type: BusinessType
+  city?: string
+  plan?: string
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export const setupBusiness = (dto: SetupBusinessDto): Promise<BusinessEntity> =>
+  apiClient.post<BusinessEntity>('/businesses/setup', dto)
 
 // ─── Get Plans ────────────────────────────────────────────────────────────────
 

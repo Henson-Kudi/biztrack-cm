@@ -20,6 +20,15 @@ config.resolver.extraNodeModules = {
   '@biztrack/validators': path.resolve(workspaceRoot, 'packages/validators/src'),
 }
 
+// @tanstack/query-core v5.x ships without a build/legacy folder.
+// Metro's FallbackWatcher on Windows crashes with ENOENT when it tries to watch
+// that non-existent path, causing the "infinite reloading" screen. Blocking it
+// here is the permanent fix — no stub directory required.
+config.resolver.blockList = [
+  ...(Array.isArray(config.resolver.blockList) ? config.resolver.blockList : []),
+  /node_modules[/\\]\.pnpm[/\\]@tanstack\+query-core@[^/\\]+[/\\]node_modules[/\\]@tanstack[/\\]query-core[/\\]build[/\\]legacy.*/,
+]
+
 // withNativeWind MUST be the last step — it registers the CSS transformer
 // that processes global.css. Without this, Metro cannot handle CSS imports
 // and the bundle crashes silently on startup (causing the "reloading forever" screen).

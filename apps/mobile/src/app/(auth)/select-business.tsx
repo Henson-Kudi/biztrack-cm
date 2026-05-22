@@ -12,7 +12,7 @@ import { AppBadge } from '../../components/ui/AppBadge'
 import { AppSpinner } from '../../components/ui/AppSpinner'
 import { useAuthStore } from '../../store/useAuthStore'
 import { getMyBusinesses, selectBusiness, BusinessListItem } from '../../services/auth.service'
-import { handleNextStep } from '../../navigation/nextStepRouter'
+import { decodeJwtSub } from '../../utils/jwt'
 import type { BadgeVariant } from '../../components/ui/AppBadge'
 import type { Locale } from '../../store/useAuthStore'
 
@@ -44,6 +44,22 @@ const ROLE_BADGE: Record<string, BadgeVariant> = {
   ACCOUNTANT: 'accountant',
 }
 
+// Map the API's nextStep strings to the correct local onboardingStep value
+const NEXT_STEP_TO_ONBOARDING: Record<string, string> = {
+  setup_business: 'SETUP_BUSINESS',
+  select_plan: 'PLAN_PENDING',
+  add_first_product: 'ADD_FIRST_PRODUCT',
+  dashboard: 'COMPLETE',
+}
+
+// Map the API's nextStep strings to the navigation target
+const NEXT_STEP_TO_ROUTE: Record<string, string> = {
+  setup_business: '/(auth)/setup-business',
+  select_plan: '/(auth)/select-plan',
+  add_first_product: '/(auth)/first-product',
+  dashboard: '/(tabs)',
+}
+
 export default function SelectBusinessScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -63,12 +79,52 @@ export default function SelectBusinessScreen() {
     return () => { mountedRef.current = false }
   }, [])
 
-  const handleSelect = async (businessId: string) => {
+  // allBusinesses is passed when called from the load effect (before React re-renders)
+  // to avoid the stale-closure bug where businesses state is still []
+  const handleSelect = async (businessId: string, allBusinesses?: BusinessListItem[]) => {
     if (!mountedRef.current) return
     setSelecting(businessId)
     try {
       const res = await selectBusiness({ businessId })
-      if (mountedRef.current) handleNextStep(res, router)
+      if (!mountedRef.current) return
+
+      // 1. Store the new Phase 2 tokens
+      const store = useAuthStore.getState()
+      if (res.tokens) {
+        store.setTokens(res.tokens.accessToken, res.tokens.refreshToken)
+      }
+
+      // 2. Set the business object — prefer the freshly-loaded list to avoid stale closure
+      const list = allBusinesses ?? businesses
+      const selectedBiz = list.find((b) => b.id === businessId)
+      if (selectedBiz) {
+        store.setBusiness({
+          id: selectedBiz.id,
+          name: selectedBiz.name,
+          plan: (selectedBiz.plan as any) ?? 'FREE',
+          role: selectedBiz.role as any,
+        })
+      }
+
+      // 3. Set user with onboardingStep derived from nextStep
+      const onboardingStep = NEXT_STEP_TO_ONBOARDING[res.nextStep] ?? 'COMPLETE'
+      const currentUser = store.user
+      if (currentUser) {
+        store.setUser({ ...currentUser, onboardingStep: onboardingStep as any })
+      } else {
+        const userId = decodeJwtSub(store.accessToken) ?? `pending-${Date.now()}`
+        store.setUser({
+          id: userId,
+          name: selectedBiz?.name ?? '',
+          phone: '',
+          locale: loc,
+          onboardingStep: onboardingStep as any,
+        })
+      }
+
+      // 4. Navigate
+      const target = NEXT_STEP_TO_ROUTE[res.nextStep] ?? '/(auth)'
+      router.replace(target as never)
     } catch {
       if (mountedRef.current) {
         setSelecting(null)
@@ -85,10 +141,10 @@ export default function SelectBusinessScreen() {
 
         setBusinesses(list)
 
-        // Auto-select if exactly one active business
+        // Auto-select if exactly one active business — pass list directly to avoid stale closure
         const active = list.filter((b) => b.status === 'ACTIVE')
         if (active.length === 1 && active[0]) {
-          await handleSelect(active[0].id)
+          await handleSelect(active[0].id, list)
         }
       } catch {
         if (mountedRef.current) setError(t.error)

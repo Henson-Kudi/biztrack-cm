@@ -11,7 +11,7 @@ import { AppButton } from '../../components/ui/AppButton'
 import { AppSpinner } from '../../components/ui/AppSpinner'
 import { useAuthStore } from '../../store/useAuthStore'
 import { getPlans, selectPlan, PlanOption, SubscriptionPlan } from '../../services/auth.service'
-import { handleNextStep } from '../../navigation/nextStepRouter'
+import { decodeJwtSub } from '../../utils/jwt'
 import type { Locale } from '../../store/useAuthStore'
 
 const SUPPORTED_LOCALES: Locale[] = ['fr', 'en']
@@ -173,7 +173,18 @@ export default function SelectPlanScreen() {
     setError(null)
     try {
       const res = await selectPlan({ plan: plan.name as SubscriptionPlan })
-      handleNextStep(res, router)
+
+      // Always update user state — even if user was null (new onboarding)
+      const store = useAuthStore.getState()
+      const currentUser = store.user
+      if (currentUser) {
+        store.setUser({ ...currentUser, onboardingStep: 'ADD_FIRST_PRODUCT' })
+      } else {
+        const userId = decodeJwtSub(store.accessToken) ?? `pending-${Date.now()}`
+        store.setUser({ id: userId, name: '', phone: '', locale: loc, onboardingStep: 'ADD_FIRST_PRODUCT' })
+      }
+
+      router.replace('/(auth)/first-product' as never)
     } catch {
       setError(t.networkError)
     } finally {
@@ -229,7 +240,19 @@ export default function SelectPlanScreen() {
         <FlatList
           data={plans}
           keyExtractor={(item) => item.name}
-          contentContainerStyle={{ padding: 16, gap: 12 }}
+          contentContainerStyle={
+            plans.length === 0
+              ? { flex: 1, justifyContent: 'center', alignItems: 'center' }
+              : { padding: 16, paddingBottom: Math.max(insets.bottom + 20, 40), gap: 12 }
+          }
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', padding: 20 }}>
+              <Text style={{ color: '#888780', textAlign: 'center', marginBottom: 16 }}>
+                {loc === 'fr' ? 'Aucun plan disponible pour le moment.' : 'No plans available at the moment.'}
+              </Text>
+              <AppButton variant="secondary" onPress={fetchPlans}>{t.retry}</AppButton>
+            </View>
+          }
           renderItem={({ item }) => {
             const accent = PLAN_ACCENT[item.name] ?? '#185FA5'
             const isPopular = item.name === 'SOLO'

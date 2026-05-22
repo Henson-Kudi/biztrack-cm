@@ -12,8 +12,8 @@ import { AppButton } from '../../components/ui/AppButton'
 import { AppInput } from '../../components/ui/AppInput'
 import { useAuthStore } from '../../store/useAuthStore'
 import apiClient from '../../services/apiClient'
-import { handleNextStep } from '../../navigation/nextStepRouter'
 import { useForm } from '../../hooks/useForm'
+import { decodeJwtSub } from '../../utils/jwt'
 import type { Locale } from '../../store/useAuthStore'
 
 const SUPPORTED_LOCALES: Locale[] = ['fr', 'en']
@@ -79,13 +79,22 @@ export default function FirstProductScreen() {
     form.clearErrors()
 
     try {
-      const res: any = await apiClient
+      await apiClient
         .post('/businesses/first-product', {
           name: name.trim(),
           price: Number(price),
           stock: Number(stock) || 0,
         })
-      handleNextStep(res, router)
+      // Always mark onboarding complete regardless of whether user was in store
+      const store = useAuthStore.getState()
+      const currentUser = store.user
+      if (currentUser) {
+        store.setUser({ ...currentUser, onboardingStep: 'COMPLETE' })
+      } else {
+        const userId = decodeJwtSub(store.accessToken) ?? `pending-${Date.now()}`
+        store.setUser({ id: userId, name: '', phone: '', locale: loc, onboardingStep: 'COMPLETE' })
+      }
+      router.replace('/(tabs)' as never)
     } catch {
       form.setFieldError('name', t.error)
     } finally {
@@ -96,11 +105,26 @@ export default function FirstProductScreen() {
   const handleSkip = async () => {
     setSkipping(true)
     try {
-      const res: any = await apiClient
+      await apiClient
         .post('/businesses/first-product', { skip: true })
-      handleNextStep(res, router)
+      const store = useAuthStore.getState()
+      const currentUser = store.user
+      if (currentUser) {
+        store.setUser({ ...currentUser, onboardingStep: 'COMPLETE' })
+      } else {
+        const userId = decodeJwtSub(store.accessToken) ?? `pending-${Date.now()}`
+        store.setUser({ id: userId, name: '', phone: '', locale: loc, onboardingStep: 'COMPLETE' })
+      }
+      router.replace('/(tabs)' as never)
     } catch {
       // Skip failure — navigate to dashboard anyway (non-blocking step)
+      const store2 = useAuthStore.getState()
+      const cu2 = store2.user
+      if (cu2) {
+        store2.setUser({ ...cu2, onboardingStep: 'COMPLETE' })
+      } else {
+        store2.setUser({ id: '', name: '', phone: '', locale: loc, onboardingStep: 'COMPLETE' })
+      }
       router.replace('/(tabs)' as never)
     } finally {
       setSkipping(false)

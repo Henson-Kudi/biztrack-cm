@@ -54,6 +54,7 @@
     "@biztrack/typescript-config": "workspace:*",
     "@testing-library/react-native": "^13.3.3",
     "@types/react": "~19.2.10",
+    "@types/uuid": "^10.0.0",
     "babel-plugin-inline-import": "^3.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.32.0",

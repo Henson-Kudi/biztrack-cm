@@ -23,7 +23,7 @@ export default function RootLayout() {
     if (_hasHydrated) return
     const timer = setTimeout(() => {
       setHasHydrated(true)
-    }, 2000)
+    }, 5000)
     return () => clearTimeout(timer)
   }, [_hasHydrated, setHasHydrated])
 

@@ -18,8 +18,8 @@ import { AppButton } from '../../components/ui/AppButton'
 import { AppInput } from '../../components/ui/AppInput'
 import { useAuthStore } from '../../store/useAuthStore'
 import { setupBusiness, BusinessType } from '../../services/auth.service'
-import { handleNextStep } from '../../navigation/nextStepRouter'
 import { useForm } from '../../hooks/useForm'
+import { decodeJwtSub } from '../../utils/jwt'
 import type { Locale } from '../../store/useAuthStore'
 
 const SUPPORTED_LOCALES: Locale[] = ['fr', 'en']
@@ -229,8 +229,32 @@ export default function SetupBusinessScreen() {
     if (!textOk || !typeOk || !type) return
     setLoading(true)
     try {
-      const res = await setupBusiness({ name: name.trim(), type, city: city.trim() })
-      handleNextStep(res, router)
+      // setupBusiness returns BusinessEntity — no cast needed
+      const biz = await setupBusiness({ name: name.trim(), type, city: city.trim() })
+
+      // Persist business in the store so the layout guard can satisfy its `business` check
+      const store = useAuthStore.getState()
+      if (biz?.id) {
+        store.setBusiness({
+          id: biz.id,
+          name: biz.name ?? name.trim(),
+          plan: (biz.plan as any) ?? 'FREE',
+          role: 'OWNER',
+        })
+      }
+
+      // Ensure user is in the store with the correct onboarding step.
+      // If no user exists yet, decode the JWT sub to get a real ID rather than
+      // storing id:'' which breaks downstream identity checks.
+      const currentUser = store.user
+      if (currentUser) {
+        store.setUser({ ...currentUser, onboardingStep: 'PLAN_PENDING' })
+      } else {
+        const userId = decodeJwtSub(store.accessToken) ?? `pending-${Date.now()}`
+        store.setUser({ id: userId, name: name.trim(), phone: '', locale: loc, onboardingStep: 'PLAN_PENDING' })
+      }
+
+      router.replace('/(auth)/select-plan' as never)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       // Prefer server validation message; fall back to generic network error
