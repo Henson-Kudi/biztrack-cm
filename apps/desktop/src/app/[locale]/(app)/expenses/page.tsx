@@ -1,9 +1,9 @@
 'use client'
 
-import { useDeferredValue, useEffect, useState, type FormEvent } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Button, Spinner } from '@biztrack/ui'
-import { PaymentMethod, type Expense, type ExpenseCategory } from '@biztrack/types'
+import { PaymentMethod, Resource, type Expense, type ExpenseCategory } from '@biztrack/types'
 import { toast } from 'sonner'
 import { MetricCard } from '@/components/catalog/MetricCard'
 import { SurfaceCard } from '@/components/catalog/SurfaceCard'
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { getPermissionAccessFromState } from '@/lib/plan-access'
 import { cn } from '@/lib/utils'
 import {
   createExpenseLocal,
@@ -34,6 +35,7 @@ import {
   updateExpenseLocal,
 } from '@/services/expenses.local'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 
 type PeriodKey = 'month' | 'quarter' | 'year'
 type RecurringFilterValue = '' | 'true' | 'false'
@@ -339,10 +341,16 @@ function PlusIcon() {
 
 function ExpensesPageContent() {
   const t = useTranslations('app.expenses')
+  const planGateT = useTranslations('app.plan_gate')
   const locale = useLocale()
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
+  const planState = usePlanStore((state) => state.current)
+  const canUseCategories = useMemo(
+    () => (planState ? getPermissionAccessFromState(planState, Resource.EXPENSES_CATEGORIES).allowed : true),
+    [planState],
+  )
   const [period, setPeriod] = useState<PeriodKey>('month')
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
@@ -568,7 +576,7 @@ function ExpensesPageContent() {
 
     try {
       const payload = {
-        categoryId: formState.categoryId,
+        categoryId: canUseCategories ? formState.categoryId : undefined,
         description: formState.description,
         amount: Number(formState.amount),
         expenseDate: formState.expenseDate,
@@ -648,6 +656,20 @@ function ExpensesPageContent() {
 
   return (
     <>
+      {!canUseCategories ? (
+        <p className="text-sm text-muted-foreground">
+          {planGateT.rich('upgrade_hint', {
+            link: (chunks) => (
+              <a
+                href={`/${locale}/subscription`}
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
+        </p>
+      ) : null}
       <div className="space-y-6">
         <div className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
@@ -675,7 +697,7 @@ function ExpensesPageContent() {
             <Button
               variant="primary"
               onClick={openAddDialog}
-              disabled={categories.length === 0}
+              disabled={canUseCategories && categories.length === 0}
               className="gap-2"
             >
               <PlusIcon />
@@ -706,13 +728,16 @@ function ExpensesPageContent() {
             value={formatCurrency(oneOffAmount, localeTag)}
             hint={t('metrics.share_of_total', { value: oneOffShare })}
           />
-          <MetricCard
-            label={t('metrics.categories')}
-            value={String(currentCategoryTotals.length)}
-            hint={t('metrics.entries_count', { count: periodExpenses.length })}
-          />
+          {canUseCategories ? (
+            <MetricCard
+              label={t('metrics.categories')}
+              value={String(currentCategoryTotals.length)}
+              hint={t('metrics.entries_count', { count: periodExpenses.length })}
+            />
+          ) : null}
         </div>
 
+        {canUseCategories ? (
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
           <SurfaceCard title={t('chart.title')}>
             {chartCategories.length === 0 ? (
@@ -808,6 +833,7 @@ function ExpensesPageContent() {
             )}
           </SurfaceCard>
         </div>
+        ) : null}
 
         <SurfaceCard>
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -820,19 +846,21 @@ function ExpensesPageContent() {
             />
 
             <div className="grid gap-3 sm:grid-cols-2 lg:w-[360px]">
-              <Select value={categoryFilter || '__all__'} onValueChange={(value) => setCategoryFilter(value === '__all__' ? '' : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('filters.all_categories')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">{t('filters.all_categories')}</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {canUseCategories ? (
+                <Select value={categoryFilter || '__all__'} onValueChange={(value) => setCategoryFilter(value === '__all__' ? '' : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('filters.all_categories')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">{t('filters.all_categories')}</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
 
               <Select value={recurringFilter || '__all__'} onValueChange={(value) => setRecurringFilter(value === '__all__' ? '' : (value as RecurringFilterValue))}>
                 <SelectTrigger>
@@ -857,9 +885,11 @@ function ExpensesPageContent() {
                   <th className="w-[14%] px-3 py-3 text-left text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                     {t('table.date')}
                   </th>
-                  <th className="w-[18%] px-3 py-3 text-left text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                    {t('table.category')}
-                  </th>
+                  {canUseCategories ? (
+                    <th className="w-[18%] px-3 py-3 text-left text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                      {t('table.category')}
+                    </th>
+                  ) : null}
                   <th className="w-[16%] px-3 py-3 text-left text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                     {t('table.vendor')}
                   </th>
@@ -885,9 +915,11 @@ function ExpensesPageContent() {
                       <td className="px-3 py-3 text-foreground">
                         {formatDateLabel(expense.expenseDate, localeTag)}
                       </td>
-                      <td className="px-3 py-3">
-                        <CategoryPill label={categoryName} color={categoryColor} />
-                      </td>
+                      {canUseCategories ? (
+                        <td className="px-3 py-3">
+                          <CategoryPill label={categoryName} color={categoryColor} />
+                        </td>
+                      ) : null}
                       <td
                         className={cn(
                           'px-3 py-3',
@@ -1035,26 +1067,28 @@ function ExpensesPageContent() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">{t('form.category')}</label>
-                      <Select
-                        value={formState.categoryId}
-                        onValueChange={(value) =>
-                          setFormState((current) => ({ ...current, categoryId: value }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('form.category_placeholder')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {canUseCategories ? (
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-foreground">{t('form.category')}</label>
+                        <Select
+                          value={formState.categoryId}
+                          onValueChange={(value) =>
+                            setFormState((current) => ({ ...current, categoryId: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('form.category_placeholder')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
 
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-foreground" htmlFor="expense-vendor">

@@ -62,6 +62,8 @@ export enum BusinessMemberRole {
   MANAGER = 'MANAGER',
   CASHIER = 'CASHIER',
   ACCOUNTANT = 'ACCOUNTANT',
+  /** Generic placeholder for custom (non-system) roles */
+  STAFF = 'STAFF',
 }
 
 export enum BusinessMemberStatus {
@@ -106,54 +108,70 @@ export interface BusinessMembershipSummary {
   business: BusinessMembershipBusinessSummary | null
 }
 
-export const SUBSCRIPTION_LIMITS: Record<SubscriptionPlan, {
-  maxProducts: number
-  maxUsers: number
-  maxDevices: number
-  thermalPrinting: boolean
-  advancedReports: boolean
-  multiDevice: boolean
-  multiBranch: boolean
-  apiAccess: boolean
-}> = {
-  [SubscriptionPlan.FREE]: {
-    maxProducts: 50,
-    maxUsers: 1,
-    maxDevices: 1,
-    thermalPrinting: false,
-    advancedReports: false,
-    multiDevice: false,
-    multiBranch: false,
-    apiAccess: false,
-  },
-  [SubscriptionPlan.SOLO]: {
-    maxProducts: Infinity,
-    maxUsers: 1,
-    maxDevices: 1,
-    thermalPrinting: false,
-    advancedReports: true,
-    multiDevice: false,
-    multiBranch: false,
-    apiAccess: false,
-  },
-  [SubscriptionPlan.BUSINESS]: {
-    maxProducts: Infinity,
-    maxUsers: 3,
-    maxDevices: 3,
-    thermalPrinting: true,
-    advancedReports: true,
-    multiDevice: true,
-    multiBranch: false,
-    apiAccess: false,
-  },
-  [SubscriptionPlan.PRO]: {
-    maxProducts: Infinity,
-    maxUsers: Infinity,
-    maxDevices: Infinity,
-    thermalPrinting: true,
-    advancedReports: true,
-    multiDevice: true,
-    multiBranch: true,
-    apiAccess: true,
-  },
+export interface TeamMember {
+  memberId: string
+  userId: string
+  roleId: string
+  roleName: string
+  role: BusinessMemberRole | null
+  status: BusinessMemberStatus
+  name: string | null
+  email: string | null
+  phone: string | null
+  joinedAt: IsoDateString
+}
+
+export interface ListTeamMembersResponse {
+  members: TeamMember[]
+}
+
+export interface RemoveTeamMemberResponse {
+  removed: boolean
+}
+
+export interface UpdateMemberRoleRequest {
+  roleId: string
+}
+
+export interface UpdateMemberRoleResponse {
+  memberId: string
+  roleId: string
+  roleName: string
+  role: BusinessMemberRole | null
+}
+
+export interface BulkUpdateMemberRoleRequest {
+  userIds: string[]
+  roleId: string
+}
+
+export interface BulkUpdateMemberRoleResponse {
+  updated: number
+}
+
+export type InviteStatus = 'pending' | 'expired'
+
+export interface PendingInviteItem {
+  id: string
+  roleId: string
+  roleName: string
+  role: BusinessMemberRole | null
+  phone: string | null
+  email: string | null
+  status: InviteStatus
+  expiresAt: IsoDateString
+  createdAt: IsoDateString
+}
+
+export interface ListPendingInvitesResponse {
+  invites: PendingInviteItem[]
+}
+
+export interface ResendInviteResponse {
+  resent: boolean
+  inviteUrl: string | null
+}
+
+export interface CancelInviteResponse {
+  cancelled: boolean
 }

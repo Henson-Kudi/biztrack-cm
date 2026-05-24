@@ -11,6 +11,7 @@ import {
 } from '@/common/exceptions/app-exceptions'
 import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
+import { QuotaService } from '@/modules/permissions/quota.service'
 import { ProductCategoriesRepository } from '../repositories/product-categories.repository'
 import { ProductsRepository } from '../repositories/products.repository'
 import { SlugService } from './slug.service'
@@ -21,6 +22,7 @@ export class CategoriesService {
     private readonly categoriesRepo: ProductCategoriesRepository,
     private readonly productsRepo: ProductsRepository,
     private readonly slugService: SlugService,
+    private readonly quotaService: QuotaService,
     private readonly i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
@@ -29,6 +31,8 @@ export class CategoriesService {
 
   async create(businessId: string, dto: CreateCategoryRequest) {
     try {
+      await this.quotaService.assertWithinQuota(businessId, 'categories')
+
       const slug = await this.slugService.generateCategorySlug(dto.name, businessId)
       const category = this.categoriesRepo.create({
         businessId,

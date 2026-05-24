@@ -9,6 +9,7 @@ const fallbackSnapshot: SyncSnapshot = {
   pendingCount: 0,
   lastSyncedAt: null,
   lastError: null,
+  lastFailureDetails: null,
   network: {
     online: true,
     quality: 'strong',

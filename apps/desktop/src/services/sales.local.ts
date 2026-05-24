@@ -4,6 +4,7 @@ import {
   ContactType,
   InventoryMovementType,
   PaymentMethod,
+  Resource,
   SaleStatus,
   type CreateSaleItemRequest,
   type CreateSaleRequest,
@@ -17,6 +18,7 @@ import {
   type SalesQuery,
   type SaleSyncPayload,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess } from '@/lib/plan-access'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
 import { getContactByIdLocal } from './contacts.local'
 import { assertBusinessId, fetchProductRowsForBusiness, type ProductRow } from './products.local'
@@ -149,6 +151,7 @@ export async function createSaleLocal(
   payload: CreateLocalSaleInput,
 ): Promise<LocalSaleRecord> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.SALES_CREATE)
   validateSalePayload(payload)
 
   const clientId = payload.clientId?.trim() || crypto.randomUUID()
@@ -376,7 +379,7 @@ export async function createSaleLocal(
 
   const amountPaid = roundMoney(salePayments.reduce((sum, payment) => sum + payment.amount, 0))
   const creditAmount = roundMoney(Math.max(0, totalAmount - amountPaid))
-  let customerId: string | null = requestedCustomerId
+  const customerId: string | null = requestedCustomerId
   let customerName = payload.customerName?.trim() || null
   let customerPhone = payload.customerPhone?.trim() || null
 
@@ -734,6 +737,7 @@ export async function voidSaleLocal(
   },
 ): Promise<LocalSaleRecord> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.SALES_VOID)
   const trimmedReason = reason.trim()
 
   if (trimmedReason.length < 10 || trimmedReason.length > 1000) {

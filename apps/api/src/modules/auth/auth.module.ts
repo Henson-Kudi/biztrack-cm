@@ -25,14 +25,18 @@ import { RedisModule } from '@/common/redis/redis.module'
 import { AuthRateLimitGuard } from '@/common/guards/auth-rate-limit.guard'
 import { PermissionsModule } from '@/modules/permissions/permissions.module'
 import { BusinessModule } from '@/modules/business/business.module'
+import { NotificationsModule } from '@/modules/notifications/notifications.module'
+import { RolesModule } from '@/modules/roles/roles.module'
 
 @Module({
   imports: [
     UsersModule,
     BusinessModule,
+    NotificationsModule,
     PassportModule,
     RedisModule,
     PermissionsModule,
+    RolesModule,
     TypeOrmModule.forFeature([User, RefreshToken, VerificationCode, Business, BusinessMember, PendingInvite]),
     JwtModule.registerAsync({
       inject: [ConfigService],

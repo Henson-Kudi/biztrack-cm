@@ -1,7 +1,7 @@
 import type { AuthNextStep } from './auth.types'
 import type { SubscriptionPlan, SubscriptionStatus } from './business.types'
 import type { IsoDateString } from './http.types'
-import type { AuthPermissions } from './permissions.types'
+import type { AuthPermissions, PlanQuotaMap, PlanQuotaUsage } from './permissions.types'
 
 export interface PlanResourceSummary {
   name: SubscriptionPlan
@@ -9,6 +9,7 @@ export interface PlanResourceSummary {
   priceXAF: number
   trialDays: number
   resources: string[]
+  quotas: PlanQuotaMap
   inheritsFrom: SubscriptionPlan | null
   additionalResources: string[]
 }
@@ -54,4 +55,30 @@ export interface UpgradePlanResponse {
 export interface CancelPlanResponse {
   cancelAtPeriodEnd: boolean
   currentPeriodEnd: IsoDateString | null
+}
+
+export interface PlanStateResponse {
+  selectedPlan: SubscriptionPlan
+  effectivePlan: SubscriptionPlan
+  status: SubscriptionStatus
+  trialStartedAt: IsoDateString | null
+  trialEndsAt: IsoDateString | null
+  currentPeriodStart: IsoDateString | null
+  currentPeriodEnd: IsoDateString | null
+  cancelAtPeriodEnd: boolean
+  entitlementValid: boolean
+  entitlementExpiresAt: IsoDateString | null
+  fetchedAt: IsoDateString
+  staleAfter: IsoDateString
+  authPermissions: AuthPermissions
+  quotas: PlanQuotaMap
+  quotaUsage: PlanQuotaUsage[]
+}
+
+export interface QuotaUsageResponse {
+  selectedPlan: SubscriptionPlan
+  effectivePlan: SubscriptionPlan
+  entitlementValid: boolean
+  fetchedAt: IsoDateString
+  quotaUsage: PlanQuotaUsage[]
 }

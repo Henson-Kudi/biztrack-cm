@@ -43,6 +43,7 @@ import {
 } from '@/common/exceptions/app-exceptions'
 import { OnboardingStep, User, UserStatus } from '@/entities/user.entity'
 import { PermissionsService } from '@/modules/permissions/permissions.service'
+import { QuotaService } from '@/modules/permissions/quota.service'
 import { DEFAULT_LOCALE } from '@/common/enums/locale.enum'
 import { I18nService } from 'nestjs-i18n'
 import type { I18nTranslations } from '@/i18n/i18n.types'
@@ -51,6 +52,8 @@ import { PendingInvitesRepository } from './repositories/pending-invites.reposit
 import { BusinessesRepository } from '@/modules/business/repositories/businesses.repository'
 import { RedisService } from '@/common/redis/redis.service'
 import { generateSlug } from '@biztrack/utils'
+import { NotificationsService } from '@/modules/notifications/services/notifications.service'
+import { RolesService } from '@/modules/roles/roles.service'
 
 @Injectable()
 export class AuthService {
@@ -66,6 +69,9 @@ export class AuthService {
     private config: ConfigService<AppConfig>,
     private passwordManager: PasswordManager,
     private permissionsService: PermissionsService,
+    private quotaService: QuotaService,
+    private notificationsService: NotificationsService,
+    private rolesService: RolesService,
     private i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private logger: Logger,
   ) {
@@ -595,6 +601,7 @@ export class AuthService {
         businessId,
         'phase2',
         stored.familyId,
+        membership.roleId,
       )
       return { tokens }
     } catch (error) {
@@ -669,6 +676,8 @@ export class AuthService {
         membership.role,
         businessId,
         'phase2',
+        undefined,
+        membership.roleId,
       )
       const authPermissions = await this.getAuthPermissions(businessId)
 
@@ -708,9 +717,9 @@ export class AuthService {
 
       const invitedBy = invite.invitedById
         ? await this.usersRepo.findOne({
-            where: { id: invite.invitedById },
-            select: { id: true, name: true },
-          } as any)
+          where: { id: invite.invitedById },
+          select: { id: true, name: true },
+        } as any)
         : null
 
       const sentTo = invite.phone
@@ -725,6 +734,8 @@ export class AuthService {
         invitedByName: invitedBy?.name ?? null,
         expiresAt: invite.expiresAt,
         sentTo,
+        email: invite.email ?? null,
+        phone: invite.phone ?? null,
       }
     } catch (error) {
       return this.handleServiceError('getInvitePreview', error, { token })
@@ -732,7 +743,7 @@ export class AuthService {
   }
 
   async sendInvite(userId: string, businessId: string, dto: SendInviteRequest) {
-    this.logger.debug('Send invite', 'AuthService', { userId, businessId, role: dto.role })
+    this.logger.debug('Send invite', 'AuthService', { userId, businessId, roleId: dto.roleId })
 
     try {
       const inviter = await this.businessMembersRepo.findOne({
@@ -744,6 +755,16 @@ export class AuthService {
           'BUSINESS_FORBIDDEN',
         )
       }
+
+      // Validate & look up the requested role
+      const inviteRole = await this.rolesService.findByIdOrFail(dto.roleId, businessId)
+      if (inviteRole.isOwnerRole) {
+        throw new AppForbiddenException(
+          await this.i18n.translate('errors.forbidden'),
+          'BUSINESS_FORBIDDEN',
+        )
+      }
+      const enumRole = RolesService.toMemberRoleEnum(inviteRole.name)
 
       const email = dto.email?.toLowerCase() ?? null
       const phone = dto.phone ?? null
@@ -784,13 +805,15 @@ export class AuthService {
         if (membership) {
           await this.businessMembersRepo.update(membership.id, {
             status: BusinessMemberStatus.PENDING,
-            role: dto.role,
+            role: enumRole,
+            roleId: inviteRole.id,
           })
         } else {
           const newMember = this.businessMembersRepo.create({
             businessId,
             userId: existingUser.id,
-            role: dto.role,
+            role: enumRole,
+            roleId: inviteRole.id,
             status: BusinessMemberStatus.PENDING,
           })
           await this.businessMembersRepo.save(newMember)
@@ -800,6 +823,7 @@ export class AuthService {
           status: 'pending_member',
           businessId,
           userId: existingUser.id,
+          inviteUrl: null,
         }
       }
 
@@ -808,7 +832,8 @@ export class AuthService {
       const invite = this.pendingInvitesRepo.create({
         token,
         businessId,
-        role: dto.role,
+        role: enumRole,
+        roleId: inviteRole.id,
         phone,
         email,
         invitedById: userId,
@@ -816,10 +841,23 @@ export class AuthService {
       })
       await this.pendingInvitesRepo.save(invite)
 
+      // Enqueue invite notifications — processor handles all channel logic asynchronously
+      const business = await this.businessesRepo.findOne({ where: { id: businessId } })
+      const inviterUser = await this.usersRepo.findOne({ where: { id: userId } })
+      void this.notificationsService.enqueueInviteNotifications(
+        invite.id,
+        business?.name ?? 'BizTrack',
+        inviterUser?.name ?? undefined,
+      )
+
+      const appUrl = this.config.get<string>('APP_URL', { infer: true }) ?? ''
+      const inviteUrl = `${appUrl}/en/invite?token=${token}`
+
       return {
         status: 'pending_invite',
         token,
         expiresAt,
+        inviteUrl,
       }
     } catch (error) {
       return this.handleServiceError('sendInvite', error, { userId, businessId })
@@ -865,15 +903,22 @@ export class AuthService {
       }
 
       if (existing) {
+        // Accepting an invite is the moment a seat becomes active. Pending
+        // invites are intentionally free in v1, so the quota check belongs
+        // here rather than in `sendInvite`.
+        await this.quotaService.assertWithinQuota(invite.businessId, 'users')
         await this.businessMembersRepo.update(existing.id, {
           status: BusinessMemberStatus.ACTIVE,
-          role: invite.role,
+          role: invite.role ?? BusinessMemberRole.CASHIER,
+          roleId: invite.roleId,
         })
       } else {
+        await this.quotaService.assertWithinQuota(invite.businessId, 'users')
         const member = this.businessMembersRepo.create({
           businessId: invite.businessId,
           userId,
-          role: invite.role,
+          role: invite.role ?? BusinessMemberRole.CASHIER,
+          roleId: invite.roleId,
           status: BusinessMemberStatus.ACTIVE,
         })
         await this.businessMembersRepo.save(member)
@@ -885,14 +930,16 @@ export class AuthService {
         user.id,
         user.email ?? undefined,
         user.phone ?? undefined,
-        invite.role,
+        invite.role ?? BusinessMemberRole.CASHIER,
         invite.businessId,
         'phase2',
+        undefined,
+        invite.roleId,
       )
       const authPermissions = await this.getAuthPermissions(invite.businessId)
 
       const business = await this.businessesRepo.findOne({ where: { id: invite.businessId } })
-      const nextStep = this.resolveBusinessNextStep(invite.role, business?.businessStatus ?? null)
+      const nextStep = this.resolveBusinessNextStep(invite.role ?? BusinessMemberRole.CASHIER, business?.businessStatus ?? null)
 
       return { nextStep, tokens, authPermissions }
     } catch (error) {
@@ -943,6 +990,102 @@ export class AuthService {
     }
   }
 
+  async listPendingInvites(businessId: string) {
+    this.logger.debug('List pending invites', 'AuthService', { businessId })
+
+    try {
+      const invites = await this.pendingInvitesRepo.find({
+        where: { businessId, acceptedAt: IsNull() },
+        relations: ['roleRecord'],
+        order: { createdAt: 'DESC' },
+      })
+
+      const now = new Date()
+      return {
+        invites: invites.map((invite) => ({
+          id: invite.id,
+          roleId: invite.roleId ?? '',
+          roleName: invite.roleRecord?.name ?? invite.role ?? '',
+          role: invite.role ?? null,
+          phone: invite.phone ?? null,
+          email: invite.email ?? null,
+          status: (invite.expiresAt < now ? 'expired' : 'pending') as 'expired' | 'pending',
+          expiresAt: invite.expiresAt.toISOString(),
+          createdAt: invite.createdAt.toISOString(),
+        })),
+      }
+    } catch (error) {
+      return this.handleServiceError('listPendingInvites', error, { businessId })
+    }
+  }
+
+  async resendInvite(userId: string, businessId: string, inviteId: string) {
+    this.logger.debug('Resend invite', 'AuthService', { userId, businessId, inviteId })
+
+    try {
+      const requester = await this.businessMembersRepo.findOne({
+        where: { businessId, userId, status: BusinessMemberStatus.ACTIVE },
+      })
+      if (!requester || (requester.role !== BusinessMemberRole.OWNER && requester.role !== BusinessMemberRole.MANAGER)) {
+        throw new AppForbiddenException(
+          await this.i18n.translate('errors.forbidden'),
+          'FORBIDDEN',
+        )
+      }
+
+      const invite = await this.pendingInvitesRepo.findOne({
+        where: { id: inviteId, businessId, acceptedAt: IsNull() },
+      })
+      if (!invite) {
+        throw new AppNotFoundException(
+          await this.i18n.translate('errors.not_found'),
+          'NOT_FOUND',
+        )
+      }
+
+      const newExpiry = new Date()
+      newExpiry.setDate(newExpiry.getDate() + 7)
+      await this.pendingInvitesRepo.update(invite.id, { expiresAt: newExpiry })
+
+      const appUrl = this.config.get<string>('APP_URL', { infer: true }) ?? ''
+      const inviteUrl = invite.token ? `${appUrl}/en/invite?token=${invite.token}` : null
+      return { resent: true, inviteUrl }
+    } catch (error) {
+      return this.handleServiceError('resendInvite', error, { userId, businessId, inviteId })
+    }
+  }
+
+  async cancelInvite(userId: string, businessId: string, inviteId: string) {
+    this.logger.debug('Cancel invite', 'AuthService', { userId, businessId, inviteId })
+
+    try {
+      const requester = await this.businessMembersRepo.findOne({
+        where: { businessId, userId, status: BusinessMemberStatus.ACTIVE },
+      })
+      if (!requester || (requester.role !== BusinessMemberRole.OWNER && requester.role !== BusinessMemberRole.MANAGER)) {
+        throw new AppForbiddenException(
+          await this.i18n.translate('errors.forbidden'),
+          'FORBIDDEN',
+        )
+      }
+
+      const invite = await this.pendingInvitesRepo.findOne({
+        where: { id: inviteId, businessId },
+      })
+      if (!invite) {
+        throw new AppNotFoundException(
+          await this.i18n.translate('errors.not_found'),
+          'NOT_FOUND',
+        )
+      }
+
+      await this.pendingInvitesRepo.delete(invite.id)
+      return { cancelled: true }
+    } catch (error) {
+      return this.handleServiceError('cancelInvite', error, { userId, businessId, inviteId })
+    }
+  }
+
   private async generateTokens(
     userId: string,
     email: string | undefined,
@@ -951,12 +1094,15 @@ export class AuthService {
     businessId: string | null,
     tokenType: 'phase1' | 'phase2',
     familyId?: string,
+    roleId?: string | null,
   ) {
     const payload: JwtPayload = {
       sub: userId,
       email,
       phone,
       role: role ?? null,
+      roleId: roleId ?? null,
+      isOwner: role === BusinessMemberRole.OWNER,
       businessId,
       type: tokenType,
     }
@@ -1054,6 +1200,7 @@ export class AuthService {
 
     const valid = await this.passwordManager.verifyOtp(code, record.codeHash)
     if (!valid) {
+      console.log('not valid code')
       throw new AppBadRequestException(
         await this.i18n.translate('auth.otp.invalid'),
         'INVALID_CODE',
@@ -1120,10 +1267,12 @@ export class AuthService {
         (invite.email && invite.email === user.email))
 
     if (inviteValid) {
+      await this.quotaService.assertWithinQuota(invite!.businessId, 'users')
       const member = this.businessMembersRepo.create({
         businessId: invite!.businessId,
         userId: user.id,
-        role: invite!.role,
+        role: invite!.role ?? BusinessMemberRole.CASHIER,
+        roleId: invite!.roleId,
         status: BusinessMemberStatus.ACTIVE,
       })
       await this.businessMembersRepo.save(member)
@@ -1286,7 +1435,7 @@ export class AuthService {
         effectivePermissions: [],
         specialPermissions: [],
         permissionsIssuedAt: Date.now(),
-        permissionsExpiresAt: Date.now() + 15 * 60 * 1000,
+        permissionsExpiresAt: null,
       }
     }
     return this.permissionsService.buildAuthPermissions(businessId)

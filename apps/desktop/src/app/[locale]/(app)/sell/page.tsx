@@ -12,7 +12,16 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { Badge, Button, NumberInput, PhoneInput, Spinner } from '@biztrack/ui'
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Badge,
+  Button,
+  NumberInput,
+  PhoneInput,
+  Spinner,
+} from '@biztrack/ui'
 import {
   PaymentMethod,
   type JwtPayload,
@@ -47,6 +56,7 @@ import {
 } from '@/services/products.local'
 import { createSaleLocal, SaleLocalError, type LocalSaleRecord } from '@/services/sales.local'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 
 type ViewMode = 'grid' | 'list'
 type Stage = 'cart' | 'payment' | 'success'
@@ -320,9 +330,14 @@ function padLine(left: string, right: string, cols: number) {
 }
 
 function sanitizeReceiptFileName(value: string) {
-  const cleaned = value
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+  const base = Array.from(value.trim())
+    .filter((character) => {
+      const code = character.charCodeAt(0)
+      return code >= 32 && code !== 127
+    })
+    .join('')
+  const cleaned = base
+    .replace(/[<>:"/\\|?*]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
 
@@ -796,6 +811,47 @@ function Icon({
   )
 }
 
+type ProductThumbnailProps = {
+  imageUrl: string | null | undefined
+  alt: string
+  fallback: string
+  className?: string
+  fallbackClassName?: string
+}
+
+function ProductThumbnail({
+  imageUrl,
+  alt,
+  fallback,
+  className,
+  fallbackClassName,
+}: ProductThumbnailProps) {
+  // The sell flow renders the same product thumbnail in the catalogue, list rows,
+  // and cart summary. Centralising it here keeps the fallback behavior identical
+  // everywhere and prevents the browser's broken-image placeholder from leaking
+  // out of tight rounded tiles when a stored URL no longer resolves.
+  return (
+    <Avatar
+      className={cn(
+        'overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-background to-secondary',
+        className,
+      )}
+    >
+      <AvatarImage src={imageUrl ?? undefined} alt={alt} className="h-full w-full object-cover" />
+      <AvatarFallback
+        className={cn(
+          'bg-gradient-to-br from-background to-secondary text-foreground/70',
+          fallbackClassName,
+        )}
+      >
+        <span aria-hidden="true" className="select-none leading-none">
+          {fallback}
+        </span>
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
 export default function SellPage() {
   const locale = useLocale()
   const t = useTranslations('app.sell')
@@ -803,6 +859,12 @@ export default function SellPage() {
   const businessName = useAuthStore((state) => state.businessName)
   const accessToken = useAuthStore((state) => state.accessToken)
   const role = useAuthStore((state) => state.role)
+  const planState = usePlanStore((state) => state.current)
+  const productsQuotaUsage =
+    planState?.quotaUsage.find((entry) => entry.resource === 'products' && !entry.unlimited) ?? null
+  const productsQuotaReached = Boolean(
+    productsQuotaUsage && productsQuotaUsage.used >= (productsQuotaUsage.limit ?? 0),
+  )
   const [products, setProducts] = useState<Product[]>([])
   const [productCount, setProductCount] = useState(0)
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -2088,17 +2150,13 @@ export default function SellPage() {
                             {copy.outOfStock}
                           </Badge>
                         ) : null}
-                        <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-background to-secondary text-4xl">
-                          {product.primaryImageUrl ? (
-                            <img
-                              src={product.primaryImageUrl}
-                              alt={product.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            pickEmoji(product)
-                          )}
-                        </div>
+                        <ProductThumbnail
+                          imageUrl={product.primaryImageUrl ?? product.imageUrl ?? null}
+                          alt={product.name}
+                          fallback={pickEmoji(product)}
+                          className="mb-3 aspect-square w-full"
+                          fallbackClassName="text-4xl"
+                        />
                         <div className="min-h-[2.75rem] text-sm font-semibold leading-5">
                           {product.name}
                         </div>
@@ -2139,17 +2197,13 @@ export default function SellPage() {
                             : 'hover:border-ring hover:bg-accent/40',
                         )}
                       >
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-background to-secondary text-2xl">
-                          {product.primaryImageUrl ? (
-                            <img
-                              src={product.primaryImageUrl}
-                              alt={product.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            pickEmoji(product)
-                          )}
-                        </div>
+                        <ProductThumbnail
+                          imageUrl={product.primaryImageUrl ?? product.imageUrl ?? null}
+                          alt={product.name}
+                          fallback={pickEmoji(product)}
+                          className="h-12 w-12 shrink-0"
+                          fallbackClassName="text-2xl"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold">{product.name}</div>
                           <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -2456,17 +2510,13 @@ export default function SellPage() {
                             className="rounded-[22px] border border-border bg-card p-3 shadow-sm"
                           >
                             <div className="flex items-start gap-3">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-gradient-to-br from-background to-secondary text-2xl">
-                                {item.imageUrl ? (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.name}
-                                    className="h-full w-full rounded-2xl object-cover"
-                                  />
-                                ) : (
-                                  item.emoji
-                                )}
-                              </div>
+                              <ProductThumbnail
+                                imageUrl={item.imageUrl}
+                                alt={item.name}
+                                fallback={item.emoji}
+                                className="h-12 w-12 shrink-0"
+                                fallbackClassName="text-2xl"
+                              />
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-semibold">{item.name}</div>
                                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2882,6 +2932,7 @@ export default function SellPage() {
           if (!open) setPendingScannedBarcode(null)
         }}
         onCreated={handleScannedProductCreated}
+        quotaReached={productsQuotaReached}
       />
 
       {holdsOpen ? (

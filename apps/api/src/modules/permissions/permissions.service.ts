@@ -1,92 +1,233 @@
 import { Injectable } from '@nestjs/common'
-import { SubscriptionPlan, Resource, type AuthPermissions, type SpecialPermission } from '@biztrack/types'
-import { RedisService } from '@/common/redis/redis.service'
-import { BusinessesRepository } from '@/modules/business/repositories/businesses.repository'
-import { PlanConfigsRepository } from './repositories/plan-configs.repository'
-import { BusinessOverridesRepository } from './repositories/business-overrides.repository'
+import {
+  DEFAULT_PLAN_QUOTAS,
+  DEFAULT_PLAN_RESOURCES,
+  type AuthPermissions,
+  type PlanQuotaMap,
+  type PlanQuotaResource,
+  type Resource,
+  type SpecialPermission,
+  SubscriptionPlan,
+} from '@biztrack/types'
 import { IsNull, MoreThan } from 'typeorm'
+import { RedisService } from '@/common/redis/redis.service'
+import { SubscriptionStatus, type Business } from '@/entities/business.entity'
+import { BusinessesRepository } from '@/modules/business/repositories/businesses.repository'
+import { BusinessOverridesRepository } from './repositories/business-overrides.repository'
+import { PlanConfigsRepository } from './repositories/plan-configs.repository'
+
+type BusinessEntitlementFields = Pick<
+  Business,
+  | 'id'
+  | 'plan'
+  | 'subscriptionStatus'
+  | 'trialStartedAt'
+  | 'trialEndsAt'
+  | 'currentPeriodStart'
+  | 'currentPeriodEnd'
+  | 'cancelAtPeriodEnd'
+>
+
+export type ResolvedBusinessEntitlement = {
+  selectedPlan: SubscriptionPlan
+  effectivePlan: SubscriptionPlan
+  entitlementValid: boolean
+  entitlementExpiresAt: number | null
+  business: BusinessEntitlementFields
+}
 
 @Injectable()
 export class PermissionsService {
   private readonly CACHE_TTL = 300
+  private readonly PLAN_ORDER = [
+    SubscriptionPlan.FREE,
+    SubscriptionPlan.SOLO,
+    SubscriptionPlan.BUSINESS,
+    SubscriptionPlan.PRO,
+  ]
 
   constructor(
-    private businessesRepo: BusinessesRepository,
-    private planConfigsRepo: PlanConfigsRepository,
-    private overridesRepo: BusinessOverridesRepository,
-    private redis: RedisService,
-  ) { }
+    private readonly businessesRepo: BusinessesRepository,
+    private readonly planConfigsRepo: PlanConfigsRepository,
+    private readonly overridesRepo: BusinessOverridesRepository,
+    private readonly redis: RedisService,
+  ) {}
 
   async getEffectivePermissions(businessId: string): Promise<Resource[]> {
     const cacheKey = `permissions:${businessId}`
     const cached = await this.redis.get(cacheKey)
-    if (cached) return JSON.parse(cached)
+    if (cached) {
+      return JSON.parse(cached) as Resource[]
+    }
 
-    const business = await this.businessesRepo.findOne({
-      where: { id: businessId },
-      select: { plan: true } as any,
-    })
-    if (!business) return []
+    const entitlement = await this.getBusinessEntitlement(businessId)
+    if (!entitlement) {
+      return []
+    }
 
-    const planConfig = await this.planConfigsRepo.findOne({
-      where: { plan: business.plan as SubscriptionPlan },
-    })
+    const [planConfig, overrides] = await Promise.all([
+      this.planConfigsRepo.findOne({ where: { plan: entitlement.effectivePlan } }),
+      this.getActiveOverrides(businessId),
+    ])
 
-    const overrides = await this.overridesRepo.find({
-      where: [
-        { businessId, expiresAt: IsNull() },
-        { businessId, expiresAt: MoreThan(new Date()) },
-      ] as any,
-    })
+    const permissions = new Set<Resource>(
+      (planConfig?.resources ?? DEFAULT_PLAN_RESOURCES[entitlement.effectivePlan]) as Resource[],
+    )
 
-    const permissions = new Set<string>(planConfig?.resources ?? [])
     for (const override of overrides) {
+      const resource = override.resource as Resource
       if (override.granted) {
-        permissions.add(override.resource)
+        permissions.add(resource)
       } else {
-        permissions.delete(override.resource)
+        permissions.delete(resource)
       }
     }
 
-    const result = Array.from(permissions) as Resource[]
-    await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result))
+    const result = Array.from(permissions)
+    const ttlSeconds = this.resolvePermissionCacheTtlSeconds(entitlement, overrides)
+    if (ttlSeconds !== null) {
+      await this.redis.setex(cacheKey, ttlSeconds, JSON.stringify(result))
+    }
+
     return result
   }
 
   async buildAuthPermissions(businessId: string): Promise<AuthPermissions> {
-    const business = await this.businessesRepo.findOne({
-      where: { id: businessId },
-      select: { plan: true } as any,
-    })
+    const entitlement = await this.getBusinessEntitlement(businessId)
+    if (!entitlement) {
+      const now = Date.now()
+      return {
+        plan: SubscriptionPlan.FREE,
+        effectivePermissions: [],
+        specialPermissions: [],
+        permissionsIssuedAt: now,
+        permissionsExpiresAt: null,
+      }
+    }
 
-    const effectivePermissions = await this.getEffectivePermissions(businessId)
+    const [effectivePermissions, overrides] = await Promise.all([
+      this.getEffectivePermissions(businessId),
+      this.getActiveOverrides(businessId),
+    ])
 
-    const overrides = await this.overridesRepo.find({
-      where: [
-        { businessId, expiresAt: IsNull() },
-        { businessId, expiresAt: MoreThan(new Date()) },
-      ] as any,
-    })
-
-    const specialPermissions: SpecialPermission[] = overrides.map((o) => ({
-      resource: o.resource as Resource,
-      grantedAt: o.grantedAt.getTime(),
-      expiresAt: o.expiresAt?.getTime() ?? null,
-      grantedBy: o.grantedBy,
-      reason: o.reason,
-      isRevocation: !o.granted,
+    const specialPermissions: SpecialPermission[] = overrides.map((override) => ({
+      resource: override.resource as Resource,
+      grantedAt: override.grantedAt.getTime(),
+      expiresAt: override.expiresAt?.getTime() ?? null,
+      grantedBy: override.grantedBy,
+      reason: override.reason,
+      isRevocation: !override.granted,
     }))
 
-    const now = Date.now()
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000
-
     return {
-      plan: business?.plan ?? SubscriptionPlan.FREE,
+      // `plan` intentionally remains the selected plan. Consumers that need the
+      // currently-usable plan can compare `permissionsExpiresAt` with "now" or
+      // ask the dedicated plan-state endpoint for the server-computed fallback.
+      plan: entitlement.selectedPlan,
       effectivePermissions,
       specialPermissions,
-      permissionsIssuedAt: now,
-      permissionsExpiresAt: now + thirtyDays,
+      permissionsIssuedAt: Date.now(),
+      permissionsExpiresAt: entitlement.entitlementExpiresAt,
     }
+  }
+
+  async getBusinessEntitlement(businessId: string): Promise<ResolvedBusinessEntitlement | null> {
+    const business = await this.businessesRepo.findOne({
+      where: { id: businessId },
+      select: {
+        id: true,
+        plan: true,
+        subscriptionStatus: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+        cancelAtPeriodEnd: true,
+      } as any,
+    })
+
+    return business ? this.resolveBusinessEntitlement(business) : null
+  }
+
+  resolveBusinessEntitlement(
+    business: BusinessEntitlementFields,
+    nowMs: number = Date.now(),
+  ): ResolvedBusinessEntitlement {
+    const selectedPlan = business.plan ?? SubscriptionPlan.FREE
+    if (selectedPlan === SubscriptionPlan.FREE) {
+      return {
+        selectedPlan,
+        effectivePlan: SubscriptionPlan.FREE,
+        entitlementValid: true,
+        entitlementExpiresAt: null,
+        business,
+      }
+    }
+
+    const trialEndsAtMs = business.trialEndsAt?.getTime() ?? null
+    const periodEndsAtMs = business.currentPeriodEnd?.getTime() ?? null
+
+    if (business.subscriptionStatus === SubscriptionStatus.TRIAL) {
+      const entitlementValid = trialEndsAtMs !== null && nowMs <= trialEndsAtMs
+      return {
+        selectedPlan,
+        effectivePlan: entitlementValid ? selectedPlan : SubscriptionPlan.FREE,
+        entitlementValid,
+        entitlementExpiresAt: trialEndsAtMs,
+        business,
+      }
+    }
+
+    if (
+      business.subscriptionStatus === SubscriptionStatus.PAST_DUE ||
+      business.subscriptionStatus === SubscriptionStatus.CANCELLED ||
+      business.subscriptionStatus === SubscriptionStatus.SUSPENDED
+    ) {
+      const entitlementValid = periodEndsAtMs !== null && nowMs <= periodEndsAtMs
+      return {
+        selectedPlan,
+        effectivePlan: entitlementValid ? selectedPlan : SubscriptionPlan.FREE,
+        entitlementValid,
+        entitlementExpiresAt: periodEndsAtMs,
+        business,
+      }
+    }
+
+    if (periodEndsAtMs !== null) {
+      const entitlementValid = nowMs <= periodEndsAtMs
+      return {
+        selectedPlan,
+        effectivePlan: entitlementValid ? selectedPlan : SubscriptionPlan.FREE,
+        entitlementValid,
+        entitlementExpiresAt: periodEndsAtMs,
+        business,
+      }
+    }
+
+    return {
+      selectedPlan,
+      effectivePlan: selectedPlan,
+      entitlementValid: true,
+      entitlementExpiresAt: null,
+      business,
+    }
+  }
+
+  async getQuotaMapForPlan(plan: SubscriptionPlan): Promise<PlanQuotaMap> {
+    const config = await this.planConfigsRepo.findOne({ where: { plan } })
+    return this.normalizeQuotaMap(plan, config?.quotas)
+  }
+
+  async getQuotaMapForBusiness(businessId: string): Promise<PlanQuotaMap> {
+    const entitlement = await this.getBusinessEntitlement(businessId)
+    if (!entitlement) {
+      return DEFAULT_PLAN_QUOTAS[SubscriptionPlan.FREE]
+    }
+
+    const config = await this.planConfigsRepo.findOne({
+      where: { plan: entitlement.effectivePlan },
+    })
+    return this.normalizeQuotaMap(entitlement.effectivePlan, config?.quotas)
   }
 
   async invalidateCache(businessId: string): Promise<void> {
@@ -94,12 +235,81 @@ export class PermissionsService {
   }
 
   async getMinimumPlanFor(resource: Resource): Promise<SubscriptionPlan> {
-    const configs = await this.planConfigsRepo.find({ order: { plan: 'ASC' as any } })
-    const planOrder = [SubscriptionPlan.FREE, SubscriptionPlan.SOLO, SubscriptionPlan.BUSINESS, SubscriptionPlan.PRO]
-    for (const plan of planOrder) {
-      const config = configs.find((c) => c.plan === plan)
-      if (config?.resources?.includes(resource)) return plan
+    const configs = await this.planConfigsRepo.find()
+
+    for (const plan of this.PLAN_ORDER) {
+      const config = configs.find((candidate) => candidate.plan === plan)
+      const resources = (config?.resources ?? DEFAULT_PLAN_RESOURCES[plan]) as Resource[]
+      if (resources.includes(resource)) {
+        return plan
+      }
     }
+
     return SubscriptionPlan.PRO
+  }
+
+  async getMinimumPlanForQuota(
+    resource: PlanQuotaResource,
+    requiredUsage: number,
+  ): Promise<SubscriptionPlan | null> {
+    for (const plan of this.PLAN_ORDER) {
+      const quotas = await this.getQuotaMapForPlan(plan)
+      const limit = quotas[resource]
+      if (limit === null || limit >= requiredUsage) {
+        return plan
+      }
+    }
+
+    return null
+  }
+
+  private async getActiveOverrides(businessId: string) {
+    return this.overridesRepo.find({
+      where: [
+        { businessId, expiresAt: IsNull() },
+        { businessId, expiresAt: MoreThan(new Date()) },
+      ] as any,
+    })
+  }
+
+  private normalizeQuotaMap(
+    plan: SubscriptionPlan,
+    quotas: Partial<Record<PlanQuotaResource, number | null>> | null | undefined,
+  ): PlanQuotaMap {
+    const fallback = DEFAULT_PLAN_QUOTAS[plan]
+    return {
+      products: quotas?.products ?? fallback.products,
+      contacts: quotas?.contacts ?? fallback.contacts,
+      categories: quotas?.categories ?? fallback.categories,
+      users: quotas?.users ?? fallback.users,
+    }
+  }
+
+  private resolvePermissionCacheTtlSeconds(
+    entitlement: ResolvedBusinessEntitlement,
+    overrides: Array<{ expiresAt?: Date | null }>,
+  ): number | null {
+    const nowMs = Date.now()
+    let ttlSeconds = this.CACHE_TTL
+
+    if (entitlement.entitlementExpiresAt !== null) {
+      ttlSeconds = Math.min(
+        ttlSeconds,
+        Math.floor((entitlement.entitlementExpiresAt - nowMs) / 1000),
+      )
+    }
+
+    for (const override of overrides) {
+      if (!override.expiresAt) {
+        continue
+      }
+
+      ttlSeconds = Math.min(
+        ttlSeconds,
+        Math.floor((override.expiresAt.getTime() - nowMs) / 1000),
+      )
+    }
+
+    return ttlSeconds > 0 ? ttlSeconds : null
   }
 }

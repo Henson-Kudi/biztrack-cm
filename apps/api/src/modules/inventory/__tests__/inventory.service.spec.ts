@@ -9,6 +9,7 @@ import { RestockPayment } from '@/entities/restock-payment.entity'
 import { RestockRecord } from '@/entities/restock-record.entity'
 import {
   InventoryMovementType,
+  PaymentMethod,
   StockAdjustmentType,
 } from '@biztrack/types'
 import { InventoryService } from '../services/inventory.service'
@@ -29,9 +30,9 @@ const makeService = () => {
   const transactionRestockRecordRepo = {
     create: jest.fn((input) => input),
     save: jest.fn(async (input) => ({
-      id: 'restock-1',
-      createdAt: new Date('2026-04-18T08:00:00.000Z'),
       ...input,
+      id: input.id ?? 'restock-1',
+      createdAt: input.createdAt ?? new Date('2026-04-18T08:00:00.000Z'),
     })),
   }
   const transactionRestockItemRepo = {
@@ -120,6 +121,7 @@ const makeService = () => {
   )
 
   return {
+    debtsService,
     service,
     inventoryLevelsQb,
     movementsQb,
@@ -166,6 +168,7 @@ describe('InventoryService', () => {
 
     const result = await service.restock('business-1', 'user-1', {
       notes: 'Morning delivery',
+      totalAmount: 20,
       items: [{ productId: 'product-1', quantity: 2 }],
     })
 
@@ -178,6 +181,39 @@ describe('InventoryService', () => {
       }),
     )
     expect(result.items).toEqual([{ productId: 'product-1', quantity: 2, newQuantity: 2 }])
+  })
+
+  it('uses the saved restock id as the debt reference when credit restocks omit a reference number', async () => {
+    const {
+      debtsService,
+      service,
+      transactionProductRepo,
+      transactionInventoryRepo,
+    } = makeService()
+
+    transactionProductRepo.findOne.mockResolvedValue({
+      id: 'product-1',
+      businessId: 'business-1',
+      trackInventory: true,
+    })
+    transactionInventoryRepo.findOne.mockResolvedValue(null)
+
+    await service.restock('business-1', 'user-1', {
+      supplierId: '5d6eb154-b738-4cc9-9cd6-b65f1743874b',
+      totalAmount: 100,
+      payments: [{ method: PaymentMethod.CASH, amount: 40 }],
+      items: [{ productId: 'product-1', quantity: 2 }],
+    })
+
+    expect(debtsService.createSourceDebt).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        businessId: 'business-1',
+        contactId: '5d6eb154-b738-4cc9-9cd6-b65f1743874b',
+        sourceReference: 'restock-1',
+        originalAmount: 60,
+      }),
+    )
   })
 
   it('paginates and filters cross-product movement history', async () => {

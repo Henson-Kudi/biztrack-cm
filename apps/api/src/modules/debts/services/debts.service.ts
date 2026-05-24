@@ -603,6 +603,7 @@ export class DebtsService {
     params: CreateSourceDebtParams,
   ): Promise<DebtEntity | null> {
     const originalAmount = this.roundMoney(params.originalAmount)
+    const sourceReference = this.normalizeOptionalString(params.sourceReference) ?? params.sourceId
     if (originalAmount <= 0) {
       return null
     }
@@ -630,7 +631,7 @@ export class DebtsService {
         direction: params.direction,
         sourceType: params.sourceType,
         sourceId: params.sourceId,
-        sourceReference: params.sourceReference,
+        sourceReference,
         originalAmount,
         status: DebtStatus.OUTSTANDING,
         dueDate: params.dueDate ?? null,

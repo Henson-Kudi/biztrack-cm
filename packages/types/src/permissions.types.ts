@@ -45,6 +45,18 @@ export enum Resource {
 
   DESKTOP_ACCESS = 'DESKTOP_ACCESS',
 
+  // These placeholders come from the plan-permissions spec. Some of the
+  // underlying features do not exist yet, but adding stable resource IDs now
+  // lets future modules plug into the same subscription model without a later
+  // rename/migration.
+  OPENING_BALANCES = 'OPENING_BALANCES',
+  PREORDERS = 'PREORDERS',
+  DEPOSITS = 'DEPOSITS',
+  CHARGES_MULTIPLE = 'CHARGES_MULTIPLE',
+  REPORTS_FINANCIAL = 'REPORTS_FINANCIAL',
+  CUSTOM_ROLES = 'CUSTOM_ROLES',
+  AGENT_TRACK = 'AGENT_TRACK',
+
   STAFF_INVITE = 'STAFF_INVITE',
   STAFF_MANAGE = 'STAFF_MANAGE',
   STAFF_LIMIT_3 = 'STAFF_LIMIT_3',
@@ -83,6 +95,125 @@ export const FREE_PERMISSIONS: Resource[] = [
   Resource.RECEIPTS_WHATSAPP,
 ]
 
+export const PLAN_QUOTA_RESOURCES = ['products', 'contacts', 'categories', 'users'] as const
+
+export type PlanQuotaResource = (typeof PLAN_QUOTA_RESOURCES)[number]
+
+export type PlanQuotaMap = Record<PlanQuotaResource, number | null>
+
+export interface PlanQuotaUsage {
+  resource: PlanQuotaResource
+  limit: number | null
+  used: number
+  remaining: number | null
+  unlimited: boolean
+  requiredPlan: SubscriptionPlan | null
+}
+
+const unique = <T,>(values: T[]) => Array.from(new Set(values))
+
+// The boolean-resource matrix intentionally preserves current BizTrack-specific
+// extras such as scanner/desktop flags while also introducing the documented
+// placeholder features from the new plan-permissions spec.
+export const DEFAULT_PLAN_RESOURCES: Record<SubscriptionPlan, Resource[]> = {
+  [SubscriptionPlan.FREE]: unique([...FREE_PERMISSIONS]),
+  [SubscriptionPlan.SOLO]: unique([
+    ...FREE_PERMISSIONS,
+    Resource.OPENING_BALANCES,
+    Resource.PREORDERS,
+    Resource.DEPOSITS,
+    Resource.CHARGES_MULTIPLE,
+    Resource.REPORTS_FINANCIAL,
+    Resource.REPORTS_WEEKLY,
+    Resource.REPORTS_MONTHLY,
+    Resource.REPORTS_EXPORT_PDF,
+    Resource.REPORTS_EXPORT_CSV,
+    Resource.PRODUCTS_IMPORT_CSV,
+    Resource.EXPENSES_CATEGORIES,
+    Resource.SCANNER_CAMERA,
+    Resource.DESKTOP_ACCESS,
+  ]),
+  [SubscriptionPlan.BUSINESS]: unique([
+    ...FREE_PERMISSIONS,
+    Resource.OPENING_BALANCES,
+    Resource.PREORDERS,
+    Resource.DEPOSITS,
+    Resource.CHARGES_MULTIPLE,
+    Resource.REPORTS_FINANCIAL,
+    Resource.REPORTS_WEEKLY,
+    Resource.REPORTS_MONTHLY,
+    Resource.REPORTS_EXPORT_PDF,
+    Resource.REPORTS_EXPORT_CSV,
+    Resource.PRODUCTS_IMPORT_CSV,
+    Resource.PRODUCTS_UNLIMITED,
+    Resource.EXPENSES_CATEGORIES,
+    Resource.SCANNER_CAMERA,
+    Resource.DESKTOP_ACCESS,
+    Resource.STAFF_INVITE,
+    Resource.STAFF_MANAGE,
+    Resource.CUSTOM_ROLES,
+    Resource.BRANCHES_MULTI,
+    Resource.BRANCHES_DASHBOARD,
+    Resource.BRANCHES_REPORTS,
+  ]),
+  [SubscriptionPlan.PRO]: unique([
+    ...FREE_PERMISSIONS,
+    Resource.OPENING_BALANCES,
+    Resource.PREORDERS,
+    Resource.DEPOSITS,
+    Resource.CHARGES_MULTIPLE,
+    Resource.REPORTS_FINANCIAL,
+    Resource.REPORTS_WEEKLY,
+    Resource.REPORTS_MONTHLY,
+    Resource.REPORTS_EXPORT_PDF,
+    Resource.REPORTS_EXPORT_CSV,
+    Resource.PRODUCTS_IMPORT_CSV,
+    Resource.PRODUCTS_UNLIMITED,
+    Resource.EXPENSES_CATEGORIES,
+    Resource.SCANNER_CAMERA,
+    Resource.SCANNER_USB,
+    Resource.DESKTOP_ACCESS,
+    Resource.STAFF_INVITE,
+    Resource.STAFF_MANAGE,
+    Resource.CUSTOM_ROLES,
+    Resource.BRANCHES_MULTI,
+    Resource.BRANCHES_DASHBOARD,
+    Resource.BRANCHES_REPORTS,
+    Resource.API_ACCESS,
+    Resource.AGENT_TRACK,
+  ]),
+}
+
+// Quotas are the v1 source of truth for count-based restrictions. We keep the
+// legacy pseudo-limit resources in the enum for compatibility, but enforcement
+// now happens through these numeric limits instead of boolean flags.
+export const DEFAULT_PLAN_QUOTAS: Record<SubscriptionPlan, PlanQuotaMap> = {
+  [SubscriptionPlan.FREE]: {
+    products: 50,
+    contacts: 20,
+    categories: 10,
+    users: 1,
+  },
+  [SubscriptionPlan.SOLO]: {
+    products: 200,
+    contacts: null,
+    categories: 50,
+    users: 1,
+  },
+  [SubscriptionPlan.BUSINESS]: {
+    products: null,
+    contacts: null,
+    categories: null,
+    users: 5,
+  },
+  [SubscriptionPlan.PRO]: {
+    products: null,
+    contacts: null,
+    categories: null,
+    users: null,
+  },
+}
+
 export interface SpecialPermission {
   resource: Resource
   grantedAt: number
@@ -97,5 +228,8 @@ export interface AuthPermissions {
   effectivePermissions: Resource[]
   specialPermissions: SpecialPermission[]
   permissionsIssuedAt: number
-  permissionsExpiresAt: number
+  // `null` means the current entitlement does not expire. A numeric timestamp
+  // means "the selected plan is valid until this point, after which the client
+  // must fall back to FREE semantics if it cannot revalidate online".
+  permissionsExpiresAt: number | null
 }

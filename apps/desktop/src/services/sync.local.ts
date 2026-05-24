@@ -35,13 +35,15 @@ export function buildOutboxUpsertOperation(
         attempt_count,
         last_attempt_at,
         last_error,
+        last_error_details,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, 'UPSERT', ?, 'pending', 0, NULL, NULL, ?, ?)
+      ) VALUES (?, ?, ?, 'UPSERT', ?, 'pending', 0, NULL, NULL, NULL, ?, ?)
       ON CONFLICT(entity, record_id) DO UPDATE SET
         payload = excluded.payload,
         status = 'pending',
         last_error = NULL,
+        last_error_details = NULL,
         updated_at = excluded.updated_at
     `,
     params: [

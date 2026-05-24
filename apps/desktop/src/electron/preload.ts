@@ -50,10 +50,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       silent?: boolean
     }) => ipcRenderer.invoke('print:receipt', data),
   },
-  // Native file sharing
+  // Native sharing
   share: {
     file: (data: { buffer: number[]; filename: string; mimeType?: string }) =>
       ipcRenderer.invoke('share:file', data),
+    url: (payload: { url: string; text?: string; title?: string }) =>
+      ipcRenderer.invoke('share:url', payload),
   },
   documents: {
     exportPdf: (data: { html?: string; filename?: string }) =>
@@ -67,6 +69,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App info
   app: {
     version: () => ipcRenderer.invoke('app:version'),
+    openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
+    isWhatsAppInstalled: () => ipcRenderer.invoke('app:is-whatsapp-installed'),
   },
   // Secure storage
   secureStore: {

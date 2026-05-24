@@ -1,7 +1,7 @@
 'use client'
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { Button, Spinner } from '@biztrack/ui'
+import { Spinner } from '@biztrack/ui'
 import { useTranslations } from 'next-intl'
 import { ContactPickerDialog } from '@/components/contacts/ContactPickerDialog'
 import {

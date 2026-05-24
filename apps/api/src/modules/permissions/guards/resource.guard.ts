@@ -1,9 +1,10 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, SetMetadata } from '@nestjs/common'
+import { CanActivate, ExecutionContext, Injectable, SetMetadata } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { PermissionsService } from '../permissions.service'
 import type { Resource } from '@biztrack/types'
 import { I18nService } from 'nestjs-i18n'
 import type { I18nTranslations } from '@/i18n/i18n.types'
+import { AppForbiddenException } from '@/common/exceptions/app-exceptions'
 
 export const RequireResource = (resource: Resource) => SetMetadata('required_resource', resource)
 
@@ -21,19 +22,26 @@ export class ResourceGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest()
     const businessId = req.user?.businessId
-    if (!businessId) throw new ForbiddenException()
+    if (!businessId) {
+      throw new AppForbiddenException()
+    }
 
     const permissions = await this.permissionsService.getEffectivePermissions(businessId)
     if (!permissions.includes(required)) {
       const requiredPlan = await this.permissionsService.getMinimumPlanFor(required)
-      throw new ForbiddenException({
-        code: 'PLAN_UPGRADE_REQUIRED',
-        resource: required,
-        requiredPlan,
-        message: await this.i18n.translate('errors.plan_upgrade_required', {
+      // Boolean feature denial stays a 403 even after quotas are introduced.
+      // That keeps "this feature is not on your plan" separate from
+      // "this feature is on your plan but you consumed the limit".
+      throw new AppForbiddenException(
+        await this.i18n.translate('errors.plan_upgrade_required', {
           args: { plan: requiredPlan },
         }),
-      })
+        'PLAN_UPGRADE_REQUIRED',
+        {
+          resource: required,
+          requiredPlan,
+        },
+      )
     }
 
     return true

@@ -2,6 +2,7 @@
 
 import {
   PaymentMethod,
+  Resource,
   type CreateExpenseRequest,
   type Expense,
   type ExpenseCategory,
@@ -9,6 +10,7 @@ import {
   type ExpensesQuery,
   type UpdateExpenseRequest,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess } from '@/lib/plan-access'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
 import { assertBusinessId } from './products.local'
 import { buildOutboxUpsertOperation, requestBackgroundSync } from './sync.local'
@@ -198,6 +200,7 @@ export async function createExpenseLocal(
   payload: CreateExpenseRequest,
 ) {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.EXPENSES_CREATE)
   const normalizedCategory = await resolveExpenseCategory(normalizedBusinessId, payload.categoryId)
   const description = normalizeDescription(payload.description)
   const amount = normalizeAmount(payload.amount)
@@ -263,6 +266,7 @@ export async function updateExpenseLocal(
   payload: UpdateExpenseRequest,
 ) {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.EXPENSES_EDIT)
   const existing = await getExpenseLocal(normalizedBusinessId, expenseId)
   const categoryId = payload.categoryId
     ? (await resolveExpenseCategory(normalizedBusinessId, payload.categoryId)).id
@@ -334,6 +338,7 @@ export async function updateExpenseLocal(
 
 export async function deleteExpenseLocal(businessId: string, expenseId: string) {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.EXPENSES_DELETE)
   await getExpenseLocal(normalizedBusinessId, expenseId)
   const now = new Date().toISOString()
 

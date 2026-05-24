@@ -1,13 +1,20 @@
 import 'reflect-metadata'
 import { AppDataSource } from '../data-source'
 import { PlanConfig } from '@/entities/plan-config.entity'
-import { Resource, FREE_PERMISSIONS, SubscriptionPlan } from '@biztrack/types'
+import {
+  DEFAULT_PLAN_QUOTAS,
+  DEFAULT_PLAN_RESOURCES,
+  SubscriptionPlan,
+  type PlanQuotaMap,
+  type Resource,
+} from '@biztrack/types'
 
 type PlanSeed = {
   plan: SubscriptionPlan
   displayName: string
   priceXAF: number
   resources: Resource[]
+  quotas: PlanQuotaMap
 }
 
 const seedPlans: PlanSeed[] = [
@@ -15,72 +22,29 @@ const seedPlans: PlanSeed[] = [
     plan: SubscriptionPlan.FREE,
     displayName: 'Free',
     priceXAF: 0,
-    resources: [...FREE_PERMISSIONS],
+    resources: [...DEFAULT_PLAN_RESOURCES[SubscriptionPlan.FREE]],
+    quotas: DEFAULT_PLAN_QUOTAS[SubscriptionPlan.FREE],
   },
   {
     plan: SubscriptionPlan.SOLO,
     displayName: 'Solo',
     priceXAF: 15000,
-    resources: [
-      ...FREE_PERMISSIONS,
-      Resource.PRODUCTS_IMPORT_CSV,
-      Resource.REPORTS_WEEKLY,
-      Resource.REPORTS_MONTHLY,
-      Resource.REPORTS_EXPORT_PDF,
-      Resource.REPORTS_EXPORT_CSV,
-      Resource.EXPENSES_CATEGORIES,
-      Resource.SCANNER_CAMERA,
-      Resource.DESKTOP_ACCESS,
-      Resource.STAFF_LIMIT_3,
-    ],
+    resources: [...DEFAULT_PLAN_RESOURCES[SubscriptionPlan.SOLO]],
+    quotas: DEFAULT_PLAN_QUOTAS[SubscriptionPlan.SOLO],
   },
   {
     plan: SubscriptionPlan.BUSINESS,
     displayName: 'Business',
     priceXAF: 35000,
-    resources: [
-      ...FREE_PERMISSIONS,
-      Resource.PRODUCTS_UNLIMITED,
-      Resource.PRODUCTS_IMPORT_CSV,
-      Resource.REPORTS_WEEKLY,
-      Resource.REPORTS_MONTHLY,
-      Resource.REPORTS_EXPORT_PDF,
-      Resource.REPORTS_EXPORT_CSV,
-      Resource.EXPENSES_CATEGORIES,
-      Resource.SCANNER_CAMERA,
-      Resource.DESKTOP_ACCESS,
-      Resource.STAFF_INVITE,
-      Resource.STAFF_MANAGE,
-      Resource.STAFF_UNLIMITED,
-      Resource.BRANCHES_MULTI,
-      Resource.BRANCHES_DASHBOARD,
-      Resource.BRANCHES_REPORTS,
-    ],
+    resources: [...DEFAULT_PLAN_RESOURCES[SubscriptionPlan.BUSINESS]],
+    quotas: DEFAULT_PLAN_QUOTAS[SubscriptionPlan.BUSINESS],
   },
   {
     plan: SubscriptionPlan.PRO,
     displayName: 'Pro',
     priceXAF: 60000,
-    resources: [
-      ...FREE_PERMISSIONS,
-      Resource.PRODUCTS_UNLIMITED,
-      Resource.PRODUCTS_IMPORT_CSV,
-      Resource.REPORTS_WEEKLY,
-      Resource.REPORTS_MONTHLY,
-      Resource.REPORTS_EXPORT_PDF,
-      Resource.REPORTS_EXPORT_CSV,
-      Resource.EXPENSES_CATEGORIES,
-      Resource.SCANNER_CAMERA,
-      Resource.SCANNER_USB,
-      Resource.DESKTOP_ACCESS,
-      Resource.STAFF_INVITE,
-      Resource.STAFF_MANAGE,
-      Resource.STAFF_UNLIMITED,
-      Resource.BRANCHES_MULTI,
-      Resource.BRANCHES_DASHBOARD,
-      Resource.BRANCHES_REPORTS,
-      Resource.API_ACCESS,
-    ],
+    resources: [...DEFAULT_PLAN_RESOURCES[SubscriptionPlan.PRO]],
+    quotas: DEFAULT_PLAN_QUOTAS[SubscriptionPlan.PRO],
   },
 ]
 
@@ -105,6 +69,7 @@ async function main() {
         displayName: plan.displayName,
         priceXAF: plan.priceXAF,
         resources: plan.resources.length,
+        quotas: JSON.stringify(plan.quotas),
         updatedBy: plan.updatedBy,
       })),
     )
@@ -125,6 +90,7 @@ async function main() {
         displayName: config.displayName,
         priceXAF: config.priceXAF,
         resources,
+        quotas: config.quotas,
         updatedBy,
       })
       console.log(`Updated ${config.plan}`)
@@ -135,6 +101,7 @@ async function main() {
           displayName: config.displayName,
           priceXAF: config.priceXAF,
           resources,
+          quotas: config.quotas,
           updatedBy,
         }),
       )
@@ -150,6 +117,7 @@ async function main() {
       displayName: plan.displayName,
       priceXAF: plan.priceXAF,
       resources: plan.resources.length,
+      quotas: JSON.stringify(plan.quotas),
       updatedBy: plan.updatedBy,
     })),
   )

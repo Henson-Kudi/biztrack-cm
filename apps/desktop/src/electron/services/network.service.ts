@@ -2,13 +2,13 @@ import { EventEmitter } from 'events'
 import { createHttpClient } from '@biztrack/http-client'
 import { net } from 'electron'
 import type { NetworkQuality, NetworkSnapshot } from '@biztrack/types'
+import { API_BASE_URL } from '../config/api-base-url'
 
 type ProbeSample = {
   success: boolean
   latencyMs: number | null
 }
 
-const DEFAULT_API_URL = 'http://localhost:3001/api/v1'
 const SAMPLE_LIMIT = 5
 const PROBE_TIMEOUT_MS = 5_000
 
@@ -26,7 +26,7 @@ export class NetworkService extends EventEmitter {
   private readonly probeUrl: string
   private readonly samples: ProbeSample[] = []
 
-  constructor(apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL) {
+  constructor(apiBaseUrl = API_BASE_URL) {
     super()
     const normalizedBase = apiBaseUrl.replace(/\/+$/, '')
     this.probeUrl = `${normalizedBase}/health`

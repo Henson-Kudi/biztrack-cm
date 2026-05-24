@@ -10,6 +10,7 @@ const TOKENS_KEY = 'auth.tokens'
 const PASSWORD_HASH_KEY = 'auth.passwordHash'
 const LAST_BUSINESS_KEY = 'auth.lastBusinessId'
 const LAST_ROLE_KEY = 'auth.lastRole'
+const SYNC_CREDENTIAL_KEY = 'sync.deviceCredential'
 
 async function nudgeDesktopSync() {
   if (typeof window === 'undefined' || !window.electronAPI) {
@@ -105,6 +106,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   clearSession: async () => {
     await secureStore.delete(TOKENS_KEY)
+    // Sync credentials intentionally outlive expiring auth tokens, but an
+    // explicit logout should still tear them down so background sync stops.
+    await secureStore.delete(SYNC_CREDENTIAL_KEY)
     set({
       isOffline: false,
       accessToken: null,

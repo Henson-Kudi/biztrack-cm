@@ -7,9 +7,11 @@ import { UsersModule } from '@/modules/users/users.module'
 import { BusinessModule } from '@/modules/business/business.module'
 import { ProductsModule } from '@/modules/products/products.module'
 import { SyncModule } from '@/modules/sync/sync.module'
+import { RolesModule } from '@/modules/roles/roles.module'
 import { PlansModule } from '@/modules/plans/plans.module'
 import { PermissionsModule } from '@/modules/permissions/permissions.module'
 import { SubscriptionsModule } from '@/modules/subscriptions/subscriptions.module'
+import { NotificationsModule } from '@/modules/notifications/notifications.module'
 import { InventoryModule } from '@/modules/inventory/inventory.module'
 import { ExpensesModule } from '@/modules/expenses/expenses.module'
 import { DebtsModule } from '@/modules/debts/debts.module'
@@ -94,9 +96,11 @@ function resolveI18nPath() {
     DebtsModule,
     SalesModule,
     SyncModule,
+    RolesModule,
     PermissionsModule,
     PlansModule,
     SubscriptionsModule,
+    NotificationsModule,
     RedisModule,
   ],
   providers: [

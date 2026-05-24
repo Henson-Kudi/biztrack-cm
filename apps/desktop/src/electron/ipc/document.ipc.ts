@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { mkdir, writeFile } from 'fs/promises'
-import { basename, dirname, join, parse } from 'path'
+import { basename, dirname, join } from 'path'
 
 type ExportPdfPayload = {
   html?: string
@@ -103,24 +103,28 @@ export function registerDocumentIpc() {
 }
 
 function sanitizePdfFileName(filename: string) {
-  const cleaned = basename(filename || 'document.pdf')
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .trim()
+  const cleaned = sanitizeBaseFileName(filename || 'document.pdf')
 
   const safeName = cleaned || 'document.pdf'
   return safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`
 }
 
 function sanitizeFileName(filename: string) {
-  const cleaned = basename(filename || 'document.txt')
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+  const cleaned = sanitizeBaseFileName(filename || 'document.txt')
+
+  return cleaned || 'document.txt'
+}
+
+function sanitizeBaseFileName(filename: string) {
+  const withoutControlChars = Array.from(basename(filename)).map((char) =>
+    char.charCodeAt(0) < 32 ? '-' : char,
+  ).join('')
+
+  return withoutControlChars
+    .replace(/[<>:"/\\|?*]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim()
-
-  return cleaned || 'document.txt'
 }
 
 function sanitizeDialogFilters(filters: ExportFilePayload['filters']) {

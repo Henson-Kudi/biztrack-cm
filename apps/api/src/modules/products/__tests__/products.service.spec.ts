@@ -46,6 +46,7 @@ const makeService = () => {
   const slugService = { generateProductSlug: jest.fn() }
   const skuService = { generate: jest.fn(), validateAndNormalize: jest.fn() }
   const barcodeService = { generateFromSKU: jest.fn(), validateAndNormalize: jest.fn() }
+  const quotaService = { assertWithinQuota: jest.fn() }
   const i18n = { translate: jest.fn(async (key: string) => key) }
   const logger = {
     setContext: jest.fn(),
@@ -65,6 +66,7 @@ const makeService = () => {
     slugService as any,
     skuService as any,
     barcodeService as any,
+    quotaService as any,
     i18n as any,
     logger as any,
   )

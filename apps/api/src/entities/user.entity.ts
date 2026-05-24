@@ -9,6 +9,7 @@ import { Expense } from './expense.entity'
 import { StockMovement } from './stock-movement.entity'
 import { Locale } from '@/common/enums/locale.enum'
 import { BusinessMember } from './business-member.entity'
+import { SyncDeviceSession } from './sync-device-session.entity'
 
 export enum UserStatus {
   PENDING = 'PENDING',
@@ -91,6 +92,9 @@ export class User extends BaseEntity {
 
   @OneToMany(() => RefreshToken, (token) => token.user)
   refreshTokens?: RefreshToken[]
+
+  @OneToMany(() => SyncDeviceSession, (session) => session.user)
+  syncDeviceSessions?: SyncDeviceSession[]
 
   @OneToMany(() => BusinessMember, (member) => member.user)
   memberships?: BusinessMember[]

@@ -5,6 +5,7 @@ import {
   DebtDirection,
   DebtStatus,
   InventoryMovementType,
+  Resource,
   StockAdjustmentType,
   UnitOfMeasureType,
   type AdjustInventoryRequest,
@@ -26,6 +27,7 @@ import {
   type InventoryRestockSyncPayload,
   type InventoryThresholdSyncPayload,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess } from '@/lib/plan-access'
 import { getContactByIdLocal } from './contacts.local'
 import { listAllDebtsByDirectionLocal } from './debts.local'
 import { compareValues, dbBatch, dbQuery, paginateResult, normalizeSortOrder } from './local-db'
@@ -259,6 +261,7 @@ export async function setInventoryThresholdLocal(
 ): Promise<InventoryDetail> {
   validateThresholds(payload)
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.INVENTORY_ADJUST)
   const row = (await fetchProductRowsForBusiness(normalizedBusinessId)).find(
     (item) => item.id === productId,
   )
@@ -320,6 +323,7 @@ export async function adjustInventoryLocal(
 ): Promise<InventoryDetail> {
   validateAdjustment(payload)
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.INVENTORY_ADJUST)
   const row = (await fetchProductRowsForBusiness(normalizedBusinessId)).find(
     (item) => item.id === productId,
   )
@@ -412,6 +416,7 @@ export async function restockInventoryLocal(
 ): Promise<RestockResponse> {
   validateRestock(payload)
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.INVENTORY_ADJUST)
   const rows = await fetchProductRowsForBusiness(normalizedBusinessId)
   const now = new Date().toISOString()
   const restockId = crypto.randomUUID()

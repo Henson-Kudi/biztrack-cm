@@ -29,12 +29,20 @@ export default function InvitePreviewPage() {
     getInvitePreview(token)
       .then((data) => {
         setInvite(data)
+        // Only store the invite token in pending — contact info travels via URL params
         setPending({ inviteToken: token })
       })
       .catch(() => setError(t('invite.invalid')))
   }, [setPending, t, token])
 
-  const goTo = (path: string) => router.push(`/${locale}${path}`)
+  const navigateTo = (base: string) => {
+    if (!invite) return
+    const params = new URLSearchParams()
+    if (invite.phone) params.set('phone', invite.phone)
+    else if (invite.email) params.set('email', invite.email)
+    const qs = params.toString()
+    router.push(`/${locale}${base}${qs ? `?${qs}` : ''}`)
+  }
 
   return (
     <AuthCard title={t('invite.title')} subtitle={t('invite.subtitle')}>
@@ -50,10 +58,10 @@ export default function InvitePreviewPage() {
               {t('invite.invited_by_label')}: {invite.invitedByName ?? t('invite.team_name')}
             </div>
           </div>
-          <Button variant="primary" onClick={() => goTo('/register')} className="w-full">
+          <Button variant="primary" onClick={() => navigateTo('/register')} className="w-full">
             {t('invite.accept')}
           </Button>
-          <Button variant="secondary" onClick={() => goTo('/login')} className="w-full">
+          <Button variant="secondary" onClick={() => navigateTo('/login')} className="w-full">
             {t('invite.have_account')}
           </Button>
         </div>

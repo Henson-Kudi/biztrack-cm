@@ -6,10 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
-import { JwtService } from '@nestjs/jwt'
-import { InjectRepository } from '@nestjs/typeorm'
 import type {
-  JwtPayload,
   SyncBatchStatus,
   SyncBatchStatusResponse,
   SyncChangesAvailableEvent,
@@ -21,10 +18,9 @@ import type {
 import type { Logger } from '@biztrack/logger'
 import type { Server as HttpServer } from 'http'
 import { Server as SocketIoServer, type Socket } from 'socket.io'
-import { Repository } from 'typeorm'
-import { User } from '@/entities/user.entity'
 import { LOGGER } from '@/logger/logger.module'
 import { SYNC_REALTIME_PATH } from '../constants/sync.constants'
+import { SyncAuthService } from './sync-auth.service'
 
 type SyncSocket = Socket
 
@@ -36,9 +32,7 @@ export class SyncRealtimeService implements OnApplicationBootstrap, OnApplicatio
 
   constructor(
     private readonly httpAdapterHost: HttpAdapterHost,
-    private readonly jwtService: JwtService,
-    @InjectRepository(User)
-    private readonly usersRepo: Repository<User>,
+    private readonly syncAuthService: SyncAuthService,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
@@ -132,15 +126,12 @@ export class SyncRealtimeService implements OnApplicationBootstrap, OnApplicatio
   private async authenticateConnection(socket: SyncSocket, payload: SyncRealtimeAuthPayload) {
     try {
       const auth = this.readAuthPayload(payload)
-      const jwt = await this.jwtService.verifyAsync<JwtPayload>(auth.accessToken)
-      const user = await this.usersRepo.findOne({ where: { id: jwt.sub } })
+      const jwt = await this.syncAuthService.authenticateSyncToken(auth.syncToken)
+      const businessId = String(jwt.businessId)
+      const tokenDeviceId = String(jwt.deviceId)
 
-      if (!user || !user.isActive) {
-        throw new UnauthorizedException('Realtime sync user is not active.')
-      }
-
-      if (!jwt.businessId) {
-        throw new UnauthorizedException('Realtime sync requires a selected business.')
+      if (tokenDeviceId !== auth.deviceId) {
+        throw new UnauthorizedException('Realtime sync device does not match the issued sync token.')
       }
 
       if (socket.data.authTimeout) {
@@ -157,15 +148,15 @@ export class SyncRealtimeService implements OnApplicationBootstrap, OnApplicatio
       }
 
       socket.data.userId = jwt.sub
-      socket.data.businessId = jwt.businessId
-      socket.data.deviceId = auth.deviceId
+      socket.data.businessId = businessId
+      socket.data.deviceId = tokenDeviceId
 
-      await socket.join(this.getBusinessRoom(jwt.businessId))
-      await socket.join(this.getDeviceRoom(auth.deviceId))
+      await socket.join(this.getBusinessRoom(businessId))
+      await socket.join(this.getDeviceRoom(tokenDeviceId))
 
       const connectedPayload: SyncRealtimeConnectionPayload = {
-        businessId: jwt.businessId,
-        deviceId: auth.deviceId,
+        businessId,
+        deviceId: tokenDeviceId,
         connectedAt: new Date().toISOString(),
       }
 
@@ -180,14 +171,14 @@ export class SyncRealtimeService implements OnApplicationBootstrap, OnApplicatio
   }
 
   private readAuthPayload(payload: SyncRealtimeAuthPayload): SyncRealtimeAuthPayload {
-    const accessToken = payload?.accessToken?.trim() ?? ''
+    const syncToken = payload?.syncToken?.trim() ?? ''
     const deviceId = payload?.deviceId?.trim() ?? ''
 
-    if (!accessToken || !deviceId) {
+    if (!syncToken || !deviceId) {
       throw new UnauthorizedException('Realtime sync auth payload is invalid.')
     }
 
-    return { accessToken, deviceId }
+    return { syncToken, deviceId }
   }
 
   private toBatchEventName(status: SyncBatchStatus): SyncRealtimeServerEventName | null {

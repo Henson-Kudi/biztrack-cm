@@ -20,18 +20,29 @@ export default function SelectBusinessPage() {
   const [error, setError] = useState<string | null>(null)
 
   const setTokens = useAuthStore((s) => s.setTokens)
+  const clearSession = useAuthStore((s) => s.clearSession)
 
   const goTo = (path: string) => router.push(`/${locale}${path}`)
 
   useEffect(() => {
     let mounted = true
+
+    // The auth layout should keep unauthenticated users away from this page, but
+    // we still guard async state updates here because auth can disappear while the
+    // request is in flight, for example after a failed token refresh.
     getBusinesses()
       .then((items) => {
         if (!mounted) return
         setBusinesses(items)
       })
-      .catch(() => setError(t('select_business.load_error')))
-      .finally(() => setLoading(false))
+      .catch((fetchError) => {
+        if (!mounted) return
+        setError(getApiErrorMessage(fetchError, t('select_business.load_error')))
+      })
+      .finally(() => {
+        if (!mounted) return
+        setLoading(false)
+      })
     return () => {
       mounted = false
     }
@@ -49,6 +60,11 @@ export default function SelectBusinessPage() {
     } catch (error) {
       setError(getApiErrorMessage(error, t('select_business.select_error')))
     }
+  }
+
+  const handleBackToLogin = async () => {
+    await clearSession()
+    goTo('/login')
   }
 
   return (
@@ -78,6 +94,13 @@ export default function SelectBusinessPage() {
           </div>
         ))}
       </div>
+      {!loading && (
+        <div className="mt-4">
+          <Button type="button" variant="secondary" className="w-full" onClick={handleBackToLogin}>
+            {t('select_business.back_to_login')}
+          </Button>
+        </div>
+      )}
     </AuthCard>
   )
 }

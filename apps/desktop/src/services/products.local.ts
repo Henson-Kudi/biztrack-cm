@@ -2,6 +2,7 @@
 
 import {
   Currency,
+  Resource,
   type CategoriesQuery,
   UnitOfMeasureType,
   type CreateCategoryRequest,
@@ -18,6 +19,8 @@ import {
   type UnitOfMeasure,
   type UnitOfMeasuresQuery,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess, getLocalQuotaGate } from '@/lib/plan-access'
+import { usePlanStore } from '@/stores/plan.store'
 import { compareValues, dbBatch, dbQuery, paginateResult, normalizeSortOrder } from './local-db'
 import { buildOutboxUpsertOperation, requestBackgroundSync } from './sync.local'
 
@@ -49,6 +52,7 @@ export class ProductLocalError extends Error {
       | 'PRODUCT_BARCODE_INVALID'
       | 'PRODUCT_BARCODE_IN_USE'
       | 'PRODUCT_IMAGE_URL_TOO_LONG'
+      | 'PRODUCTS_QUOTA_REACHED'
       | 'PRODUCT_SAVE_RELOAD_FAILED'
       | 'CATEGORY_NOT_FOUND'
       | 'CATEGORY_NAME_REQUIRED'
@@ -58,6 +62,7 @@ export class ProductLocalError extends Error {
       | 'CATEGORY_ICON_TOO_LONG'
       | 'CATEGORY_IMAGE_URL_TOO_LONG'
       | 'CATEGORY_SORT_ORDER_INVALID'
+      | 'CATEGORIES_QUOTA_REACHED'
       | 'CATEGORY_HAS_PRODUCTS'
       | 'CATEGORY_SAVE_RELOAD_FAILED'
       | 'UNIT_NOT_FOUND'
@@ -71,6 +76,7 @@ export class ProductLocalError extends Error {
       | 'UNIT_HAS_PRODUCTS'
       | 'UNIT_SAVE_RELOAD_FAILED',
     message?: string,
+    public readonly details?: unknown,
   ) {
     super(message ?? code)
     this.name = 'ProductLocalError'
@@ -331,6 +337,7 @@ export async function createProductLocal(
   payload: CreateProductRequest,
 ): Promise<Product> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_CREATE)
   const trimmedName = payload.name.trim()
   const trimmedDescription = payload.description?.trim() || null
   const trimmedImageUrl = payload.imageUrl?.trim() || null
@@ -442,6 +449,14 @@ export async function createProductLocal(
   }
   if (conflicts.barcode) {
     throw new ProductLocalError(conflicts.barcode)
+  }
+
+  // We block before writing to SQLite/outbox so offline users get immediate
+  // feedback and do not create local records that are guaranteed to fail once
+  // the sync worker reaches the server.
+  const productQuota = await getLocalQuotaGate(normalizedBusinessId, 'products')
+  if (!productQuota.allowed) {
+    throw new ProductLocalError('PRODUCTS_QUOTA_REACHED', undefined, productQuota)
   }
 
   const now = new Date().toISOString()
@@ -593,6 +608,7 @@ export async function createProductLocal(
   }
 
   await dbBatch(operations)
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const created = await getProductByIdLocal(normalizedBusinessId, id)
@@ -609,6 +625,7 @@ export async function updateProductLocal(
   payload: UpdateProductRequest,
 ): Promise<Product> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getProductByIdLocal(normalizedBusinessId, productId)
 
   if (!existing) {
@@ -751,6 +768,12 @@ export async function updateProductLocal(
         ? false
         : existing.trackInventory
   const isActive = payload.isActive ?? existing.isActive
+  if (isActive && !existing.isActive) {
+    const productQuota = await getLocalQuotaGate(normalizedBusinessId, 'products')
+    if (!productQuota.allowed) {
+      throw new ProductLocalError('PRODUCTS_QUOTA_REACHED', undefined, productQuota)
+    }
+  }
   const lowStockThreshold =
     payload.lowStockThreshold !== undefined
       ? payload.lowStockThreshold ?? null
@@ -881,6 +904,7 @@ export async function updateProductLocal(
   operations.push(buildOutboxUpsertOperation('products', productId))
 
   await dbBatch(operations)
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const updated = await getProductByIdLocal(normalizedBusinessId, productId)
@@ -897,6 +921,7 @@ export async function setProductActiveStateLocal(
   isActive: boolean,
 ): Promise<Product> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getProductByIdLocal(normalizedBusinessId, productId)
 
   if (!existing) {
@@ -904,6 +929,13 @@ export async function setProductActiveStateLocal(
   }
 
   const now = new Date().toISOString()
+
+  if (isActive && !existing.isActive) {
+    const productQuota = await getLocalQuotaGate(normalizedBusinessId, 'products')
+    if (!productQuota.allowed) {
+      throw new ProductLocalError('PRODUCTS_QUOTA_REACHED', undefined, productQuota)
+    }
+  }
 
   await dbBatch([
     {
@@ -917,6 +949,7 @@ export async function setProductActiveStateLocal(
     },
     buildOutboxUpsertOperation('products', productId),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const updated = await getProductByIdLocal(normalizedBusinessId, productId)
@@ -929,6 +962,7 @@ export async function setProductActiveStateLocal(
 
 export async function deleteProductLocal(businessId: string, productId: string): Promise<void> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_DELETE)
   const existing = await getProductByIdLocal(normalizedBusinessId, productId)
 
   if (!existing) {
@@ -950,6 +984,7 @@ export async function deleteProductLocal(businessId: string, productId: string):
     },
     buildOutboxUpsertOperation('products', productId),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 }
 
@@ -1071,10 +1106,18 @@ export async function createCategoryLocal(
   payload: CreateCategoryRequest,
 ): Promise<ProductCategory> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_CREATE)
   const normalized = normalizeCategoryInput(payload)
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const slug = await buildUniqueCategorySlug(normalizedBusinessId, slugify(normalized.name))
+
+  // Categories are quota-limited too, so local-first writes must respect the
+  // same ceiling as the API and the sync pathway.
+  const categoryQuota = await getLocalQuotaGate(normalizedBusinessId, 'categories')
+  if (!categoryQuota.allowed) {
+    throw new ProductLocalError('CATEGORIES_QUOTA_REACHED', undefined, categoryQuota)
+  }
 
   await dbBatch([
     {
@@ -1109,6 +1152,7 @@ export async function createCategoryLocal(
     },
     buildOutboxUpsertOperation('productCategories', id),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const created = await getCategoryByIdLocal(normalizedBusinessId, id, {
@@ -1128,6 +1172,7 @@ export async function updateCategoryLocal(
   payload: UpdateCategoryRequest,
 ): Promise<ProductCategory> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getCategoryRowByIdLocal(normalizedBusinessId, categoryId, {
     includeInactive: true,
   })
@@ -1194,6 +1239,7 @@ export async function setCategoryActiveStateLocal(
   isActive: boolean,
 ): Promise<ProductCategory> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getCategoryRowByIdLocal(normalizedBusinessId, categoryId, {
     includeInactive: true,
   })
@@ -1203,6 +1249,12 @@ export async function setCategoryActiveStateLocal(
   }
 
   const now = new Date().toISOString()
+  if (isActive && !existing.is_active) {
+    const categoryQuota = await getLocalQuotaGate(normalizedBusinessId, 'categories')
+    if (!categoryQuota.allowed) {
+      throw new ProductLocalError('CATEGORIES_QUOTA_REACHED', undefined, categoryQuota)
+    }
+  }
   await dbBatch([
     {
       sql: `
@@ -1215,6 +1267,7 @@ export async function setCategoryActiveStateLocal(
     },
     buildOutboxUpsertOperation('productCategories', categoryId),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const updated = await getCategoryByIdLocal(normalizedBusinessId, categoryId, {
@@ -1230,6 +1283,7 @@ export async function setCategoryActiveStateLocal(
 
 export async function deleteCategoryLocal(businessId: string, categoryId: string): Promise<void> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_DELETE)
   const existing = await getCategoryRowByIdLocal(normalizedBusinessId, categoryId, {
     includeInactive: true,
   })
@@ -1260,6 +1314,7 @@ export async function deleteCategoryLocal(businessId: string, categoryId: string
     },
     buildOutboxUpsertOperation('productCategories', categoryId),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 }
 
@@ -1268,6 +1323,7 @@ export async function restoreCategoryLocal(
   categoryId: string,
 ): Promise<ProductCategory> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_CREATE)
   const existing = await getCategoryRowByIdLocal(normalizedBusinessId, categoryId, {
     includeInactive: true,
     includeDeleted: true,
@@ -1278,6 +1334,10 @@ export async function restoreCategoryLocal(
   }
 
   const now = new Date().toISOString()
+  const categoryQuota = await getLocalQuotaGate(normalizedBusinessId, 'categories')
+  if (!categoryQuota.allowed) {
+    throw new ProductLocalError('CATEGORIES_QUOTA_REACHED', undefined, categoryQuota)
+  }
   await dbBatch([
     {
       sql: `
@@ -1291,6 +1351,7 @@ export async function restoreCategoryLocal(
     },
     buildOutboxUpsertOperation('productCategories', categoryId),
   ])
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
 
   const restored = await getCategoryByIdLocal(normalizedBusinessId, categoryId, {
@@ -1309,6 +1370,7 @@ export async function createUnitOfMeasureLocal(
   payload: CreateUnitOfMeasureRequest,
 ): Promise<UnitOfMeasure> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_CREATE)
   const normalized = await normalizeUnitInput(normalizedBusinessId, payload)
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
@@ -1360,6 +1422,7 @@ export async function updateUnitOfMeasureLocal(
   payload: UpdateUnitOfMeasureRequest,
 ): Promise<UnitOfMeasure> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getUnitRowByIdLocal(normalizedBusinessId, unitId, {
     includeInactive: true,
     includeDeleted: true,
@@ -1416,6 +1479,7 @@ export async function setUnitOfMeasureActiveStateLocal(
   isActive: boolean,
 ): Promise<UnitOfMeasure> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_EDIT)
   const existing = await getUnitRowByIdLocal(normalizedBusinessId, unitId, {
     includeInactive: true,
     includeDeleted: true,
@@ -1455,6 +1519,7 @@ export async function setUnitOfMeasureActiveStateLocal(
 
 export async function deleteUnitOfMeasureLocal(businessId: string, unitId: string): Promise<void> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_DELETE)
   const existing = await getUnitRowByIdLocal(normalizedBusinessId, unitId, {
     includeInactive: true,
     includeDeleted: true,
@@ -1496,6 +1561,7 @@ export async function restoreUnitOfMeasureLocal(
   unitId: string,
 ): Promise<UnitOfMeasure> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.PRODUCTS_CREATE)
   const existing = await getUnitRowByIdLocal(normalizedBusinessId, unitId, {
     includeInactive: true,
     includeDeleted: true,

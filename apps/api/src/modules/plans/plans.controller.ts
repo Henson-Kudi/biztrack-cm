@@ -5,6 +5,8 @@ import type {
   CurrentSubscriptionResponse,
   JwtPayload,
   ListPlansResponse,
+  PlanStateResponse,
+  QuotaUsageResponse,
   SelectPlanResponse,
   UpgradePlanResponse,
 } from '@biztrack/types'
@@ -16,6 +18,8 @@ import {
   CancelPlanResponseDto,
   CurrentSubscriptionResponseDto,
   ListPlansResponseDto,
+  PlanStateResponseDto,
+  QuotaUsageResponseDto,
   SelectPlanResponseDto,
   UpgradePlanResponseDto,
 } from './dto/plan-response.dto'
@@ -60,6 +64,26 @@ export class PlansController {
     return serializeDto(
       CurrentSubscriptionResponseDto.fromModel(
         await this.plansService.mySubscription(user.businessId as string),
+      ),
+    )
+  }
+
+  @Get('state')
+  @ApiOperation({ summary: 'Get cached desktop plan-state bootstrap data' })
+  async getPlanState(@CurrentUser() user: JwtPayload): Promise<PlanStateResponse> {
+    return serializeDto(
+      PlanStateResponseDto.fromModel(
+        await this.plansService.getPlanState(user.businessId as string),
+      ),
+    )
+  }
+
+  @Get('quota-usage')
+  @ApiOperation({ summary: 'Get current quota usage for the active business plan' })
+  async getQuotaUsage(@CurrentUser() user: JwtPayload): Promise<QuotaUsageResponse> {
+    return serializeDto(
+      QuotaUsageResponseDto.fromModel(
+        await this.plansService.getQuotaUsage(user.businessId as string),
       ),
     )
   }

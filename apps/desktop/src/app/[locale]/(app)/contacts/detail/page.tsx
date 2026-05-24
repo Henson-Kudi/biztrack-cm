@@ -10,7 +10,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import {
@@ -19,6 +18,7 @@ import {
   DebtDirection,
   DebtStatus,
   PaymentMethod,
+  Resource,
   type JwtPayload,
 } from '@biztrack/types'
 import { Button, Input, NumberInput, Spinner } from '@biztrack/ui'
@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { decodeJwtPayload } from '@/lib/jwt'
+import { getPermissionAccessFromState } from '@/lib/plan-access'
 import { cn } from '@/lib/utils'
 import { getApiErrorMessage } from '@/services/api-response'
 import {
@@ -46,6 +47,7 @@ import {
 import { DebtLocalError, recordDebtPaymentLocal, writeOffDebtLocal } from '@/services/debts.local'
 import { hasDesktopIpc, ipc } from '@/services/ipc.bridge'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 
 type DirectionTone = 'customer' | 'supplier'
 type PaymentDraftState = {
@@ -81,9 +83,11 @@ function ContactDetailPageContent() {
   const locale = useLocale()
   const router = useRouter()
   const t = useTranslations('app.contactDetail')
+  const planGateT = useTranslations('app.plan_gate')
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const accessToken = useAuthStore((state) => state.accessToken)
+  const planState = usePlanStore((state) => state.current)
   const [detail, setDetail] = useState<LocalContactDetailRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -172,6 +176,25 @@ function ContactDetailPageContent() {
     () => detail?.payableDebts.filter((debt) => debt.outstandingAmount > 0) ?? [],
     [detail],
   )
+
+  const statementReportAccess = useMemo(
+    () => (planState ? getPermissionAccessFromState(planState, Resource.REPORTS_MONTHLY) : null),
+    [planState],
+  )
+  const csvExportAccess = useMemo(
+    () => (planState ? getPermissionAccessFromState(planState, Resource.REPORTS_EXPORT_CSV) : null),
+    [planState],
+  )
+  const pdfExportAccess = useMemo(
+    () => (planState ? getPermissionAccessFromState(planState, Resource.REPORTS_EXPORT_PDF) : null),
+    [planState],
+  )
+  // Contact statements are another report surface. They must obey the same
+  // report/export plan matrix as the dedicated reports page so users cannot
+  // bypass plan restrictions by exporting from a contact detail screen.
+  const canViewStatementReports = statementReportAccess?.allowed ?? true
+  const canExportStatementCsv = csvExportAccess?.allowed ?? true
+  const canExportStatementPdf = pdfExportAccess?.allowed ?? true
 
   useEffect(() => {
     setReceivableDraft((current) => ({
@@ -398,7 +421,7 @@ function ContactDetailPageContent() {
         },
       )
 
-      setPaymentDraft((current) => ({
+      setPaymentDraft(() => ({
         ...EMPTY_PAYMENT_DRAFT,
         date: getTodayDate(),
       }))
@@ -412,6 +435,27 @@ function ContactDetailPageContent() {
   }
 
   const handleExportStatementCsv = async (tone: DirectionTone) => {
+    if (!canViewStatementReports) {
+      toast.error(
+        planGateT('locked_feature_description', {
+          report: getStatementTitle(detail.type, tone, t),
+          section: t('statement.account_title'),
+          plan: statementReportAccess?.requiredPlan ?? 'SOLO',
+        }),
+      )
+      return
+    }
+
+    if (!canExportStatementCsv) {
+      toast.error(
+        planGateT('export_locked_description', {
+          formats: 'CSV',
+          plan: csvExportAccess?.requiredPlan ?? 'SOLO',
+        }),
+      )
+      return
+    }
+
     const statementSnapshot =
       tone === 'customer'
         ? { summary: detail.receivableSummary, entries: detail.receivableStatement }
@@ -487,6 +531,27 @@ function ContactDetailPageContent() {
   }
 
   const handleExportStatementPdf = async (tone: DirectionTone) => {
+    if (!canViewStatementReports) {
+      toast.error(
+        planGateT('locked_feature_description', {
+          report: getStatementTitle(detail.type, tone, t),
+          section: t('statement.account_title'),
+          plan: statementReportAccess?.requiredPlan ?? 'SOLO',
+        }),
+      )
+      return
+    }
+
+    if (!canExportStatementPdf) {
+      toast.error(
+        planGateT('export_locked_description', {
+          formats: 'PDF',
+          plan: pdfExportAccess?.requiredPlan ?? 'SOLO',
+        }),
+      )
+      return
+    }
+
     if (!hasDesktopIpc()) {
       toast.error(t('statement.export.pdf_desktop_only'))
       return
@@ -855,38 +920,63 @@ function ContactDetailPageContent() {
         />
       </div>
 
-      {detail.type !== ContactType.SUPPLIER ? (
-        <StatementCard
-          title={getStatementTitle(detail.type, 'customer', t)}
-          description={getStatementCardDescription('customer', t)}
-          balanceLabel={getStatementBalanceLabel('customer', t)}
-          summary={detail.receivableSummary}
-          entries={detail.receivableStatement}
-          tone="customer"
-          localeTag={localeTag}
-          exportingCsv={exportingCsvTone === 'customer'}
-          exportingPdf={exportingPdfTone === 'customer'}
-          onExportCsv={() => void handleExportStatementCsv('customer')}
-          onExportPdf={() => void handleExportStatementPdf('customer')}
-          t={t}
-        />
+      {!canViewStatementReports || !canExportStatementCsv || !canExportStatementPdf ? (
+        <p className="text-sm text-muted-foreground">
+          {planGateT.rich('upgrade_hint', {
+            link: (chunks) => (
+              <a
+                href={`/${locale}/subscription`}
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
+        </p>
       ) : null}
 
-      {detail.type !== ContactType.CUSTOMER ? (
-        <StatementCard
-          title={getStatementTitle(detail.type, 'supplier', t)}
-          description={getStatementCardDescription('supplier', t)}
-          balanceLabel={getStatementBalanceLabel('supplier', t)}
-          summary={detail.payableSummary}
-          entries={detail.payableStatement}
-          tone="supplier"
-          localeTag={localeTag}
-          exportingCsv={exportingCsvTone === 'supplier'}
-          exportingPdf={exportingPdfTone === 'supplier'}
-          onExportCsv={() => void handleExportStatementCsv('supplier')}
-          onExportPdf={() => void handleExportStatementPdf('supplier')}
-          t={t}
-        />
+      {canViewStatementReports ? (
+        <>
+          {detail.type !== ContactType.SUPPLIER ? (
+            <StatementCard
+              title={getStatementTitle(detail.type, 'customer', t)}
+              description={getStatementCardDescription('customer', t)}
+              balanceLabel={getStatementBalanceLabel('customer', t)}
+              summary={detail.receivableSummary}
+              entries={detail.receivableStatement}
+              tone="customer"
+              localeTag={localeTag}
+              exportingCsv={exportingCsvTone === 'customer'}
+              exportingPdf={exportingPdfTone === 'customer'}
+              onExportCsv={() => void handleExportStatementCsv('customer')}
+              onExportPdf={() => void handleExportStatementPdf('customer')}
+              csvLocked={!canExportStatementCsv}
+              pdfLocked={!canExportStatementPdf}
+              upgradeLabel={planGateT('upgrade_action')}
+              t={t}
+            />
+          ) : null}
+
+          {detail.type !== ContactType.CUSTOMER ? (
+            <StatementCard
+              title={getStatementTitle(detail.type, 'supplier', t)}
+              description={getStatementCardDescription('supplier', t)}
+              balanceLabel={getStatementBalanceLabel('supplier', t)}
+              summary={detail.payableSummary}
+              entries={detail.payableStatement}
+              tone="supplier"
+              localeTag={localeTag}
+              exportingCsv={exportingCsvTone === 'supplier'}
+              exportingPdf={exportingPdfTone === 'supplier'}
+              onExportCsv={() => void handleExportStatementCsv('supplier')}
+              onExportPdf={() => void handleExportStatementPdf('supplier')}
+              csvLocked={!canExportStatementCsv}
+              pdfLocked={!canExportStatementPdf}
+              upgradeLabel={planGateT('upgrade_action')}
+              t={t}
+            />
+          ) : null}
+        </>
       ) : null}
       </div>
 
@@ -1217,6 +1307,9 @@ function StatementCard({
   exportingPdf,
   onExportCsv,
   onExportPdf,
+  csvLocked,
+  pdfLocked,
+  upgradeLabel,
   t,
 }: {
   title: string
@@ -1230,6 +1323,9 @@ function StatementCard({
   exportingPdf: boolean
   onExportCsv: () => void
   onExportPdf: () => void
+  csvLocked: boolean
+  pdfLocked: boolean
+  upgradeLabel: string
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>
 }) {
   const panelClassName =
@@ -1352,11 +1448,17 @@ function StatementCard({
             disabled={exportingCsv || exportingPdf}
             className={cn(
               'inline-flex items-center gap-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
-              actionClassName,
+              csvLocked ? 'text-amber-700 hover:text-amber-800' : actionClassName,
             )}
           >
             <DownloadIcon />
-            <span>{exportingCsv ? t('statement.export.exporting_csv') : t('statement.export.download_csv')}</span>
+            <span>
+              {csvLocked
+                ? upgradeLabel
+                : exportingCsv
+                  ? t('statement.export.exporting_csv')
+                  : t('statement.export.download_csv')}
+            </span>
           </button>
           <button
             type="button"
@@ -1364,11 +1466,17 @@ function StatementCard({
             disabled={exportingCsv || exportingPdf}
             className={cn(
               'inline-flex items-center gap-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
-              actionClassName,
+              pdfLocked ? 'text-amber-700 hover:text-amber-800' : actionClassName,
             )}
           >
             <DocumentIcon />
-            <span>{exportingPdf ? t('statement.export.exporting_pdf') : t('statement.export.download_pdf')}</span>
+            <span>
+              {pdfLocked
+                ? upgradeLabel
+                : exportingPdf
+                  ? t('statement.export.exporting_pdf')
+                  : t('statement.export.download_pdf')}
+            </span>
           </button>
         </div>
       </div>

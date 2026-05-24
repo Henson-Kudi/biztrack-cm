@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events'
+import { app } from 'electron'
+import { hostname } from 'os'
 import type {
   ChangeSet,
   ContactSyncPayload,
@@ -6,37 +8,39 @@ import type {
   DebtPaymentSyncPayload,
   DebtSyncPayload,
   DebtSyncRecord,
-  ExpenseCategorySyncRecord,
-  ExpenseSyncRecord,
   InventoryAdjustmentSyncPayload,
   InventoryLevelSyncRecord,
   InventoryMovementSyncRecord,
   InventoryRestockSyncPayload,
   InventoryThresholdSyncPayload,
+  RoleSyncRecord,
   SaleItemSyncRecord,
   SalePaymentSyncRecord,
   SaleSyncPayload,
   SaleSyncRecord,
-  ExpenseCategorySyncPayload,
-  ExpenseSyncPayload,
+  ExpenseCategorySyncRecord,
+  ExpenseSyncRecord,
+  IssueSyncTokenRequest,
+  IssueSyncTokenResponse,
+  JwtPayload,
   NetworkQuality,
   NetworkSnapshot,
   RestockItemSyncRecord,
   RestockRecordSyncRecord,
   SyncBatchStatusResponse,
-  SyncChangesAvailableEvent,
   SyncEntity,
+  SyncOperationFailureDetails,
   SyncPullResponse,
   SyncPushOperation,
   SyncPushPayload,
   SyncPushRequest,
   SyncPushResponse,
-  SyncRealtimeConnectionPayload,
   SyncRealtimeErrorEvent,
   SyncRealtimeStatus,
   SyncRecord,
   SyncSettings,
   SyncSnapshot,
+  TeamMemberSyncRecord,
 } from '@biztrack/types'
 import { getSyncEntityDependencyTier, getSyncEntityStableOrder } from '@biztrack/types'
 import {
@@ -49,6 +53,7 @@ import { io, Socket } from 'socket.io-client'
 import { DatabaseService } from './database.service'
 import { NetworkService } from './network.service'
 import { SecureStoreService } from './secure-store.service'
+import { API_BASE_URL } from '../config/api-base-url'
 
 type OutboxRow = {
   id: string
@@ -68,8 +73,15 @@ type OutboxRow = {
   payload: string | null
   status: 'pending' | 'failed'
   attempt_count: number
+  last_error: string | null
+  last_error_details: string | null
   created_at: string
   updated_at: string
+}
+
+type FailedOutboxRow = {
+  last_error: string | null
+  last_error_details: string | null
 }
 
 type LocalProductRow = {
@@ -188,9 +200,23 @@ type AuthenticatedResponse<T> = {
   tokens: Tokens
 }
 
-const DEFAULT_API_URL = 'http://localhost:3001/api/v1'
+type SyncCredential = {
+  syncToken: string
+  userId: string
+  businessId: string
+  deviceId: string
+  issuedAt: string
+}
+
+type SyncAuthenticatedResponse<T> = {
+  data: T
+  credential: SyncCredential
+  authTokens: Tokens | null
+}
+
 const AUTH_TOKENS_KEY = 'auth.tokens'
 const LAST_BUSINESS_KEY = 'auth.lastBusinessId'
+const SYNC_CREDENTIAL_KEY = 'sync.deviceCredential'
 const AUTO_SYNC_KEY = 'sync.autoSyncEnabled'
 const MIN_QUALITY_KEY = 'sync.minQuality'
 const DEVICE_ID_KEY = 'sync.deviceId'
@@ -257,6 +283,7 @@ export class SyncService extends EventEmitter {
   private stopRequested = false
   private pendingRealtimeSync = false
   private lastAutoSyncStartedAt = 0
+  private lastRuntimeFailureDetails: SyncOperationFailureDetails | null = null
   private readonly batchStatusCache = new Map<string, SyncBatchStatusResponse>()
   private readonly batchWaiters = new Map<
     string,
@@ -271,7 +298,7 @@ export class SyncService extends EventEmitter {
     private readonly network: NetworkService,
     private readonly db: DatabaseService,
     private readonly secureStore: SecureStoreService,
-    private readonly apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL,
+    private readonly apiBaseUrl = API_BASE_URL,
   ) {
     super()
 
@@ -285,6 +312,7 @@ export class SyncService extends EventEmitter {
       pendingCount: 0,
       lastSyncedAt: null,
       lastError: null,
+      lastFailureDetails: null,
       network: this.network.snapshot,
       settings: DEFAULT_SETTINGS,
       realtime: {
@@ -407,34 +435,52 @@ export class SyncService extends EventEmitter {
     const businessId = this.secureStore.get(LAST_BUSINESS_KEY)
     const deviceId = await this.ensureDeviceId()
 
-    if (!tokens || !businessId) {
+    if (!businessId) {
       await this.refreshSnapshot('paused')
       await this.refreshRealtimeConnection()
-      return { success: false, message: 'missing_auth_context' }
+      return { success: false, message: 'missing_business_context' }
+    }
+
+    let syncCredential: SyncCredential
+    let activeAuthTokens = tokens
+
+    try {
+      const bootstrap = await this.ensureSyncCredential(tokens, businessId, deviceId)
+      syncCredential = bootstrap.credential
+      activeAuthTokens = bootstrap.authTokens
+    } catch (error) {
+      await this.refreshSnapshot('paused')
+      await this.refreshRealtimeConnection()
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'missing_sync_auth_context',
+      }
     }
 
     await this.refreshRealtimeConnection()
 
     this.isSyncing = true
+    this.lastRuntimeFailureDetails = null
     this.snapshot = {
       ...this.snapshot,
       status: 'syncing',
       pendingCount,
       lastError: null,
+      lastFailureDetails: null,
       settings,
     }
     this.emitSnapshot()
 
-    let activeTokens = tokens
-    let baseCursor = (await this.readSetting(LAST_SYNCED_AT_KEY)) ?? null
+    const baseCursor = (await this.readSetting(LAST_SYNCED_AT_KEY)) ?? null
     let finalCursor = baseCursor
     let pulledCount = 0
     let pushedCount = 0
     let conflictCount = 0
 
     try {
-      const initialPull = await this.pullChanges(activeTokens, baseCursor)
-      activeTokens = initialPull.tokens
+      const initialPull = await this.pullChanges(syncCredential, activeAuthTokens, baseCursor)
+      syncCredential = initialPull.credential
+      activeAuthTokens = initialPull.authTokens
       await this.applyPulledChanges(initialPull.data)
       pulledCount += countChanges(initialPull.data.changes)
       finalCursor = initialPull.data.cursor
@@ -456,8 +502,9 @@ export class SyncService extends EventEmitter {
           break
         }
 
-        const pushResponse = await this.pushBatch(activeTokens, payload)
-        activeTokens = pushResponse.tokens
+        const pushResponse = await this.pushBatch(syncCredential, activeAuthTokens, payload)
+        syncCredential = pushResponse.credential
+        activeAuthTokens = pushResponse.authTokens
 
         if (pushResponse.data.status === 'enqueue_failed') {
           batchError = pushResponse.data.lastError ?? 'Sync batch could not be queued.'
@@ -469,16 +516,23 @@ export class SyncService extends EventEmitter {
           break
         }
 
-        const batchStatus = await this.waitForBatch(activeTokens, pushResponse.data.batchId)
-        activeTokens = batchStatus.tokens
+        const batchStatus = await this.waitForBatch(
+          syncCredential,
+          activeAuthTokens,
+          pushResponse.data.batchId,
+        )
+        syncCredential = batchStatus.credential
+        activeAuthTokens = batchStatus.authTokens
 
         const batchOutcome = this.applyBatchResults(batchStatus.data, pendingRows)
         pushedCount += batchStatus.data.acceptedCount
         conflictCount += batchStatus.data.conflictCount
         batchError = batchOutcome.firstError
+        this.lastRuntimeFailureDetails = batchOutcome.firstFailureDetails
 
-        const followUpPull = await this.pullChanges(activeTokens, baseCursor)
-        activeTokens = followUpPull.tokens
+        const followUpPull = await this.pullChanges(syncCredential, activeAuthTokens, baseCursor)
+        syncCredential = followUpPull.credential
+        activeAuthTokens = followUpPull.authTokens
         await this.applyPulledChanges(followUpPull.data)
         pulledCount = countChanges(followUpPull.data.changes)
         finalCursor = followUpPull.data.cursor
@@ -496,11 +550,13 @@ export class SyncService extends EventEmitter {
           ...this.snapshot,
           status: 'error',
           lastError: batchError,
+          lastFailureDetails: this.lastRuntimeFailureDetails,
         }
         this.emitSnapshot()
         return { success: false, message: batchError }
       }
 
+      this.lastRuntimeFailureDetails = null
       await this.refreshSnapshot('synced')
       return { success: true, message: 'synced' }
     } catch (error) {
@@ -510,10 +566,12 @@ export class SyncService extends EventEmitter {
         force ? ['pending', 'failed'] : ['pending'],
       )
       this.markOutboxAttempt(retryableRows, message)
+      this.lastRuntimeFailureDetails = null
       this.snapshot = {
         ...this.snapshot,
         status: 'error',
         lastError: message,
+        lastFailureDetails: null,
       }
       this.emitSnapshot()
       return { success: false, message }
@@ -1099,47 +1157,56 @@ export class SyncService extends EventEmitter {
     }
   }
 
-  private async pushBatch(tokens: Tokens, payload: SyncPushRequest): Promise<AuthenticatedResponse<SyncPushResponse>> {
-    return this.authenticatedRequest<SyncPushResponse>('/sync/batches', {
+  private async pushBatch(
+    credential: SyncCredential,
+    authTokens: Tokens | null,
+    payload: SyncPushRequest,
+  ): Promise<SyncAuthenticatedResponse<SyncPushResponse>> {
+    return this.syncAuthenticatedRequest<SyncPushResponse>('/sync/batches', {
       method: 'POST',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      credential,
+      authTokens,
       data: payload,
     })
   }
 
   private async waitForBatch(
-    tokens: Tokens,
+    credential: SyncCredential,
+    authTokens: Tokens | null,
     batchId: string,
-  ): Promise<AuthenticatedResponse<SyncBatchStatusResponse>> {
+  ): Promise<SyncAuthenticatedResponse<SyncBatchStatusResponse>> {
     if (this.realtimeAuthenticated) {
       try {
         const response = await this.waitForBatchRealtime(batchId)
         return {
           data: response,
-          tokens,
+          credential,
+          authTokens,
         }
       } catch {
         // Fall back to HTTP polling if the realtime channel is unavailable or slow.
       }
     }
 
-    return this.waitForBatchByPolling(tokens, batchId)
+    return this.waitForBatchByPolling(credential, authTokens, batchId)
   }
 
   private async waitForBatchByPolling(
-    tokens: Tokens,
+    credential: SyncCredential,
+    authTokens: Tokens | null,
     batchId: string,
-  ): Promise<AuthenticatedResponse<SyncBatchStatusResponse>> {
-    let activeTokens = tokens
+  ): Promise<SyncAuthenticatedResponse<SyncBatchStatusResponse>> {
+    let activeCredential = credential
+    let activeAuthTokens = authTokens
 
     for (let attempt = 0; attempt < BATCH_STATUS_POLL_ATTEMPTS; attempt += 1) {
-      const response = await this.authenticatedRequest<SyncBatchStatusResponse>(`/sync/batches/${batchId}`, {
+      const response = await this.syncAuthenticatedRequest<SyncBatchStatusResponse>(`/sync/batches/${batchId}`, {
         method: 'GET',
-        accessToken: activeTokens.accessToken,
-        refreshToken: activeTokens.refreshToken,
+        credential: activeCredential,
+        authTokens: activeAuthTokens,
       })
-      activeTokens = response.tokens
+      activeCredential = response.credential
+      activeAuthTokens = response.authTokens
 
       if (isTerminalBatchStatus(response.data.status)) {
         return response
@@ -1152,14 +1219,15 @@ export class SyncService extends EventEmitter {
   }
 
   private async pullChanges(
-    tokens: Tokens,
+    credential: SyncCredential,
+    authTokens: Tokens | null,
     cursor: string | null,
-  ): Promise<AuthenticatedResponse<SyncPullResponse>> {
+  ): Promise<SyncAuthenticatedResponse<SyncPullResponse>> {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
-    return this.authenticatedRequest<SyncPullResponse>(`/sync/pull${query}`, {
+    return this.syncAuthenticatedRequest<SyncPullResponse>(`/sync/pull${query}`, {
       method: 'GET',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      credential,
+      authTokens,
     })
   }
 
@@ -1179,6 +1247,8 @@ export class SyncService extends EventEmitter {
     const serverSalePayments = response.changes.salePayments ?? []
     const serverDebts = response.changes.debts ?? []
     const serverExpenses = response.changes.expenses ?? []
+    const serverTeamMembers = response.changes.teamMembers ?? []
+    const serverRoles = response.changes.roles ?? []
 
     if (serverUnits.length > 0) {
       this.applyUnitOfMeasureChanges(serverUnits)
@@ -1242,6 +1312,14 @@ export class SyncService extends EventEmitter {
 
     for (const record of serverRestockItems) {
       operations.push(this.buildRestockItemUpsertOperation(record))
+    }
+
+    for (const record of serverTeamMembers) {
+      operations.push(this.buildTeamMemberUpsertOperation(record))
+    }
+
+    for (const record of serverRoles) {
+      operations.push(this.buildRoleUpsertOperation(record))
     }
 
     if (operations.length > 0) {
@@ -1390,10 +1468,17 @@ export class SyncService extends EventEmitter {
                 attempt_count = attempt_count + 1,
                 last_attempt_at = ?,
                 last_error = ?,
+                last_error_details = ?,
                 updated_at = ?
             WHERE id = ?
           `,
-          params: [now, result.errorMessage ?? 'Sync operation failed.', now, result.operationId],
+          params: [
+            now,
+            this.formatSyncFailureMessage(result.errorMessage ?? 'Sync operation failed.', result.errorDetails ?? null),
+            result.errorDetails ? JSON.stringify(result.errorDetails) : null,
+            now,
+            result.operationId,
+          ],
         })
       }
     }
@@ -1403,7 +1488,14 @@ export class SyncService extends EventEmitter {
     }
 
     return {
-      firstError: failedResults[0]?.errorMessage ?? null,
+      firstError:
+        failedResults[0]
+          ? this.formatSyncFailureMessage(
+              failedResults[0].errorMessage ?? 'Sync operation failed.',
+              failedResults[0].errorDetails ?? null,
+            )
+          : null,
+      firstFailureDetails: failedResults[0]?.errorDetails ?? null,
     }
   }
 
@@ -2311,16 +2403,98 @@ export class SyncService extends EventEmitter {
     }
   }
 
+  private buildTeamMemberUpsertOperation(record: TeamMemberSyncRecord) {
+    const now = new Date().toISOString()
+    return {
+      sql: `
+        INSERT INTO business_members (
+          id,
+          business_id,
+          user_id,
+          role_id,
+          role,
+          status,
+          name,
+          email,
+          phone,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          role_id = excluded.role_id,
+          role = excluded.role,
+          status = excluded.status,
+          name = excluded.name,
+          email = excluded.email,
+          phone = excluded.phone,
+          is_deleted = excluded.is_deleted,
+          updated_at = excluded.updated_at
+      `,
+      params: [
+        record.id,
+        record.businessId,
+        record.userId,
+        record.roleId ?? null,
+        record.role,
+        record.status,
+        record.name ?? null,
+        record.email ?? null,
+        record.phone ?? null,
+        record.isDeleted ? 1 : 0,
+        record.createdAt ?? now,
+        record.updatedAt ?? now,
+      ],
+    }
+  }
+
+  private buildRoleUpsertOperation(record: RoleSyncRecord) {
+    const now = new Date().toISOString()
+    return {
+      sql: `
+        INSERT INTO roles (
+          id,
+          business_id,
+          name,
+          description,
+          is_system,
+          is_owner_role,
+          colour,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name        = excluded.name,
+          description = excluded.description,
+          colour      = excluded.colour,
+          is_deleted  = excluded.is_deleted,
+          updated_at  = excluded.updated_at
+      `,
+      params: [
+        record.id,
+        record.businessId,
+        record.name,
+        record.description ?? null,
+        record.isSystem ? 1 : 0,
+        record.isOwnerRole ? 1 : 0,
+        record.colour ?? null,
+        record.isDeleted ? 1 : 0,
+        record.createdAt ?? now,
+        record.updatedAt ?? now,
+      ],
+    }
+  }
+
   private async refreshRealtimeConnection(forceReconnect = false) {
     const settings = await this.readSettings()
-    const tokens = this.getStoredTokens()
+    const authTokens = this.getStoredTokens()
     const businessId = this.secureStore.get(LAST_BUSINESS_KEY)
     const deviceId = await this.ensureDeviceId()
 
     const shouldConnect =
       !this.stopRequested &&
       settings.autoSyncEnabled &&
-      Boolean(tokens?.accessToken) &&
       Boolean(businessId) &&
       this.meetsMinimumQuality(this.network.snapshot.quality, settings.minQuality)
 
@@ -2347,6 +2521,18 @@ export class SyncService extends EventEmitter {
       this.reconnectTimeout = null
     }
 
+    let syncCredential: SyncCredential
+    try {
+      // Realtime shares the same sync-only credential as HTTP sync so both
+      // transports survive expired auth tokens in the same offline-first way.
+      const bootstrap = await this.ensureSyncCredential(authTokens, businessId as string, deviceId)
+      syncCredential = bootstrap.credential
+    } catch {
+      this.disconnectRealtimeSocket()
+      await this.refreshSnapshot()
+      return
+    }
+
     this.realtimeStatus = this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting'
     await this.refreshSnapshot()
 
@@ -2365,12 +2551,12 @@ export class SyncService extends EventEmitter {
       this.reconnectAttempt = 0
 
       socket.emit('auth.authenticate', {
-        accessToken: tokens!.accessToken,
+        syncToken: syncCredential.syncToken,
         deviceId,
       })
     })
 
-    socket.on('sync.connected', (_payload: SyncRealtimeConnectionPayload) => {
+    socket.on('sync.connected', () => {
       this.realtimeAuthenticated = true
       this.realtimeStatus = 'connected'
       this.reconnectAttempt = 0
@@ -2397,7 +2583,7 @@ export class SyncService extends EventEmitter {
       this.handleRealtimeBatchEvent(batch)
     })
 
-    socket.on('sync.changes.available', (_payload: SyncChangesAvailableEvent) => {
+    socket.on('sync.changes.available', () => {
       if (this.isSyncing) {
         this.pendingRealtimeSync = true
         return
@@ -2456,15 +2642,9 @@ export class SyncService extends EventEmitter {
 
   private async handleRealtimeError(payload: SyncRealtimeErrorEvent) {
     if (payload.code === 'SYNC_SOCKET_UNAUTHORIZED') {
-      const tokens = this.getStoredTokens()
-      if (tokens?.refreshToken) {
-        try {
-          await this.refreshTokens(tokens.refreshToken)
-          return
-        } catch {
-          // Let reconnect backoff handle future attempts when auth refresh is unavailable.
-        }
-      }
+      this.clearStoredSyncCredential()
+      this.disconnectRealtimeSocket()
+      void this.refreshRealtimeConnection(true)
     }
   }
 
@@ -2541,7 +2721,7 @@ export class SyncService extends EventEmitter {
     },
   ): Promise<AuthenticatedResponse<T>> {
     try {
-      const data = await this.requestWithAccessToken<T>(
+      const data = await this.requestWithBearerToken<T>(
         path,
         options.accessToken,
         options.method,
@@ -2560,7 +2740,7 @@ export class SyncService extends EventEmitter {
       }
 
       const refreshed = await this.refreshTokens(options.refreshToken)
-      const data = await this.requestWithAccessToken<T>(
+      const data = await this.requestWithBearerToken<T>(
         path,
         refreshed.accessToken,
         options.method,
@@ -2573,9 +2753,66 @@ export class SyncService extends EventEmitter {
     }
   }
 
-  private async requestWithAccessToken<T>(
+  private async syncAuthenticatedRequest<T>(
     path: string,
-    accessToken: string,
+    options: {
+      method: HttpMethod
+      credential: SyncCredential
+      authTokens: Tokens | null
+      data?: unknown
+    },
+  ): Promise<SyncAuthenticatedResponse<T>> {
+    try {
+      const data = await this.requestWithBearerToken<T>(
+        path,
+        options.credential.syncToken,
+        options.method,
+        options.data,
+      )
+      return {
+        data,
+        credential: options.credential,
+        authTokens: options.authTokens,
+      }
+    } catch (error) {
+      if (!this.isUnauthorizedError(error)) {
+        throw error
+      }
+
+      // A revoked sync token should not get retried forever. We clear the local
+      // credential first, then attempt a one-time online re-issuance using the
+      // normal auth session if that session is still recoverable.
+      this.clearStoredSyncCredential()
+
+      if (!options.authTokens) {
+        throw new Error(
+          'The saved sync token is no longer valid and no online session is available to renew it.',
+        )
+      }
+
+      const refreshed = await this.ensureSyncCredential(
+        options.authTokens,
+        options.credential.businessId,
+        options.credential.deviceId,
+      )
+      const data = await this.requestWithBearerToken<T>(
+        path,
+        refreshed.credential.syncToken,
+        options.method,
+        options.data,
+      )
+
+      return {
+        data,
+        credential: refreshed.credential,
+        authTokens: refreshed.authTokens,
+      }
+    }
+  }
+
+  private async requestWithBearerToken<T>(
+    path: string,
+    bearerToken: string,
     method: HttpMethod = 'GET',
     data?: unknown,
   ): Promise<T> {
@@ -2584,7 +2821,7 @@ export class SyncService extends EventEmitter {
         url: path,
         method,
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${bearerToken}`,
         },
         data,
       })
@@ -2599,7 +2836,7 @@ export class SyncService extends EventEmitter {
     }
   }
 
-  private async refreshTokens(refreshToken: string): Promise<Tokens> {
+  private async refreshTokens(refreshToken: string, reconnectRealtime = false): Promise<Tokens> {
     let payload: { tokens: Tokens }
 
     try {
@@ -2619,8 +2856,78 @@ export class SyncService extends EventEmitter {
 
     this.secureStore.set(AUTH_TOKENS_KEY, JSON.stringify(payload.tokens))
     this.emit('tokens-updated')
-    void this.refreshRealtimeConnection(true)
+    if (reconnectRealtime) {
+      void this.refreshRealtimeConnection(true)
+    }
     return payload.tokens
+  }
+
+  private async ensureSyncCredential(
+    authTokens: Tokens | null,
+    businessId: string,
+    deviceId: string,
+  ): Promise<{ credential: SyncCredential; authTokens: Tokens | null }> {
+    const storedCredential = this.getStoredSyncCredential()
+    const authContext = authTokens ? decodeJwtPayload<JwtPayload>(authTokens.accessToken) : null
+    if (
+      storedCredential &&
+      storedCredential.businessId === businessId &&
+      storedCredential.deviceId === deviceId &&
+      (!authContext?.sub || storedCredential.userId === authContext.sub)
+    ) {
+      return {
+        credential: storedCredential,
+        authTokens,
+      }
+    }
+
+    if (storedCredential) {
+      this.clearStoredSyncCredential()
+    }
+
+    if (!authTokens) {
+      throw new Error(
+        'Sync needs an existing device credential or a valid online session to mint one.',
+      )
+    }
+
+    if (
+      !authContext?.sub ||
+      authContext.type !== 'phase2' ||
+      !authContext.businessId ||
+      authContext.businessId !== businessId
+    ) {
+      throw new Error('Sync token issuance requires a valid phase2 business session.')
+    }
+
+    const deviceIdentity: IssueSyncTokenRequest = {
+      deviceId,
+      deviceName: hostname(),
+      platform: `${process.platform}/${process.arch}`,
+      appVersion: app.getVersion(),
+    }
+
+    const response = await this.authenticatedRequest<IssueSyncTokenResponse>('/sync/token', {
+      method: 'POST',
+      accessToken: authTokens.accessToken,
+      refreshToken: authTokens.refreshToken,
+      data: deviceIdentity,
+    })
+
+    const nextCredential: SyncCredential = {
+      syncToken: response.data.syncToken,
+      userId: authContext.sub,
+      businessId,
+      deviceId: response.data.deviceId,
+      issuedAt: response.data.issuedAt,
+    }
+
+    this.secureStore.set(SYNC_CREDENTIAL_KEY, JSON.stringify(nextCredential))
+
+    return {
+      credential: nextCredential,
+      authTokens: response.tokens,
+    }
   }
 
   private isUnauthorizedError(error: unknown) {
@@ -2659,6 +2966,24 @@ export class SyncService extends EventEmitter {
     } catch {
       return null
     }
+  }
+
+  private getStoredSyncCredential(): SyncCredential | null {
+    const raw = this.secureStore.get(SYNC_CREDENTIAL_KEY)
+    if (!raw) {
+      return null
+    }
+
+    try {
+      return JSON.parse(raw) as SyncCredential
+    } catch {
+      this.clearStoredSyncCredential()
+      return null
+    }
+  }
+
+  private clearStoredSyncCredential() {
+    this.secureStore.delete(SYNC_CREDENTIAL_KEY)
   }
 
   private getPendingCount() {
@@ -2729,6 +3054,53 @@ export class SyncService extends EventEmitter {
     return left.id.localeCompare(right.id)
   }
 
+  private readLatestFailedOutbox(): FailedOutboxRow | null {
+    const [row] = this.db.query(
+      `
+        SELECT last_error, last_error_details
+        FROM sync_outbox
+        WHERE status = 'failed'
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+      `,
+    ) as FailedOutboxRow[]
+
+    return row ?? null
+  }
+
+  private parseFailureDetails(raw: string | null): SyncOperationFailureDetails | null {
+    if (!raw) {
+      return null
+    }
+
+    try {
+      return JSON.parse(raw) as SyncOperationFailureDetails
+    } catch {
+      return null
+    }
+  }
+
+  private formatSyncFailureMessage(
+    fallbackMessage: string,
+    details: SyncOperationFailureDetails | null,
+  ) {
+    if (!details) {
+      return fallbackMessage
+    }
+
+    if (details.code === 'QUOTA_EXCEEDED' && details.quota) {
+      const requiredPlan = details.requiredPlan ? `${details.requiredPlan} or higher` : 'a higher plan'
+      return `Sync needs a plan upgrade: ${details.quota.resource} is at ${details.quota.used}/${details.quota.limit ?? 'unlimited'}. Reconnect and move this business to ${requiredPlan} before retrying.`
+    }
+
+    if (details.code === 'PLAN_UPGRADE_REQUIRED') {
+      const requiredPlan = details.requiredPlan ? `${details.requiredPlan} or higher` : 'a higher plan'
+      return `Sync needs a plan upgrade before this action can be applied. Reconnect and move this business to ${requiredPlan}.`
+    }
+
+    return fallbackMessage
+  }
+
   private markOutboxAttempt(rows: OutboxRow[], message: string) {
     if (rows.length === 0) {
       return
@@ -2742,6 +3114,7 @@ export class SyncService extends EventEmitter {
           SET attempt_count = attempt_count + 1,
               last_attempt_at = ?,
               last_error = ?,
+              last_error_details = NULL,
               updated_at = ?
           WHERE id = ?
         `,
@@ -2811,11 +3184,17 @@ export class SyncService extends EventEmitter {
   private async refreshSnapshot(nextStatus?: SyncSnapshot['status']) {
     const settings = await this.readSettings()
     const lastSyncedAt = await this.readSetting(LAST_SYNCED_AT_KEY)
+    const latestFailure = this.readLatestFailedOutbox()
+    const status = nextStatus ?? this.deriveStatus(settings)
+    const parsedFailureDetails = this.parseFailureDetails(latestFailure?.last_error_details ?? null)
     this.snapshot = {
       ...this.snapshot,
-      status: nextStatus ?? this.deriveStatus(settings),
+      status,
       pendingCount: this.getPendingCount(),
       lastSyncedAt,
+      lastError: latestFailure?.last_error ?? (status === 'error' ? this.snapshot.lastError : null),
+      lastFailureDetails:
+        parsedFailureDetails ?? (status === 'error' ? this.lastRuntimeFailureDetails : null),
       network: this.network.snapshot,
       settings,
       realtime: this.resolveRealtimeSnapshot(settings),
@@ -2825,11 +3204,14 @@ export class SyncService extends EventEmitter {
 
   private resolveRealtimeSnapshot(settings: SyncSettings): SyncSnapshot['realtime'] {
     const tokens = this.getStoredTokens()
+    const syncCredential = this.getStoredSyncCredential()
     const businessId = this.secureStore.get(LAST_BUSINESS_KEY)
+    const hasMatchingSyncCredential =
+      Boolean(syncCredential) && syncCredential?.businessId === businessId
     const canUseRealtime =
       !this.stopRequested &&
       settings.autoSyncEnabled &&
-      Boolean(tokens?.accessToken) &&
+      Boolean(hasMatchingSyncCredential || tokens?.accessToken) &&
       Boolean(businessId) &&
       this.meetsMinimumQuality(this.network.snapshot.quality, settings.minQuality)
 
@@ -2931,6 +3313,21 @@ function unwrapApiEnvelope<T>(raw: unknown): T {
   }
 
   return raw as T
+}
+
+function decodeJwtPayload<T = Record<string, unknown>>(token: string): T | null {
+  try {
+    const [, payload] = token.split('.')
+    if (!payload) {
+      return null
+    }
+
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as T
+  } catch {
+    return null
+  }
 }
 
 function isSyncQuality(value: string | null): value is SyncSettings['minQuality'] {

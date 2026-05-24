@@ -19,6 +19,7 @@ import type {
   InventoryMovementSyncRecord,
   InventoryRestockSyncPayload,
   InventoryThresholdSyncPayload,
+  RoleSyncRecord,
   SaleItemSyncRecord,
   SalePaymentSyncRecord,
   SaleSyncPayload,
@@ -28,10 +29,12 @@ import type {
   SyncBatchStatus,
   SyncBatchStatusResponse,
   SyncEntity,
+  SyncOperationFailureDetails,
   SyncOperationResult,
   SyncPullResponse,
   SyncPushResponse,
   SyncRecord,
+  TeamMemberSyncRecord,
   JwtPayload,
 } from '@biztrack/types'
 import {
@@ -55,6 +58,8 @@ import {
   AppNotFoundException,
 } from '@/common/exceptions/app-exceptions'
 import { Business } from '@/entities/business.entity'
+import { BusinessMember } from '@/entities/business-member.entity'
+import { Role } from '@/entities/role.entity'
 import { Contact } from '@/entities/contact.entity'
 import { Debt } from '@/entities/debt.entity'
 import { DebtPayment } from '@/entities/debt-payment.entity'
@@ -86,6 +91,7 @@ import { ExpensesService } from '@/modules/expenses/services/expenses.service'
 import { SlugService } from '@/modules/products/services/slug.service'
 import { SkuService } from '@/modules/products/services/sku.service'
 import { SalesService } from '@/modules/sales/services/sales.service'
+import { QuotaService } from '@/modules/permissions/quota.service'
 import {
   SYNC_BATCH_MAX_OPERATIONS,
   SYNC_BATCH_RECOVERY_STALE_AFTER_MS,
@@ -99,6 +105,7 @@ type BatchProcessingResult = {
   status: 'applied' | 'conflict' | 'failed'
   resolution?: 'server_wins' | 'client_wins' | null
   errorMessage?: string | null
+  errorDetails?: SyncOperationFailureDetails | null
 }
 
 type CategorySyncPayload = {
@@ -273,6 +280,8 @@ export class SyncService {
     private readonly categoriesRepo: ProductCategoriesRepository,
     @InjectRepository(Business)
     private readonly businessesRepo: Repository<Business>,
+    @InjectRepository(BusinessMember)
+    private readonly businessMembersRepo: Repository<BusinessMember>,
     @InjectRepository(Contact)
     private readonly contactsRepo: Repository<Contact>,
     @InjectRepository(Debt)
@@ -299,12 +308,15 @@ export class SyncService {
     private readonly syncBatchesRepo: Repository<SyncBatch>,
     @InjectRepository(SyncOperation)
     private readonly syncOperationsRepo: Repository<SyncOperation>,
+    @InjectRepository(Role)
+    private readonly rolesRepo: Repository<Role>,
     @InjectRepository(UnitOfMeasure)
     private readonly unitsRepo: Repository<UnitOfMeasure>,
     private readonly expenseCategoriesService: ExpenseCategoriesService,
     private readonly expensesService: ExpensesService,
     private readonly inventoryService: InventoryService,
     private readonly salesService: SalesService,
+    private readonly quotaService: QuotaService,
     private readonly slugService: SlugService,
     private readonly skuService: SkuService,
     private readonly barcodeService: BarcodeService,
@@ -376,6 +388,7 @@ export class SyncService {
               status: 'pending',
               resolution: null,
               errorMessage: null,
+              errorDetails: null,
             }),
           ),
         )
@@ -408,9 +421,13 @@ export class SyncService {
     }
   }
 
-  async getBatchStatus(businessId: string, batchId: string): Promise<SyncBatchStatusResponse> {
+  async getBatchStatus(
+    businessId: string,
+    batchId: string,
+    deviceId?: string,
+  ): Promise<SyncBatchStatusResponse> {
     try {
-      let batch = await this.findBatchWithOperations(batchId, businessId)
+      let batch = await this.findBatchWithOperations(batchId, businessId, deviceId)
 
       if (!batch) {
         throw new AppNotFoundException(
@@ -452,6 +469,8 @@ export class SyncService {
         salePayments,
         debts,
         expenses,
+        teamMembers,
+        roles,
       ] = await Promise.all([
         this.contactsRepo
           .createQueryBuilder('contact')
@@ -563,6 +582,21 @@ export class SyncService {
           .andWhere('expense.updated_at <= :pulledAt', { pulledAt })
           .orderBy('expense.updated_at', 'ASC')
           .getMany(),
+        this.businessMembersRepo
+          .createQueryBuilder('member')
+          .leftJoinAndSelect('member.user', 'user')
+          .where('member.business_id = :businessId', { businessId })
+          .andWhere('member.updated_at > :since', { since })
+          .andWhere('member.updated_at <= :pulledAt', { pulledAt })
+          .orderBy('member.updated_at', 'ASC')
+          .getMany(),
+        this.rolesRepo
+          .createQueryBuilder('role')
+          .where('role.business_id = :businessId', { businessId })
+          .andWhere('role.updated_at > :since', { since })
+          .andWhere('role.updated_at <= :pulledAt', { pulledAt })
+          .orderBy('role.updated_at', 'ASC')
+          .getMany(),
       ])
 
       const restockQuantityMap = new Map(
@@ -593,6 +627,8 @@ export class SyncService {
         salePayments: salePayments.map((record) => this.toSalePaymentSyncRecord(record)),
         debts: debts.map((record) => this.toDebtSyncRecord(record)),
         expenses: expenses.map((record) => this.toExpenseSyncRecord(record)),
+        teamMembers: teamMembers.map((record) => this.toTeamMemberSyncRecord(record)),
+        roles: roles.map((record) => this.toRoleSyncRecord(record)),
       }
 
       return {
@@ -677,6 +713,7 @@ export class SyncService {
           status: result.status,
           resolution: result.resolution ?? null,
           errorMessage: result.errorMessage ?? null,
+          errorDetails: (result.errorDetails ? { ...result.errorDetails } : null) as any,
         })
       }
 
@@ -786,6 +823,7 @@ export class SyncService {
         return {
           status: 'failed',
           errorMessage: error.message,
+          errorDetails: (error.details as SyncOperationFailureDetails | undefined) ?? null,
         }
       }
 
@@ -799,6 +837,7 @@ export class SyncService {
       return {
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Unexpected sync failure',
+        errorDetails: null,
       }
     }
   }
@@ -841,10 +880,21 @@ export class SyncService {
     const slug = await this.slugService.generateCategorySlug(payload.name!, businessId, existing?.id)
 
     if (existing) {
+      const nextIsActive = payload.isActive ?? existing.isActive
+      const reactivatesQuotaConsumer =
+        nextIsActive && (existing.deletedAt !== null || existing.isActive === false)
+
+      // Sync is a second write path into the same business data. We enforce
+      // the quota here as well so an offline device cannot bypass the limits
+      // that the online controller/service path would apply.
+      if (reactivatesQuotaConsumer) {
+        await this.quotaService.assertWithinQuota(businessId, 'categories')
+      }
+
       await this.categoriesRepo.update(operation.recordId, {
         name: payload.name!.trim(),
         slug,
-        isActive: payload.isActive ?? existing.isActive,
+        isActive: nextIsActive,
         color: this.normalizeOptionalString(payload.color),
         icon: this.normalizeOptionalString(payload.icon),
         imageUrl: this.normalizeOptionalString(payload.imageUrl),
@@ -853,6 +903,10 @@ export class SyncService {
         updatedAt: operation.recordUpdatedAt,
       })
       return { status: 'applied' }
+    }
+
+    if (payload.isActive ?? true) {
+      await this.quotaService.assertWithinQuota(businessId, 'categories')
     }
 
     await this.categoriesRepo.save(
@@ -909,6 +963,16 @@ export class SyncService {
     const createdById = await this.resolveContactCreatedById(businessId, payload.createdById)
 
     if (existing) {
+      const nextIsActive = payload.isActive ?? existing.isActive
+      const reactivatesQuotaConsumer = nextIsActive && existing.isActive === false
+
+      // Contacts can be created offline and later pushed through sync. We
+      // repeat the quota check here so "reactivate while offline" behaves the
+      // same as "reactivate through the regular API".
+      if (reactivatesQuotaConsumer) {
+        await this.quotaService.assertWithinQuota(businessId, 'contacts')
+      }
+
       await this.contactsRepo.update(operation.recordId, {
         type: payload.type ?? existing.type,
         name: normalizedName,
@@ -916,11 +980,15 @@ export class SyncService {
         phoneAlt: this.normalizeOptionalString(payload.phoneAlt),
         address: this.normalizeOptionalString(payload.address),
         notes: this.normalizeOptionalString(payload.notes),
-        isActive: payload.isActive ?? existing.isActive,
+        isActive: nextIsActive,
         updatedAt: operation.recordUpdatedAt,
       })
 
       return { status: 'applied' }
+    }
+
+    if (payload.isActive ?? true) {
+      await this.quotaService.assertWithinQuota(businessId, 'contacts')
     }
 
     await this.contactsRepo.save(
@@ -1119,6 +1187,18 @@ export class SyncService {
           : existing?.trackInventory ?? !isService
 
     if (existing) {
+      const nextIsActive = payload.isActive ?? existing.isActive
+      const reactivatesQuotaConsumer =
+        nextIsActive && (existing.deletedAt !== null || existing.isActive === false)
+
+      // Product creation is quota-limited in both the controller path and the
+      // sync path. Without this check, an offline device could create beyond
+      // plan limits and only discover the problem after the data was already
+      // accepted server-side.
+      if (reactivatesQuotaConsumer) {
+        await this.quotaService.assertWithinQuota(businessId, 'products')
+      }
+
       await this.dataSource.transaction(async (manager) => {
         await manager.getRepository(Product).update(operation.recordId, {
           categoryId: category?.id ?? null,
@@ -1132,7 +1212,7 @@ export class SyncService {
           sellingPrice: payload.sellingPrice!,
           costPrice: payload.costPrice ?? null,
           taxRate: payload.taxRate ?? existing.taxRate ?? 0,
-          isActive: payload.isActive ?? existing.isActive,
+          isActive: nextIsActive,
           isService,
           trackInventory,
           imageUrl: this.normalizeOptionalString(payload.imageUrl),
@@ -1172,6 +1252,10 @@ export class SyncService {
     const openingStock = trackInventory
       ? Math.max(payload.currentStock ?? payload.openingStock ?? 0, 0)
       : 0
+
+    if (payload.isActive ?? true) {
+      await this.quotaService.assertWithinQuota(businessId, 'products')
+    }
 
     await this.dataSource.transaction(async (manager) => {
       await manager.getRepository(Product).save(
@@ -1481,7 +1565,7 @@ export class SyncService {
           direction: payload.direction,
           sourceType: payload.sourceType,
           sourceId: payload.sourceId,
-          sourceReference: payload.sourceReference.trim(),
+          sourceReference: this.normalizeOptionalString(payload.sourceReference) ?? payload.sourceId,
           originalAmount: normalizedOriginalAmount,
           status,
           dueDate: payload.dueDate ?? null,
@@ -1738,8 +1822,14 @@ export class SyncService {
     )
   }
 
-  private async findBatchWithOperations(batchId: string, businessId?: string) {
-    const where = businessId ? { id: batchId, businessId } : { id: batchId }
+  private async findBatchWithOperations(batchId: string, businessId?: string, deviceId?: string) {
+    const where = businessId
+      ? {
+          id: batchId,
+          businessId,
+          ...(deviceId ? { deviceId } : {}),
+        }
+      : { id: batchId }
     return this.syncBatchesRepo.findOne({
       where,
       relations: ['operations'],
@@ -1900,6 +1990,7 @@ export class SyncService {
       .set({
         status: 'failed',
         errorMessage,
+        errorDetails: null,
       })
       .where('batch_id = :batchId', { batchId })
       .andWhere('status = :status', { status: 'pending' })
@@ -2011,6 +2102,7 @@ export class SyncService {
           ? operation.resolution
           : null,
       errorMessage: operation.errorMessage ?? null,
+      errorDetails: (operation.errorDetails as SyncOperationFailureDetails | null | undefined) ?? null,
     }
   }
 
@@ -2332,6 +2424,40 @@ export class SyncService {
       updatedAt: record.updatedAt.toISOString(),
       deletedAt: record.deletedAt?.toISOString() ?? null,
       isDeleted: Boolean(record.deletedAt),
+    }
+  }
+
+  private toTeamMemberSyncRecord(record: BusinessMember): TeamMemberSyncRecord {
+    return {
+      id: record.id,
+      businessId: record.businessId,
+      userId: record.userId,
+      roleId: record.roleId ?? null,
+      role: record.role,
+      status: record.status,
+      name: record.user?.name ?? null,
+      email: record.user?.email ?? null,
+      phone: record.user?.phone ?? null,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+      deletedAt: null,
+      isDeleted: false,
+    }
+  }
+
+  private toRoleSyncRecord(record: Role): RoleSyncRecord {
+    return {
+      id: record.id,
+      businessId: record.businessId,
+      name: record.name,
+      description: record.description ?? null,
+      isSystem: record.isSystem,
+      isOwnerRole: record.isOwnerRole,
+      colour: record.colour ?? null,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+      deletedAt: null,
+      isDeleted: false,
     }
   }
 

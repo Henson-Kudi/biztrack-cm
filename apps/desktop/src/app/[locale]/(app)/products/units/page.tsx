@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Badge, Button, Spinner } from '@biztrack/ui'
 import { toast } from 'sonner'
@@ -49,7 +49,7 @@ export default function ProductUnitsPage() {
   const [editingUnit, setEditingUnit] = useState<UnitOfMeasure | null>(null)
   const [busyUnitId, setBusyUnitId] = useState<string | null>(null)
 
-  const translateKey = (key: string) => t(key as never)
+  const translateKey = useCallback((key: string) => t(key as never), [t])
   const canUndoDelete = String(role ?? '') === 'SUPER_ADMIN'
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export default function ProductUnitsPage() {
     return () => {
       active = false
     }
-  }, [businessId, deferredSearch, page, reloadKey, t])
+  }, [businessId, deferredSearch, page, reloadKey, t, translateKey])
 
   useEffect(() => {
     if (!units || units.totalPages === 0 || page <= units.totalPages) {

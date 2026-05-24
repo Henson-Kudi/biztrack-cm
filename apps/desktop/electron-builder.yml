@@ -1,7 +1,7 @@
 appId: cm.biztrack.desktop
 productName: BizTrack CM
 npmRebuild: false
-copyright: "Copyright © 2025 BizTrack CM"
+copyright: "Copyright (c) 2025 BizTrack CM"
 
 directories:
   output: release

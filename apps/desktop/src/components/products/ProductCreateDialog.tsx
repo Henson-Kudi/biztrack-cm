@@ -24,6 +24,7 @@ type ProductCreateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: (product: Product) => void
+  quotaReached?: boolean
 }
 
 export function ProductCreateDialog({
@@ -34,6 +35,7 @@ export function ProductCreateDialog({
   open,
   onOpenChange,
   onCreated,
+  quotaReached = false,
 }: ProductCreateDialogProps) {
   const t = useTranslations('app.products')
   const [formKey, setFormKey] = useState(0)
@@ -62,6 +64,7 @@ export function ProductCreateDialog({
           units={units}
           defaultUnitId={fallbackUnit?.id}
           defaultValues={defaultValues}
+          quotaReached={quotaReached}
           onCancel={() => onOpenChange(false)}
           onSaved={(product) => {
             onCreated(product)

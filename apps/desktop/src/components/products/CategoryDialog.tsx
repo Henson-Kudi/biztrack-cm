@@ -26,6 +26,7 @@ type CategoryDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: (category: ProductCategory) => void
+  quotaReached?: boolean
 }
 
 type CategoryFormValues = {
@@ -69,6 +70,7 @@ export function CategoryDialog({
   open,
   onOpenChange,
   onSaved,
+  quotaReached = false,
 }: CategoryDialogProps) {
   const t = useTranslations('app.products')
   const [submitting, setSubmitting] = useState(false)
@@ -254,7 +256,7 @@ export function CategoryDialog({
               >
                 {t('form.cancel')}
               </Button>
-              <Button type="submit" variant="primary" disabled={submitting}>
+              <Button type="submit" variant="primary" disabled={submitting || (quotaReached && !isUpdateMode)}>
                 {submitting
                   ? isUpdateMode
                     ? t('categories_page.form.updating')

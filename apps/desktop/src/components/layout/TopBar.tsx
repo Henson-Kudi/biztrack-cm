@@ -9,6 +9,7 @@ import { type Locale, routing } from '@/i18n/routing'
 import { useSyncSnapshot } from '@/hooks/useSyncSnapshot'
 import { cn } from '@/lib/utils'
 import { hasDesktopIpc } from '@/services/ipc.bridge'
+import { usePlanStore } from '@/stores/plan.store'
 
 const syncQualityOptions: SyncSettings['minQuality'][] = ['fair', 'strong', 'very_strong']
 
@@ -21,6 +22,7 @@ export function TopBar() {
   const [isSyncMenuOpen, setIsSyncMenuOpen] = useState(false)
   const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false)
   const { snapshot, trigger, updateSettings } = useSyncSnapshot()
+  const planState = usePlanStore((state) => state.current)
   const syncMenuRef = useRef<HTMLDivElement | null>(null)
   const localeMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -107,6 +109,14 @@ export function TopBar() {
       }).format(new Date(snapshot.lastSyncedAt))
     : t('never')
   const autoSyncWarning = t('auto_sync_warning')
+  const activePlanLabel = planState ? t('plan_label', { plan: planState.effectivePlan }) : null
+  const trialDaysRemaining =
+    planState?.trialEndsAt && planState.status === 'TRIAL'
+      ? Math.max(
+          0,
+          Math.ceil((new Date(planState.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
+        )
+      : 0
   const localeLabels: Record<Locale, string> = {
     en: t('languages.en'),
     fr: t('languages.fr'),
@@ -208,6 +218,21 @@ export function TopBar() {
             {t('desktop_only_title')}
           </span>
         )}
+        {isDesktopRuntime && activePlanLabel ? (
+          <span className={passiveChipClassName}>
+            {activePlanLabel}
+          </span>
+        ) : null}
+        {isDesktopRuntime && planState?.isStale ? (
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#FAEEDA] px-3 py-1.5 text-xs text-[#854F0B]">
+            {t('plan_stale')}
+          </span>
+        ) : null}
+        {isDesktopRuntime && trialDaysRemaining > 0 && !planState?.offlineExpiredFallback ? (
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#E6F1FB] px-3 py-1.5 text-xs text-[#185FA5]">
+            {t('trial_days_left', { count: trialDaysRemaining })}
+          </span>
+        ) : null}
       </div>
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -289,6 +314,13 @@ export function TopBar() {
                     })}
                   </p>
                 </div>
+
+                {snapshot.status === 'error' && snapshot.lastError ? (
+                  <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-900">
+                    <p className="font-semibold">{t('sync_issue_label')}</p>
+                    <p className="mt-1">{snapshot.lastError}</p>
+                  </div>
+                ) : null}
 
                 <div className="mt-4 space-y-3">
                   <div className="rounded-xl border border-border bg-background px-3 py-3">

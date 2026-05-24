@@ -25,6 +25,7 @@ import { Contact } from '@/entities/contact.entity'
 import { Debt } from '@/entities/debt.entity'
 import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
+import { QuotaService } from '@/modules/permissions/quota.service'
 import { DebtsService } from './debts.service'
 
 @Injectable()
@@ -35,6 +36,7 @@ export class ContactsService {
     @InjectRepository(Debt)
     private readonly debtsRepo: Repository<Debt>,
     private readonly debtsService: DebtsService,
+    private readonly quotaService: QuotaService,
     private readonly i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
@@ -131,6 +133,12 @@ export class ContactsService {
 
       const existing = await this.findByPrimaryPhone(businessId, phone)
       if (existing) {
+        if (!existing.isActive) {
+          // Reactivating an archived contact consumes a slot again because the
+          // quota counts only active contacts.
+          await this.quotaService.assertWithinQuota(businessId, 'contacts')
+        }
+
         if (existing.type === ContactType.BOTH) {
           return this.reuseExistingContact(existing, businessId, {
             type: ContactType.BOTH,
@@ -154,6 +162,8 @@ export class ContactsService {
           notes,
         })
       }
+
+      await this.quotaService.assertWithinQuota(businessId, 'contacts')
 
       const contact = await this.contactsRepo.save(
         this.contactsRepo.create({

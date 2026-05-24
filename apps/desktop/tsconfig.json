@@ -1,6 +1,12 @@
 {
   "extends": "@biztrack/typescript-config/nextjs.json",
   "compilerOptions": {
+    "skipLibCheck": true,
+    "types": [
+      "react",
+      "react-dom",
+      "node"
+    ],
     "paths": {
       "@/*": [
         "./src/*"
@@ -12,7 +18,7 @@
         "../../packages/utils/src"
       ],
       "@biztrack/ui": [
-        "../../packages/ui/src"
+        "../../packages/ui/dist"
       ],
       "@hookform/resolvers/zod": [
         "../../node_modules/.pnpm/@hookform+resolvers@5.2.2_react-hook-form@7.72.1_react@19.2.4_/node_modules/@hookform/resolvers/zod"

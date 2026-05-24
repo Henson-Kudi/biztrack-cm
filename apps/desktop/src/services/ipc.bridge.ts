@@ -54,6 +54,11 @@ declare global {
           fallback?: 'downloads' | 'downloads-revealed'
           error?: string
         }>
+        url: (payload: {
+          url: string
+          text?: string
+          title?: string
+        }) => Promise<{ success: boolean; shared: boolean; error?: string }>
       }
       documents: {
         exportPdf: (data: {
@@ -78,6 +83,8 @@ declare global {
       }
       app: {
         version: () => Promise<string>
+        openExternal: (url: string) => Promise<{ success: boolean }>
+        isWhatsAppInstalled: () => Promise<{ installed: boolean }>
       }
       secureStore: {
         isAvailable: () => Promise<boolean>
@@ -107,6 +114,7 @@ const fallbackIpc: Window['electronAPI'] = {
       pendingCount: 0,
       lastSyncedAt: null,
       lastError: null,
+      lastFailureDetails: null,
       network: {
         online: true,
         quality: 'strong',
@@ -127,6 +135,7 @@ const fallbackIpc: Window['electronAPI'] = {
       pendingCount: 0,
       lastSyncedAt: null,
       lastError: null,
+      lastFailureDetails: null,
       network: {
         online: true,
         quality: 'strong',
@@ -151,6 +160,7 @@ const fallbackIpc: Window['electronAPI'] = {
       pendingCount: 0,
       lastSyncedAt: null,
       lastError: null,
+      lastFailureDetails: null,
       network: {
         online: true,
         quality: 'strong',
@@ -185,10 +195,8 @@ const fallbackIpc: Window['electronAPI'] = {
     receipt: async () => ({ success: false }),
   },
   share: {
-    file: async () => ({
-      success: false,
-      shared: false,
-    }),
+    file: async () => ({ success: false, shared: false }),
+    url: async () => ({ success: false, shared: false }),
   },
   documents: {
     exportPdf: async () => ({
@@ -202,6 +210,8 @@ const fallbackIpc: Window['electronAPI'] = {
   },
   app: {
     version: async () => 'web',
+    openExternal: async () => ({ success: false }),
+    isWhatsAppInstalled: async () => ({ installed: false }),
   },
   secureStore: {
     isAvailable: async () => false,

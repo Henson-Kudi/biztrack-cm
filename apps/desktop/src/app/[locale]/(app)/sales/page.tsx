@@ -285,9 +285,14 @@ function getDebtStatusBadgeClassName(status: DebtStatus) {
 }
 
 function sanitizeReceiptFileName(value: string) {
-  const cleaned = value
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+  const base = Array.from(value.trim())
+    .filter((character) => {
+      const code = character.charCodeAt(0)
+      return code >= 32 && code !== 127
+    })
+    .join('')
+  const cleaned = base
+    .replace(/[<>:"/\\|?*]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
 
@@ -657,7 +662,6 @@ export default function SalesPage() {
   const t = useTranslations('app.sales')
   const tSell = useTranslations('app.sell')
   const locale = useLocale()
-  console.log('Current locale:', locale)
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
@@ -985,7 +989,8 @@ export default function SalesPage() {
   const updateSaleDebtLookup = (saleId: string, nextDebt: Debt | null) => {
     setSaleDebtLookup((current) => {
       if (!nextDebt) {
-        const { [saleId]: _removed, ...rest } = current
+        const { [saleId]: removedDebt, ...rest } = current
+        void removedDebt
         return rest
       }
 

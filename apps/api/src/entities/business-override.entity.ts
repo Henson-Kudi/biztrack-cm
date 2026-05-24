@@ -17,6 +17,10 @@ export class BusinessOverride extends BaseEntity {
   @Column()
   resource!: string
 
+  // Overrides remain boolean-only in v1. We are intentionally not adding
+  // per-business quota overrides yet because count-based exceptions would have
+  // to stay perfectly in sync across controller writes, sync-batch writes, and
+  // offline desktop fallback logic.
   @Column({ default: true })
   granted!: boolean
 

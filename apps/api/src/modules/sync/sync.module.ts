@@ -3,6 +3,8 @@ import { BullModule } from '@nestjs/bullmq'
 import { JwtModule } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { PasswordManager } from '@/common/security/password-manager'
+import { BusinessMember } from '@/entities/business-member.entity'
 import { Business } from '@/entities/business.entity'
 import { Contact } from '@/entities/contact.entity'
 import { Debt } from '@/entities/debt.entity'
@@ -19,8 +21,10 @@ import { SaleItem } from '@/entities/sale-item.entity'
 import { SalePayment } from '@/entities/sale-payment.entity'
 import { Sale } from '@/entities/sale.entity'
 import { SyncBatch } from '@/entities/sync-batch.entity'
+import { SyncDeviceSession } from '@/entities/sync-device-session.entity'
 import { SyncLog } from '@/entities/sync-log.entity'
 import { SyncOperation } from '@/entities/sync-operation.entity'
+import { Role } from '@/entities/role.entity'
 import { UnitOfMeasure } from '@/entities/unit-of-measure.entity'
 import { User } from '@/entities/user.entity'
 import { RedisModule } from '@/common/redis/redis.module'
@@ -31,11 +35,14 @@ import { SlugService } from '@/modules/products/services/slug.service'
 import { SkuService } from '@/modules/products/services/sku.service'
 import { ExpensesModule } from '@/modules/expenses/expenses.module'
 import { InventoryModule } from '@/modules/inventory/inventory.module'
+import { PermissionsModule } from '@/modules/permissions/permissions.module'
 import { SalesModule } from '@/modules/sales/sales.module'
 import type { AppConfig } from '@/config/configuration'
 import { SYNC_BATCHES_QUEUE } from './constants/sync.constants'
 import { SyncController } from './sync.controller'
+import { SyncTokenGuard } from './guards/sync-token.guard'
 import { SyncBatchesProcessor } from './processors/sync-batches.processor'
+import { SyncAuthService } from './services/sync-auth.service'
 import { SyncQueueMonitorService } from './services/sync-queue-monitor.service'
 import { SyncRealtimeService } from './services/sync-realtime.service'
 import { SyncService } from './sync.service'
@@ -49,13 +56,19 @@ import { SyncService } from './sync.service'
     SalesModule,
     ExpensesModule,
     InventoryModule,
+    PermissionsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig>) => ({
-        secret: config.get<string>('JWT_SECRET', { infer: true }),
+        // Sync credentials deliberately use their own secret so a leaked sync token
+        // cannot be replayed as a normal phase1/phase2 bearer token elsewhere.
+        secret:
+          config.get<string>('SYNC_JWT_SECRET', { infer: true }) ??
+          config.get<string>('JWT_SECRET', { infer: true }),
       }),
     }),
     TypeOrmModule.forFeature([
+      BusinessMember,
       Business,
       Contact,
       Debt,
@@ -66,12 +79,14 @@ import { SyncService } from './sync.service'
       InventoryMovement,
       Product,
       ProductCategory,
+      Role,
       RestockRecord,
       RestockItem,
       Sale,
       SaleItem,
       SalePayment,
       SyncBatch,
+      SyncDeviceSession,
       SyncLog,
       SyncOperation,
       UnitOfMeasure,
@@ -85,6 +100,9 @@ import { SyncService } from './sync.service'
     BarcodeService,
     SlugService,
     SkuService,
+    PasswordManager,
+    SyncAuthService,
+    SyncTokenGuard,
     SyncService,
     SyncQueueMonitorService,
     SyncRealtimeService,

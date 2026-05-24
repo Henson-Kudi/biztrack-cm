@@ -5,6 +5,7 @@ const dotenv = require('dotenv')
 
 const cwd = path.resolve(__dirname, '..')
 dotenv.config({ path: path.join(cwd, '.env') })
+require('./generate-build-config')
 fs.rmSync(path.join(cwd, 'dist', 'electron'), { recursive: true, force: true })
 
 const processes = []

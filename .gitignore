@@ -43,6 +43,8 @@ apps/desktop/biztrack-dev.db-wal
 # Prisma
 prisma/migrations/dev/
 
+plans
+
 # AI assisted dev template
 smithdesign.md
 theme.pdf
@@ -63,3 +65,8 @@ redis.zip
 
 # Test / scratch scripts
 test_conn.js
+
+# Others
+.tmp_plan_permissions.zip
+.tmp_docx_permissions
+.claude

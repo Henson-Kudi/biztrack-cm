@@ -1,4 +1,4 @@
-type Resource = string
+import { DEFAULT_PLAN_RESOURCES, SubscriptionPlan, type Resource } from '@biztrack/types'
 
 type PermissionAccessInput = {
   effectivePermissions: Resource[]
@@ -10,7 +10,7 @@ type PermissionAccessInput = {
     reason: string
     isRevocation: boolean
   }>
-  permissionsExpiresAt: number
+  permissionsExpiresAt: number | null
 }
 
 type PermissionAccessResult = {
@@ -20,23 +20,7 @@ type PermissionAccessResult = {
   grantReason?: string
 }
 
-const FREE_PERMISSIONS: Resource[] = [
-  'SALES_CREATE',
-  'SALES_VIEW',
-  'PRODUCTS_CREATE',
-  'PRODUCTS_VIEW',
-  'PRODUCTS_EDIT',
-  'PRODUCTS_DELETE',
-  'PRODUCTS_LIMIT_50',
-  'INVENTORY_VIEW',
-  'INVENTORY_ADJUST',
-  'INVENTORY_ALERTS',
-  'EXPENSES_CREATE',
-  'EXPENSES_VIEW',
-  'REPORTS_DAILY',
-  'RECEIPTS_GENERATE',
-  'RECEIPTS_WHATSAPP',
-]
+const FREE_PERMISSIONS = DEFAULT_PLAN_RESOURCES[SubscriptionPlan.FREE]
 
 export const computePermissionAccess = (
   resource: Resource,
@@ -66,7 +50,8 @@ export const computePermissionAccess = (
     }
   }
 
-  const planExpired = now > auth.permissionsExpiresAt
+  const planExpired =
+    auth.permissionsExpiresAt !== null && now > auth.permissionsExpiresAt
   if (planExpired) {
     return {
       granted: FREE_PERMISSIONS.includes(resource),

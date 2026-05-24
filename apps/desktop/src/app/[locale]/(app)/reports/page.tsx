@@ -2,18 +2,22 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import {
   DebtDirection,
   DebtStatus,
   InventoryMovementType,
   PaymentMethod,
+  Resource,
   SaleStatus,
   type Debt,
   type Expense,
   type InventoryListItem,
   type InventoryMovement,
+  type SubscriptionPlan,
 } from '@biztrack/types'
 import { Badge, Button, Spinner } from '@biztrack/ui'
+import { Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { SurfaceCard } from '@/components/catalog/SurfaceCard'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -52,6 +56,8 @@ import {
   type ReportSaleRow,
 } from '@/services/reports.local'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
+import { getPermissionAccessFromState } from '@/lib/plan-access'
 
 type ReportPreset = 'today' | 'last7' | 'thisMonth' | 'lastMonth' | 'quarter' | 'year' | 'custom'
 type ReportSectionKey = 'sales' | 'inventory' | 'financial' | 'credit'
@@ -86,12 +92,19 @@ type AppliedRange = {
 type ReportDefinition = {
   id: ReportId
   section: ReportSectionKey
+  requiredResource: Resource
   badge: string
   badgeTone: 'success' | 'warning' | 'danger' | 'info' | 'neutral'
   icon: ReportIconName
   name: string
   description: string
   source: string
+}
+
+type LockedFeaturePrompt = {
+  title: string
+  description: string
+  requiredPlan: SubscriptionPlan | null
 }
 
 type ReportStat = {
@@ -245,6 +258,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'daily-sales',
     section: 'sales',
+    requiredResource: Resource.REPORTS_DAILY,
     badge: 'Daily',
     badgeTone: 'success',
     icon: 'receipt',
@@ -255,6 +269,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'revenue-trend',
     section: 'sales',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Range',
     badgeTone: 'info',
     icon: 'trend',
@@ -265,6 +280,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'top-products',
     section: 'sales',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Ranking',
     badgeTone: 'warning',
     icon: 'ranking',
@@ -275,6 +291,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'cashier-performance',
     section: 'sales',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Period',
     badgeTone: 'success',
     icon: 'cashier',
@@ -285,6 +302,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'payment-breakdown',
     section: 'sales',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Analysis',
     badgeTone: 'info',
     icon: 'payments',
@@ -295,6 +313,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'voided-sales',
     section: 'sales',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Audit',
     badgeTone: 'danger',
     icon: 'audit',
@@ -305,6 +324,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'stock-levels',
     section: 'inventory',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Snapshot',
     badgeTone: 'warning',
     icon: 'snapshot',
@@ -315,6 +335,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'stock-movements',
     section: 'inventory',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Movements',
     badgeTone: 'success',
     icon: 'movements',
@@ -325,6 +346,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'low-stock-alerts',
     section: 'inventory',
+    requiredResource: Resource.REPORTS_WEEKLY,
     badge: 'Alert',
     badgeTone: 'danger',
     icon: 'alert',
@@ -335,6 +357,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'restock-costs',
     section: 'inventory',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Cost',
     badgeTone: 'info',
     icon: 'cost',
@@ -345,6 +368,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'profit-loss',
     section: 'financial',
+    requiredResource: Resource.REPORTS_FINANCIAL,
     badge: 'P&L',
     badgeTone: 'success',
     icon: 'profit',
@@ -355,6 +379,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'expense-breakdown',
     section: 'financial',
+    requiredResource: Resource.REPORTS_FINANCIAL,
     badge: 'Expenses',
     badgeTone: 'warning',
     icon: 'expenses',
@@ -365,6 +390,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'revenue-vs-expenses',
     section: 'financial',
+    requiredResource: Resource.REPORTS_FINANCIAL,
     badge: 'Trend',
     badgeTone: 'info',
     icon: 'trend',
@@ -375,6 +401,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'debtors-ageing',
     section: 'credit',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Debtors',
     badgeTone: 'danger',
     icon: 'ledger',
@@ -385,6 +412,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'creditors-ageing',
     section: 'credit',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Creditors',
     badgeTone: 'info',
     icon: 'ledger',
@@ -395,6 +423,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'contact-statement',
     section: 'credit',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Statement',
     badgeTone: 'success',
     icon: 'receipt',
@@ -405,6 +434,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'credit-activity',
     section: 'credit',
+    requiredResource: Resource.REPORTS_MONTHLY,
     badge: 'Summary',
     badgeTone: 'warning',
     icon: 'payments',
@@ -415,7 +445,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
 ]
 
 const DEFAULT_REPORT: ReportDefinition =
-  REPORT_DEFINITIONS.find((report) => report.id === 'revenue-trend') ?? REPORT_DEFINITIONS[0]!
+  REPORT_DEFINITIONS.find((report) => report.id === 'daily-sales') ?? REPORT_DEFINITIONS[0]!
 
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -432,10 +462,6 @@ function startOfWeek(date: Date) {
   const day = next.getDay()
   const diff = day === 0 ? -6 : 1 - day
   return addDays(next, diff)
-}
-
-function addMonths(date: Date, offset: number) {
-  return new Date(date.getFullYear(), date.getMonth() + offset, 1)
 }
 
 function formatDateKey(date: Date) {
@@ -798,7 +824,6 @@ function buildRevenueVsExpensesPoints(
 
 function buildAgeingRows(
   debts: Debt[],
-  localeTag: string,
 ): Array<{
   label: string
   amount: number
@@ -1058,6 +1083,7 @@ function ReportMetricCard({ stat }: { stat: ReportStat }) {
   )
 }
 
+
 function DualSeriesTrendChart({
   points,
   primaryMaxLabel,
@@ -1170,25 +1196,6 @@ function DualSeriesTrendChart({
   )
 }
 
-function SearchIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="9" cy="9" r="5.5" />
-      <path d="m14 14 3 3" />
-    </svg>
-  )
-}
-
 function DownloadIcon() {
   return (
     <svg
@@ -1230,13 +1237,16 @@ function ChevronDownIcon({ className }: { className?: string }) {
 
 export default function ReportsPage() {
   const t = useTranslations('app.reports')
+  const planGateT = useTranslations('app.plan_gate')
   const tSell = useTranslations('app.sell')
   const locale = useLocale()
+  const router = useRouter()
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
+  const planState = usePlanStore((state) => state.current)
   const defaultRange = useMemo(() => resolvePresetRange('thisMonth'), [])
-  const [previewReportId, setPreviewReportId] = useState<ReportId>('revenue-trend')
+  const [previewReportId, setPreviewReportId] = useState<ReportId>(DEFAULT_REPORT.id)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   const [previewGeneratedAt, setPreviewGeneratedAt] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -1253,6 +1263,7 @@ export default function ReportsPage() {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [isProfitLossExpanded, setIsProfitLossExpanded] = useState(true)
   const [isRevenueTrendExpanded, setIsRevenueTrendExpanded] = useState(true)
+  const [lockedFeaturePrompt, setLockedFeaturePrompt] = useState<LockedFeaturePrompt | null>(null)
 
   useEffect(() => {
     if (!businessId) {
@@ -1358,13 +1369,46 @@ export default function ReportsPage() {
     [t],
   )
 
+  const reportAccessById = useMemo(
+    () =>
+      new Map(
+        REPORT_DEFINITIONS.map((report) => [
+          report.id,
+          planState ? getPermissionAccessFromState(planState, report.requiredResource) : null,
+        ]),
+      ),
+    [planState],
+  )
+  const csvExportAccess = useMemo(
+    () =>
+      planState ? getPermissionAccessFromState(planState, Resource.REPORTS_EXPORT_CSV) : null,
+    [planState],
+  )
+  const pdfExportAccess = useMemo(
+    () =>
+      planState ? getPermissionAccessFromState(planState, Resource.REPORTS_EXPORT_PDF) : null,
+    [planState],
+  )
+  const hasLockedReports = REPORT_DEFINITIONS.some((report) => {
+    const access = reportAccessById.get(report.id)
+    return !(access?.allowed ?? true)
+  })
+  const canExportCsv = csvExportAccess?.allowed ?? true
+  const canExportPdf = pdfExportAccess?.allowed ?? true
+  const hasLockedExportFeature = !canExportCsv || !canExportPdf
+  const exportRequiredPlan =
+    csvExportAccess?.requiredPlan ?? pdfExportAccess?.requiredPlan ?? null
+  const exportFeatureLabel = [!canExportPdf ? t('export.pdf') : null, !canExportCsv ? t('export.excel') : null]
+    .filter(Boolean)
+    .join(', ')
+
   const filteredReports = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase()
-    if (!query) {
-      return REPORT_DEFINITIONS
-    }
-
     return REPORT_DEFINITIONS.filter((report) => {
+      if (!query) {
+        return true
+      }
+
       const haystack = [
         report.name,
         report.description,
@@ -1379,6 +1423,77 @@ export default function ReportsPage() {
       return haystack.includes(query)
     })
   }, [deferredSearch, sectionLabels])
+
+  const accessibleFilteredReports = useMemo(
+    () =>
+      // Preview state must always land on an accessible report. Locked reports
+      // remain searchable and visible, but they must not become the active
+      // preview after a plan downgrade or cache refresh.
+      filteredReports.filter((report) => {
+        const access = reportAccessById.get(report.id)
+        return access?.allowed ?? true
+      }),
+    [filteredReports, reportAccessById],
+  )
+
+  useEffect(() => {
+    const previewAccess = reportAccessById.get(previewReportId)
+    if (
+      filteredReports.some((report) => report.id === previewReportId) &&
+      (previewAccess?.allowed ?? true)
+    ) {
+      return
+    }
+
+    setPreviewReportId(accessibleFilteredReports[0]?.id ?? DEFAULT_REPORT.id)
+    setPreviewGeneratedAt(null)
+    setIsExportMenuOpen(false)
+  }, [accessibleFilteredReports, filteredReports, previewReportId, reportAccessById])
+
+  const openLockedFeaturePrompt = ({
+    title,
+    description,
+    requiredPlan,
+  }: LockedFeaturePrompt) => {
+    setLockedFeaturePrompt({
+      title,
+      description,
+      requiredPlan,
+    })
+  }
+
+  const promptForLockedReport = (report: ReportDefinition) => {
+    const access = reportAccessById.get(report.id)
+    if (access?.allowed ?? true) {
+      return false
+    }
+
+    // Locked features should never navigate straight into the report. The spec
+    // requires an explicit upgrade prompt so the user understands why the
+    // feature is unavailable on the current business plan.
+    openLockedFeaturePrompt({
+      title: planGateT('locked_feature_title'),
+      description: planGateT('locked_feature_description', {
+        report: report.name,
+        section: sectionLabels[report.section],
+        plan: access?.requiredPlan ?? 'SOLO',
+      }),
+      requiredPlan: access?.requiredPlan ?? null,
+    })
+
+    return true
+  }
+
+  const promptForLockedExport = (formats: string, requiredPlan: SubscriptionPlan | null) => {
+    openLockedFeaturePrompt({
+      title: planGateT('export_locked_title'),
+      description: planGateT('export_locked_description', {
+        formats,
+        plan: requiredPlan ?? 'SOLO',
+      }),
+      requiredPlan,
+    })
+  }
 
   const derived = useMemo(() => {
     const sales = workspace?.sales ?? []
@@ -1494,8 +1609,8 @@ export default function ReportsPage() {
     }
     const movementRows = Array.from(movementTypeTotals.values()).sort((left, right) => right.count - left.count)
 
-    const receivableAgeing = buildAgeingRows(receivableDebts, localeTag)
-    const payableAgeing = buildAgeingRows(payableDebts, localeTag)
+    const receivableAgeing = buildAgeingRows(receivableDebts)
+    const payableAgeing = buildAgeingRows(payableDebts)
     const openReceivableDebts = receivableDebts
       .filter((debt) => isOpenDebt(debt.status, debt.outstandingAmount))
       .sort((left, right) => right.outstandingAmount - left.outstandingAmount)
@@ -1572,7 +1687,7 @@ export default function ReportsPage() {
       receivableDebts,
       payableDebts,
     }
-  }, [appliedRange.endDate, appliedRange.startDate, localeTag, t, workspace])
+  }, [appliedRange.endDate, appliedRange.startDate, t, workspace])
 
   const pnlRows = useMemo(() => {
     const expenseRows = [...derived.expenseCategoryRows]
@@ -2582,7 +2697,7 @@ export default function ReportsPage() {
         },
       },
     }
-  }, [appliedRange, derived, localeTag, selectedReport, t, tSell])
+  }, [appliedRange, derived, localeTag, pnlRows, selectedReport, t, tSell])
 
   const rangeLabel = useMemo(
     () => buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
@@ -5616,37 +5731,7 @@ export default function ReportsPage() {
     appliedRange.endDate,
     appliedRange.startDate,
     businessName,
-    derived.collectedReceivable,
-    derived.completedItems,
-    derived.completedPayments,
-    derived.completedSales,
-    derived.cashierRows,
-    derived.expenseCategoryRows,
-    derived.expenses,
-    derived.grossProfit,
-    derived.inventoryItems,
-    derived.inventoryMovements,
-    derived.lowStockItems,
-    derived.netProfit,
-    derived.openPayableDebts,
-    derived.openReceivableDebts,
-    derived.payableAgeing,
-    derived.payableDebts,
-    derived.paymentTotals,
-    derived.receivableDebts,
-    derived.receivableAgeing,
-    derived.restockItems,
-    derived.totalCost,
-    derived.totalCreditIssued,
-    derived.totalExpenses,
-    derived.totalRevenue,
-    derived.averageOrderValue,
-    derived.issuedReceivable,
-    derived.movementRows,
-    derived.restocks,
-    derived.sales,
-    derived.voidedSales,
-    derived.writtenOffReceivable,
+    derived,
     localeTag,
     previewGeneratedLabel,
     rangeLabel,
@@ -5693,6 +5778,15 @@ export default function ReportsPage() {
     ],
   )
 
+  const profitLossReportDefinition =
+    REPORT_DEFINITIONS.find((report) => report.id === 'profit-loss') ?? DEFAULT_REPORT
+  const revenueTrendReportDefinition =
+    REPORT_DEFINITIONS.find((report) => report.id === 'revenue-trend') ?? DEFAULT_REPORT
+  const profitLossAccess = reportAccessById.get(profitLossReportDefinition.id)
+  const revenueTrendAccess = reportAccessById.get(revenueTrendReportDefinition.id)
+  const canOpenProfitLoss = profitLossAccess?.allowed ?? true
+  const canOpenRevenueTrend = revenueTrendAccess?.allowed ?? true
+
   const handlePresetSelect = (preset: Exclude<ReportPreset, 'custom'>) => {
     const nextRange = resolvePresetRange(preset)
     setDraftStartDate(nextRange.startDate)
@@ -5719,6 +5813,11 @@ export default function ReportsPage() {
   }
 
   const handleOpenReportPreview = (reportId: ReportId) => {
+    const report = REPORT_DEFINITIONS.find((entry) => entry.id === reportId)
+    if (report && promptForLockedReport(report)) {
+      return
+    }
+
     setPreviewReportId(reportId)
     setPreviewGeneratedAt(new Date().toISOString())
     setIsExportMenuOpen(false)
@@ -5727,6 +5826,11 @@ export default function ReportsPage() {
 
   const handleExportExcel = async () => {
     if (!activeReportDocument) {
+      return
+    }
+
+    if (!canExportCsv) {
+      promptForLockedExport(t('export.excel'), csvExportAccess?.requiredPlan ?? null)
       return
     }
 
@@ -5768,6 +5872,11 @@ export default function ReportsPage() {
 
   const handleExportPdf = async () => {
     if (!activeReportDocument) {
+      return
+    }
+
+    if (!canExportPdf) {
+      promptForLockedExport(t('export.pdf'), pdfExportAccess?.requiredPlan ?? null)
       return
     }
 
@@ -5843,7 +5952,11 @@ export default function ReportsPage() {
   const visibleSections = sections
     .map((section) => ({
       ...section,
-      reports: filteredReports.filter((report) => report.section === section.key),
+      reports: filteredReports.filter((report) => {
+        if (report.section !== section.key) return false
+        const access = reportAccessById.get(report.id)
+        return access?.allowed ?? true
+      }),
     }))
     .filter((section) => section.reports.length > 0)
 
@@ -5905,132 +6018,151 @@ export default function ReportsPage() {
             {t('run_report')}
           </Button>
         </div>
+
+        {hasLockedReports || hasLockedExportFeature ? (
+          <p className="text-sm text-muted-foreground">
+            {t.rich('upgrade_hint', {
+              link: (chunks) => (
+                <a
+                  href={`/${locale}/subscription`}
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  {chunks}
+                </a>
+              ),
+            })}
+          </p>
+        ) : null}
       </section>
 
-      <Collapsible open={isProfitLossExpanded} onOpenChange={setIsProfitLossExpanded}>
-        <SurfaceCard
-          title={t('waterfall.title')}
-          description={t('waterfall.description', {
-            range: buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
-          })}
-          action={
-            <CollapsibleTrigger
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
-              aria-label={`${isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')} ${t('waterfall.title')}`}
-            >
-              <span>{isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
-              <ChevronDownIcon
-                className={cn(
-                  'transition-transform duration-300 ease-in-out',
-                  isProfitLossExpanded && 'rotate-180',
-                )}
-              />
-            </CollapsibleTrigger>
-          }
-        >
-          <CollapsibleContent>
-            <div className="space-y-3 pt-1">
-              {pnlRows.map((row, index) => (
-                <div key={`${row.label}-${index}`} className="space-y-2">
-                  {row.total ? <div className="h-px bg-border" /> : null}
-                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px] md:items-center">
-                    <div className={cn('text-sm text-muted-foreground md:text-right', row.total && 'font-semibold text-foreground')}>
-                      {row.label}
-                    </div>
-                    <div className="h-6 overflow-hidden rounded-full bg-muted">
+      {canOpenProfitLoss ? (
+        <Collapsible open={isProfitLossExpanded} onOpenChange={setIsProfitLossExpanded}>
+          <SurfaceCard
+            title={t('waterfall.title')}
+            description={t('waterfall.description', {
+              range: buildRangeLabel(appliedRange.startDate, appliedRange.endDate, localeTag),
+            })}
+            action={
+              <CollapsibleTrigger
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
+                aria-label={`${isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')} ${t('waterfall.title')}`}
+              >
+                <span>{isProfitLossExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
+                <ChevronDownIcon
+                  className={cn(
+                    'transition-transform duration-300 ease-in-out',
+                    isProfitLossExpanded && 'rotate-180',
+                  )}
+                />
+              </CollapsibleTrigger>
+            }
+          >
+            <CollapsibleContent>
+              <div className="space-y-3 pt-1">
+                {pnlRows.map((row, index) => (
+                  <div key={`${row.label}-${index}`} className="space-y-2">
+                    {row.total ? <div className="h-px bg-border" /> : null}
+                    <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px] md:items-center">
+                      <div className={cn('text-sm text-muted-foreground md:text-right', row.total && 'font-semibold text-foreground')}>
+                        {row.label}
+                      </div>
+                      <div className="h-6 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            'flex h-full items-center justify-end rounded-full px-3 text-[11px] font-semibold text-white',
+                            row.tone === 'positive' && 'bg-success-400',
+                            row.tone === 'warning' && 'bg-warning-400',
+                            row.tone === 'danger' && 'bg-danger-400',
+                          )}
+                          style={{ width: `${row.percent}%` }}
+                        >
+                          {row.value >= 0 ? '' : '-'}
+                          {formatPercent(Math.abs(percentageOf(row.value, Math.max(derived.totalRevenue, 1))), localeTag)}%
+                        </div>
+                      </div>
                       <div
                         className={cn(
-                          'flex h-full items-center justify-end rounded-full px-3 text-[11px] font-semibold text-white',
-                          row.tone === 'positive' && 'bg-success-400',
-                          row.tone === 'warning' && 'bg-warning-400',
-                          row.tone === 'danger' && 'bg-danger-400',
+                          'text-sm font-semibold md:text-right',
+                          row.tone === 'positive' && 'text-success-600 dark:text-success-400',
+                          row.tone === 'warning' && 'text-warning-600 dark:text-warning-400',
+                          row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
                         )}
-                        style={{ width: `${row.percent}%` }}
                       >
-                        {row.value >= 0 ? '' : '-'}
-                        {formatPercent(Math.abs(percentageOf(row.value, Math.max(derived.totalRevenue, 1))), localeTag)}%
+                        {formatCurrency(row.value, localeTag)}
                       </div>
                     </div>
-                    <div
-                      className={cn(
-                        'text-sm font-semibold md:text-right',
-                        row.tone === 'positive' && 'text-success-600 dark:text-success-400',
-                        row.tone === 'warning' && 'text-warning-600 dark:text-warning-400',
-                        row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
-                      )}
-                    >
-                      {formatCurrency(row.value, localeTag)}
-                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleContent>
-        </SurfaceCard>
-      </Collapsible>
-
-      <Collapsible open={isRevenueTrendExpanded} onOpenChange={setIsRevenueTrendExpanded}>
-        <SurfaceCard
-          title="Revenue trend analysis"
-          description={`${REPORT_DEFINITIONS.find((report) => report.id === 'revenue-trend')?.description || ''} Range: ${rangeLabel}.`}
-          action={
-            <CollapsibleTrigger
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
-              aria-label={`${isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')} Revenue trend analysis`}
-            >
-              <span>{isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
-              <ChevronDownIcon
-                className={cn(
-                  'transition-transform duration-300 ease-in-out',
-                  isRevenueTrendExpanded && 'rotate-180',
-                )}
-              />
-            </CollapsibleTrigger>
-          }
-        >
-          <CollapsibleContent>
-            <div className="pt-1">
-              <div className="grid gap-3 md:grid-cols-3">
-                {revenueTrendInlineStats.map((stat) => (
-                  <ReportMetricCard key={`inline-revenue-${stat.label}`} stat={stat} />
                 ))}
               </div>
+            </CollapsibleContent>
+          </SurfaceCard>
+        </Collapsible>
+      ) : null}
 
-              <div className="mt-6">
-                {revenueTrendPoints.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-success-400" />
-                        {t('preview.legend_revenue')}
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-[#A29F97]" />
-                        {t('preview.legend_transactions')}
-                      </span>
+      {canOpenRevenueTrend ? (
+        <Collapsible open={isRevenueTrendExpanded} onOpenChange={setIsRevenueTrendExpanded}>
+          <SurfaceCard
+            title={revenueTrendReportDefinition.name}
+            description={`${revenueTrendReportDefinition.description} Range: ${rangeLabel}.`}
+            action={
+              <CollapsibleTrigger
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
+                aria-label={`${isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')} ${revenueTrendReportDefinition.name}`}
+              >
+                <span>{isRevenueTrendExpanded ? t('collapsible.collapse') : t('collapsible.expand')}</span>
+                <ChevronDownIcon
+                  className={cn(
+                    'transition-transform duration-300 ease-in-out',
+                    isRevenueTrendExpanded && 'rotate-180',
+                  )}
+                />
+              </CollapsibleTrigger>
+            }
+          >
+            <CollapsibleContent>
+              <div className="pt-1">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {revenueTrendInlineStats.map((stat) => (
+                    <ReportMetricCard key={`inline-revenue-${stat.label}`} stat={stat} />
+                  ))}
+                </div>
+
+                <div className="mt-6">
+                  {revenueTrendPoints.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-success-400" />
+                          {t('preview.legend_revenue')}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-[#A29F97]" />
+                          {t('preview.legend_transactions')}
+                        </span>
+                      </div>
+                      <DualSeriesTrendChart
+                        points={revenueTrendPoints}
+                        primaryMaxLabel={formatCurrencyCompact(
+                          Math.max(...revenueTrendPoints.map((point) => point.primary), 0),
+                          localeTag,
+                        )}
+                        secondaryMaxLabel={formatNumber(
+                          Math.max(...revenueTrendPoints.map((point) => point.secondary), 0),
+                          localeTag,
+                        )}
+                      />
                     </div>
-                    <DualSeriesTrendChart
-                      points={revenueTrendPoints}
-                      primaryMaxLabel={formatCurrencyCompact(
-                        Math.max(...revenueTrendPoints.map((point) => point.primary), 0),
-                        localeTag,
-                      )}
-                      secondaryMaxLabel={formatNumber(
-                        Math.max(...revenueTrendPoints.map((point) => point.secondary), 0),
-                        localeTag,
-                      )}
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    {t('preview.no_sales_data')}
-                  </div>
-                )}
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
+                      {t('preview.no_sales_data')}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </CollapsibleContent>
-        </SurfaceCard>
-      </Collapsible>
+            </CollapsibleContent>
+          </SurfaceCard>
+        </Collapsible>
+      ) : null}
 
       {visibleSections.length > 0 ? (
         <>
@@ -6041,36 +6173,76 @@ export default function ReportsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                {section.reports.map((report) => (
-                  <button
-                    key={report.id}
-                    type="button"
-                    onClick={() => handleOpenReportPreview(report.id)}
-                    className="rounded-[22px] border border-border bg-card p-4 text-left shadow-sm transition hover:border-border/80 hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-3">
+                {section.reports.map((report) => {
+                  const access = reportAccessById.get(report.id)
+                  const isLocked = !(access?.allowed ?? true)
+
+                  return (
+                    <button
+                      key={report.id}
+                      type="button"
+                      onClick={() => handleOpenReportPreview(report.id)}
+                      className={cn(
+                        'rounded-[22px] border p-4 text-left shadow-sm transition',
+                        isLocked
+                          ? 'border-amber-200 bg-amber-50/70 hover:border-amber-300 hover:shadow-md'
+                          : 'border-border bg-card hover:border-border/80 hover:shadow-md',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div
+                          className={cn(
+                            'flex h-10 w-10 items-center justify-center rounded-2xl',
+                            isLocked
+                              ? 'bg-amber-100 text-amber-800'
+                              : getReportIconWrapperClassName(report.badgeTone),
+                          )}
+                        >
+                          {isLocked ? <Lock className="h-4 w-4" strokeWidth={2.2} /> : <ReportIcon name={report.icon} />}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <Badge variant={report.badgeTone}>{report.badge}</Badge>
+                          {isLocked ? <Badge variant="warning">{t('locked_badge')}</Badge> : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        <h3 className={cn('text-sm font-semibold', isLocked ? 'text-amber-950' : 'text-foreground')}>
+                          {report.name}
+                        </h3>
+                        <p
+                          className={cn(
+                            'text-sm leading-6',
+                            isLocked ? 'text-amber-900/85' : 'text-muted-foreground',
+                          )}
+                        >
+                          {isLocked
+                            ? planGateT('locked_feature_description', {
+                                report: report.name,
+                                section: sectionLabels[report.section],
+                                plan: access?.requiredPlan ?? 'SOLO',
+                              })
+                            : report.description}
+                        </p>
+                      </div>
+
                       <div
                         className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-2xl',
-                          getReportIconWrapperClassName(report.badgeTone),
+                          'mt-4 flex items-center justify-between gap-3 border-t pt-3',
+                          isLocked ? 'border-amber-200/80' : 'border-border',
                         )}
                       >
-                        <ReportIcon name={report.icon} />
+                        <span className={cn('text-[11px]', isLocked ? 'text-amber-900/75' : 'text-muted-foreground')}>
+                          {report.source}
+                        </span>
+                        <span className={cn('text-sm font-medium', isLocked ? 'text-amber-800' : 'text-primary')}>
+                          {isLocked ? planGateT('upgrade_action') : t('generate')}
+                        </span>
                       </div>
-                      <Badge variant={report.badgeTone}>{report.badge}</Badge>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <h3 className="text-sm font-semibold text-foreground">{report.name}</h3>
-                      <p className="text-sm leading-6 text-muted-foreground">{report.description}</p>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
-                      <span className="text-[11px] text-muted-foreground">{report.source}</span>
-                      <span className="text-sm font-medium text-primary">{t('generate')}</span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  )
+                })}
               </div>
             </section>
           ))}
@@ -6103,59 +6275,126 @@ export default function ReportsPage() {
           className="h-[calc(100vh-2rem)] max-h-[90vh] max-w-6xl overflow-hidden p-0 sm:h-[90vh] sm:max-h-[calc(100vh-3rem)]"
           closeLabel="Close"
         >
-          <Popover open={isExportMenuOpen} onOpenChange={setIsExportMenuOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label={t('export.title')}
-                disabled={!activeReportDocument || exportingExcel || exportingPdf}
-                className={cn(
-                  'absolute right-20 top-5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors',
-                  !activeReportDocument || exportingExcel || exportingPdf
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:border-primary/30 hover:text-foreground',
-                )}
-              >
-                <DownloadIcon />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-48 p-1">
-              <div className="space-y-1">
+          {canExportCsv || canExportPdf ? (
+            <Popover open={isExportMenuOpen} onOpenChange={setIsExportMenuOpen}>
+              <PopoverTrigger asChild>
                 <button
                   type="button"
-                  disabled={exportingPdf || !activeReportDocument}
-                  onClick={() => {
-                    setIsExportMenuOpen(false)
-                    void handleExportPdf()
-                  }}
+                  aria-label={t('export.title')}
+                  disabled={!activeReportDocument || exportingExcel || exportingPdf}
                   className={cn(
-                    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                    exportingPdf || !activeReportDocument
-                      ? 'cursor-not-allowed text-muted-foreground/50'
-                      : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                    'absolute right-20 top-5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors',
+                    !activeReportDocument || exportingExcel || exportingPdf
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'hover:border-primary/30 hover:text-foreground',
                   )}
                 >
-                  {exportingPdf ? t('export.exporting_pdf') : t('export.pdf')}
+                  <DownloadIcon />
                 </button>
-                <button
-                  type="button"
-                  disabled={exportingExcel || !activeReportDocument}
-                  onClick={() => {
-                    setIsExportMenuOpen(false)
-                    void handleExportExcel()
-                  }}
-                  className={cn(
-                    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                    exportingExcel || !activeReportDocument
-                      ? 'cursor-not-allowed text-muted-foreground/50'
-                      : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-1">
+                <div className="space-y-1">
+                  {canExportPdf ? (
+                    <button
+                      type="button"
+                      disabled={exportingPdf || !activeReportDocument}
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        void handleExportPdf()
+                      }}
+                      className={cn(
+                        'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                        exportingPdf || !activeReportDocument
+                          ? 'cursor-not-allowed text-muted-foreground/50'
+                          : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                    >
+                      {exportingPdf ? t('export.exporting_pdf') : t('export.pdf')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!activeReportDocument}
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        promptForLockedExport(t('export.pdf'), pdfExportAccess?.requiredPlan ?? null)
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                        !activeReportDocument
+                          ? 'cursor-not-allowed text-muted-foreground/50'
+                          : 'bg-amber-50 text-amber-900 hover:bg-amber-100',
+                      )}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Lock className="h-3.5 w-3.5" strokeWidth={2.2} />
+                        {t('export.pdf')}
+                      </span>
+                      <Badge variant="warning">{t('locked_badge')}</Badge>
+                    </button>
                   )}
-                >
-                  {exportingExcel ? t('export.exporting_excel') : t('export.excel')}
-                </button>
-              </div>
-            </PopoverContent>
-          </Popover>
+
+                  {canExportCsv ? (
+                    <button
+                      type="button"
+                      disabled={exportingExcel || !activeReportDocument}
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        void handleExportExcel()
+                      }}
+                      className={cn(
+                        'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                        exportingExcel || !activeReportDocument
+                          ? 'cursor-not-allowed text-muted-foreground/50'
+                          : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                    >
+                      {exportingExcel ? t('export.exporting_excel') : t('export.excel')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!activeReportDocument}
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        promptForLockedExport(t('export.excel'), csvExportAccess?.requiredPlan ?? null)
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                        !activeReportDocument
+                          ? 'cursor-not-allowed text-muted-foreground/50'
+                          : 'bg-amber-50 text-amber-900 hover:bg-amber-100',
+                      )}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Lock className="h-3.5 w-3.5" strokeWidth={2.2} />
+                        {t('export.excel')}
+                      </span>
+                      <Badge variant="warning">{t('locked_badge')}</Badge>
+                    </button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <button
+              type="button"
+              aria-label={t('export.title')}
+              disabled={!activeReportDocument || exportingExcel || exportingPdf}
+              onClick={() =>
+                promptForLockedExport(exportFeatureLabel || t('export.title'), exportRequiredPlan)
+              }
+              className={cn(
+                'absolute right-20 top-5 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-900 transition-colors',
+                !activeReportDocument || exportingExcel || exportingPdf
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'hover:bg-amber-100',
+              )}
+            >
+              <Lock className="h-4 w-4" strokeWidth={2.2} />
+              {planGateT('upgrade_action')}
+            </button>
+          )}
 
           <DialogHeader className="shrink-0 pr-32">
             <DialogTitle>{selectedReport.name}</DialogTitle>
@@ -6176,6 +6415,63 @@ export default function ReportsPage() {
                 {t('load_error')}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(lockedFeaturePrompt)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLockedFeaturePrompt(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{lockedFeaturePrompt?.title ?? planGateT('locked_feature_title')}</DialogTitle>
+            <DialogDescription>
+              {lockedFeaturePrompt?.description ?? planGateT('title')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
+                <Lock className="h-4 w-4" strokeWidth={2.2} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">{planGateT('locked_feature_title')}</p>
+                <p className="text-sm leading-6 text-amber-900/85">
+                  {planGateT('locked_modal_hint')}
+                </p>
+                {lockedFeaturePrompt?.requiredPlan ? (
+                  <Badge variant="warning" className="bg-amber-100 text-amber-900 border-amber-200">
+                    {lockedFeaturePrompt.requiredPlan}+
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setLockedFeaturePrompt(null)}
+              >
+                {t('dialog.cancel')}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setLockedFeaturePrompt(null)
+                  router.push(`/${locale}/subscription`)
+                }}
+              >
+                {planGateT('upgrade_action')}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

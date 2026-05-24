@@ -24,6 +24,8 @@ export function getCategoryErrorMessage(error: unknown, t: Translate, fallback: 
         return t('errors.category_image_url_too_long')
       case 'CATEGORY_SORT_ORDER_INVALID':
         return t('errors.category_sort_order_invalid')
+      case 'CATEGORIES_QUOTA_REACHED':
+        return t('errors.categories_quota_reached')
       case 'CATEGORY_HAS_PRODUCTS':
         return t('errors.category_has_products')
       case 'CATEGORY_SAVE_RELOAD_FAILED':

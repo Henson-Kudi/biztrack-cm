@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Public } from '@/common/decorators/public.decorator'
 import { AuthService } from './auth.service'
@@ -7,9 +7,12 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard'
 import { CurrentUser } from '@/common/decorators/current-user.decorator'
 import type {
   AuthNextStepResponse,
+  CancelInviteResponse,
   InvitePreviewResponse,
   JwtPayload,
+  ListPendingInvitesResponse,
   RejectInviteResponse,
+  ResendInviteResponse,
   SendInviteResponse,
 } from '@biztrack/types'
 import { serializeDto } from '@/common/http/serialization'
@@ -26,6 +29,16 @@ import {
 export class InvitesController {
   constructor(private authService: AuthService) {}
 
+  @Get()
+  @UseGuards(Phase2Guard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List pending and expired invites for the current business' })
+  async list(@CurrentUser() user: JwtPayload): Promise<ListPendingInvitesResponse> {
+    return serializeDto(
+      await this.authService.listPendingInvites(user.businessId as string),
+    )
+  }
+
   @Post()
   @UseGuards(Phase2Guard)
   @ApiBearerAuth()
@@ -38,6 +51,32 @@ export class InvitesController {
       SendInviteResponseDto.fromModel(
         await this.authService.sendInvite(user.sub, user.businessId as string, dto),
       ),
+    )
+  }
+
+  @Post(':id/resend')
+  @UseGuards(Phase2Guard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resend an expired invite' })
+  async resend(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') inviteId: string,
+  ): Promise<ResendInviteResponse> {
+    return serializeDto(
+      await this.authService.resendInvite(user.sub, user.businessId as string, inviteId),
+    )
+  }
+
+  @Delete(':id')
+  @UseGuards(Phase2Guard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel/delete an invite' })
+  async cancel(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') inviteId: string,
+  ): Promise<CancelInviteResponse> {
+    return serializeDto(
+      await this.authService.cancelInvite(user.sub, user.businessId as string, inviteId),
     )
   }
 

@@ -90,6 +90,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const statusMap: Record<number, string> = {
       400: 'errors.validation_failed',
       401: 'errors.unauthorized',
+      402: 'errors.plan_upgrade_required',
       403: 'errors.forbidden',
       404: 'errors.not_found',
       429: 'errors.rate_limited',

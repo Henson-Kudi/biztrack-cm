@@ -1,3 +1,4 @@
+'use client'
 //@ts-ignore
 import 'react-phone-number-input/style.css'
 import * as React from 'react'

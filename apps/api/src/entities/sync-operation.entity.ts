@@ -57,4 +57,7 @@ export class SyncOperation extends BaseEntity {
 
   @Column({ name: 'error_message', type: 'text', nullable: true })
   errorMessage!: string | null
+
+  @Column({ name: 'error_details', type: 'jsonb', nullable: true })
+  errorDetails!: Record<string, unknown> | null
 }

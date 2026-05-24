@@ -110,8 +110,16 @@ const makeService = () => {
     invalidateCache: jest.fn(),
     buildAuthPermissions: jest.fn().mockResolvedValue({ permissions: [] }),
   };
+  const quotaService = {
+    assertWithinQuota: jest.fn(),
+  }
   const i18n = {
     translate: jest.fn(async (key: string) => key),
+  }
+
+  const notificationsService = {
+    createAndEnqueue: jest.fn(),
+    sendInviteNotification: jest.fn(),
   }
 
   const service = new AuthService(
@@ -126,6 +134,9 @@ const makeService = () => {
     config as any,
     passwordManager as any,
     permissionsService as any,
+    quotaService as any,
+    notificationsService as any,
+    { findByIdOrFail: jest.fn(), findOwnerRole: jest.fn() } as any,
     i18n as any,
     logger as any,
   )

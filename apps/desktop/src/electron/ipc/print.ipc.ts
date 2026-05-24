@@ -59,8 +59,11 @@ export function registerPrintIpc() {
 }
 
 function sanitizeFileName(filename: string) {
-  const cleaned = basename(filename || 'receipt.pdf')
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+  const withoutControlChars = Array.from(basename(filename || 'receipt.pdf')).map((char) =>
+    char.charCodeAt(0) < 32 ? '-' : char,
+  ).join('')
+  const cleaned = withoutControlChars
+    .replace(/[<>:"/\\|?*]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim()

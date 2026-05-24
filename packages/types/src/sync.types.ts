@@ -1,5 +1,6 @@
 import type { InventoryMovementType, StockAdjustmentType } from './inventory.types'
 import type { ContactType, DebtDirection, DebtSource, DebtStatus } from './credit.types'
+import type { SubscriptionPlan } from './business.types'
 import type {
   CreateSaleItemRequest,
   CreateSalePaymentRequest,
@@ -316,6 +317,28 @@ export interface ExpenseSyncRecord extends SyncRecord {
   createdAt: string
 }
 
+export interface TeamMemberSyncRecord extends SyncRecord {
+  businessId: string
+  userId: string
+  roleId: string | null
+  role: string
+  status: string
+  name: string | null
+  email: string | null
+  phone: string | null
+  createdAt: string
+}
+
+export interface RoleSyncRecord extends SyncRecord {
+  businessId: string
+  name: string
+  description: string | null
+  isSystem: boolean
+  isOwnerRole: boolean
+  colour: string | null
+  createdAt: string
+}
+
 export interface ChangeSet {
   contacts?: ContactSyncRecord[]
   products?: SyncRecord[]
@@ -331,6 +354,8 @@ export interface ChangeSet {
   salePayments?: SalePaymentSyncRecord[]
   debts?: DebtSyncRecord[]
   expenses?: ExpenseSyncRecord[]
+  teamMembers?: TeamMemberSyncRecord[]
+  roles?: RoleSyncRecord[]
 }
 
 export interface InventoryThresholdSyncPayload {
@@ -471,11 +496,35 @@ export interface SyncPushRequest {
   operations: SyncPushOperation[]
 }
 
+export interface IssueSyncTokenRequest {
+  deviceId: string
+  deviceName?: string | null
+  platform?: string | null
+  appVersion?: string | null
+}
+
+export interface IssueSyncTokenResponse {
+  syncToken: string
+  deviceId: string
+  issuedAt: string
+}
+
 export interface SyncPushResponse {
   batchId: string | null
   status: SyncBatchStatus
   acceptedCount: number
   lastError?: string | null
+}
+
+export interface SyncOperationFailureDetails {
+  code: string
+  requiredPlan?: SubscriptionPlan | null
+  quota?: {
+    resource: string
+    limit: number | null
+    used: number
+    remaining: number | null
+  } | null
 }
 
 export interface SyncOperationResult {
@@ -485,6 +534,7 @@ export interface SyncOperationResult {
   status: SyncOperationStatus
   resolution?: 'server_wins' | 'client_wins' | null
   errorMessage?: string | null
+  errorDetails?: SyncOperationFailureDetails | null
 }
 
 export interface SyncBatchStatusResponse {
@@ -508,7 +558,7 @@ export interface SyncPullResponse {
 }
 
 export interface SyncRealtimeAuthPayload {
-  accessToken: string
+  syncToken: string
   deviceId: string
 }
 
@@ -586,6 +636,7 @@ export interface SyncSnapshot {
   pendingCount: number
   lastSyncedAt: string | null
   lastError: string | null
+  lastFailureDetails: SyncOperationFailureDetails | null
   network: NetworkSnapshot
   settings: SyncSettings
   realtime: SyncRealtimeSnapshot

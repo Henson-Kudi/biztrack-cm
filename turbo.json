@@ -2,7 +2,12 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "globalEnv": [
-    "DATABASE_URL"
+    "DATABASE_URL",
+    "NODE_ENV",
+    "DESKTOP_FORCE_PRODUCTION",
+    "DESKTOP_API_URL",
+    "DESKTOP_RENDERER_URL",
+    "NEXT_PUBLIC_API_URL"
   ],
   "tasks": {
     "build": {

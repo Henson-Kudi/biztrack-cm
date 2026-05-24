@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -308,7 +308,7 @@ export default function ProductDetailPage() {
   )
   const [restockForm, setRestockForm] = useState<RestockFormState>(createDefaultRestockForm())
 
-  const getInventoryErrorMessage = (inventoryErrorValue: unknown, fallback: string) => {
+  const getInventoryErrorMessage = useCallback((inventoryErrorValue: unknown, fallback: string) => {
     if (inventoryErrorValue instanceof InventoryLocalError) {
       switch (inventoryErrorValue.code) {
         case 'INVENTORY_NOT_FOUND':
@@ -357,7 +357,7 @@ export default function ProductDetailPage() {
     }
 
     return getApiErrorMessage(inventoryErrorValue, fallback)
-  }
+  }, [inventoryT])
 
   useEffect(() => {
     if (!businessId) {
@@ -485,7 +485,7 @@ export default function ProductDetailPage() {
     return () => {
       active = false
     }
-  }, [businessId, inventoryT, productId, reloadKey, t])
+  }, [businessId, getInventoryErrorMessage, inventoryT, productId, reloadKey, t])
 
   useEffect(() => {
     if (!businessId || !product?.id || !product.trackInventory) {
@@ -533,7 +533,7 @@ export default function ProductDetailPage() {
     return () => {
       active = false
     }
-  }, [businessId, inventoryT, product?.id, product?.trackInventory, reloadKey])
+  }, [businessId, getInventoryErrorMessage, inventoryT, product?.id, product?.trackInventory, reloadKey])
 
   useEffect(() => {
     if (!isMovementsOpen) {
@@ -589,7 +589,7 @@ export default function ProductDetailPage() {
     return () => {
       active = false
     }
-  }, [businessId, inventoryT, isMovementsOpen, movementsPage, product?.id, product?.trackInventory, reloadKey])
+  }, [businessId, getInventoryErrorMessage, inventoryT, isMovementsOpen, movementsPage, product?.id, product?.trackInventory, reloadKey])
 
   useEffect(() => {
     setThresholdForm({
@@ -1970,7 +1970,7 @@ export default function ProductDetailPage() {
                 disabled={allMovementsCurrentPage <= 1}
                 onClick={() => setMovementsPage((current) => Math.max(current - 1, 1))}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-left-icon lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left-icon lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
               </Button>
               <span className="min-w-[3.75rem] text-center font-medium text-foreground">
                 {allMovementsCurrentPage}/{allMovementsTotalPages}
@@ -1987,7 +1987,7 @@ export default function ProductDetailPage() {
                   )
                 }
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-right-icon lucide-chevron-right"><path d="m9 18 6-6-6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-right-icon lucide-chevron-right"><path d="m9 18 6-6-6-6"/></svg>
               </Button>
             </div>
             <Button type="button" variant="secondary" onClick={() => setIsMovementsOpen(false)}>

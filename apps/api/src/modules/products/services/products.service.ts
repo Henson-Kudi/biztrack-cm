@@ -26,6 +26,7 @@ import { LOGGER } from '@/logger/logger.module'
 import { ProductCategoriesRepository } from '../repositories/product-categories.repository'
 import { ProductsRepository } from '../repositories/products.repository'
 import { BarcodeService } from './barcode.service'
+import { QuotaService } from '@/modules/permissions/quota.service'
 import { SlugService } from './slug.service'
 import { SkuService } from './sku.service'
 
@@ -48,6 +49,7 @@ export class ProductsService {
     private readonly slugService: SlugService,
     private readonly skuService: SkuService,
     private readonly barcodeService: BarcodeService,
+    private readonly quotaService: QuotaService,
     private readonly i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
@@ -56,6 +58,11 @@ export class ProductsService {
 
   async create(businessId: string, userId: string, dto: CreateProductRequest) {
     try {
+      // Count-based gating lives in the owning service, not only in guards,
+      // because only the service can tell whether this write would consume a
+      // new quota slot.
+      await this.quotaService.assertWithinQuota(businessId, 'products')
+
       const [business, category, unitOfMeasure] = await Promise.all([
         this.findBusiness(businessId),
         dto.categoryId ? this.findCategory(dto.categoryId, businessId) : Promise.resolve(null),

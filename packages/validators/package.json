@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@biztrack/types": "workspace:*",
-    "zod": "^3.24.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@biztrack/eslint-config": "workspace:*",

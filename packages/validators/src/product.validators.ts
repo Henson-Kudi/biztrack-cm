@@ -20,7 +20,7 @@ export const SyncProductSchema = z.object({
   id: z.string().uuid(),
   updatedAt: z.string().datetime(),
   isDeleted: z.boolean(),
-}).merge(CreateProductSchema.partial())
+}).extend(CreateProductSchema.partial().shape)
 
 export type CreateProductInput = z.infer<typeof CreateProductSchema>
 export type UpdateProductInput = z.infer<typeof UpdateProductSchema>

@@ -59,6 +59,7 @@ type CreateProductFormProps = {
   defaultValues?: ProductFormDefaultValues
   mode?: ProductFormMode
   product?: Product | null
+  quotaReached?: boolean
   onCancel: () => void
   onSaved: (product: Product) => void
 }
@@ -345,6 +346,7 @@ export function CreateProductForm({
   defaultValues,
   mode = 'create',
   product,
+  quotaReached = false,
   onCancel,
   onSaved,
 }: CreateProductFormProps) {
@@ -668,6 +670,9 @@ export function CreateProductForm({
             return
           case 'PRODUCT_IMAGE_URL_TOO_LONG':
             form.setError('imageUrl', { message: t('errors.image_url_too_long') })
+            return
+          case 'PRODUCTS_QUOTA_REACHED':
+            toast.error(t('errors.products_quota_reached'))
             return
           default:
             break
@@ -998,7 +1003,7 @@ export function CreateProductForm({
           <Button type="button" variant="secondary" onClick={onCancel}>
             {t('form.cancel')}
           </Button>
-          <Button type="submit" variant="primary" disabled={form.formState.isSubmitting}>
+          <Button type="submit" variant="primary" disabled={form.formState.isSubmitting || (quotaReached && !isUpdateMode)}>
             {form.formState.isSubmitting
               ? isUpdateMode
                 ? t('form.updating')

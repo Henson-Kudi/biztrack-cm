@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import type { JwtPayload } from '@biztrack/types'
+import { Resource, type JwtPayload } from '@biztrack/types'
 import {
   BarChart3,
   Bell,
@@ -15,11 +15,13 @@ import {
   Home,
   KeyRound,
   LogOut,
+  Lock,
   Package,
   Receipt,
   Ruler,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Tag,
   UserCircle2,
@@ -31,9 +33,12 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { logout } from '@/services/auth.api'
+import { formatPlanBadge } from '@/lib/app-route-access'
 import { decodeJwtPayload } from '@/lib/jwt'
+import { getPermissionAccessFromState } from '@/lib/plan-access'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 
 const SIDEBAR_COLLAPSED_KEY = 'biztrack.sidebar.collapsed'
 
@@ -47,7 +52,9 @@ type NavLeafItem = {
   label: string
   icon: LucideIcon
   badge?: string
+  requiredResource?: Resource
   activeSearchParam?: NavMatch
+  inactiveChildRoutes?: string[]
 }
 
 type NavGroupItem = {
@@ -106,6 +113,8 @@ function isItemActive(
   item: NavLeafItem,
 ) {
   const currentPath = resolveLocalizedPath(locale, item.to.split('?')[0] || '/')
+  const inactiveChildPaths =
+    item.inactiveChildRoutes?.map((route) => resolveLocalizedPath(locale, route)) ?? []
 
   if (item.activeSearchParam) {
     return (
@@ -114,10 +123,37 @@ function isItemActive(
     )
   }
 
+  // Some leaf items are the "default" section view and should stay highlighted
+  // for closely related child pages like `/products/detail`, but not for sibling
+  // sub-sections such as `/products/categories`. Explicit exclusions let us keep
+  // that intent without making the whole matcher exact-only.
+  if (inactiveChildPaths.some((childPath) => pathname === childPath || pathname.startsWith(`${childPath}/`))) {
+    return false
+  }
+
   return (
     pathname === currentPath ||
     (currentPath !== `/${locale}` && pathname.startsWith(`${currentPath}/`))
   )
+}
+
+function getLeafPermissionState(
+  item: NavLeafItem,
+  planState: ReturnType<typeof usePlanStore.getState>['current'],
+) {
+  const permission =
+    item.requiredResource && planState
+      ? getPermissionAccessFromState(planState, item.requiredResource)
+      : null
+
+  return {
+    disabled: Boolean(permission && !permission.allowed),
+    disabledBadge: permission?.allowed ? null : formatPlanBadge(permission?.requiredPlan ?? null),
+    disabledTitle:
+      permission && !permission.allowed && permission.requiredPlan
+        ? `${item.label} requires the ${permission.requiredPlan} plan.`
+        : item.label,
+  }
 }
 
 function BrandMark({
@@ -194,52 +230,81 @@ function SearchField({
 function NavLeaf({
   item,
   active,
+  disabled = false,
+  disabledBadge,
+  disabledTitle,
   depth = 0,
   collapsed,
   locale,
 }: {
   item: NavLeafItem
   active: boolean
+  disabled?: boolean
+  disabledBadge?: string | null
+  disabledTitle?: string
   depth?: number
   collapsed: boolean
   locale: string
 }) {
   const Icon = item.icon
+  const badge = disabled ? disabledBadge : item.badge
+  const iconClassName = cn(
+    'shrink-0 transition-colors',
+    depth > 0 ? 'h-3.5 w-3.5' : 'h-4 w-4',
+    disabled
+      ? 'text-primary-foreground/45 dark:text-muted-foreground/60'
+      : active
+        ? 'text-white dark:text-primary'
+        : 'text-primary-foreground/70 group-hover:text-white dark:text-muted-foreground dark:group-hover:text-foreground',
+  )
+  const content = (
+    <>
+      <Icon className={iconClassName} strokeWidth={2} />
+      {!collapsed ? (
+        <>
+          <span className="flex-1 truncate text-left">{item.label}</span>
+          {disabled ? (
+            <Lock className="h-3.5 w-3.5 shrink-0 text-primary-foreground/45 dark:text-muted-foreground/60" />
+          ) : null}
+          {badge ? (
+            <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/90 dark:bg-[rgb(var(--chart-2))]/15 dark:text-[rgb(var(--chart-2))]">
+              {badge}
+            </span>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  )
+
+  const className = cn(
+    'group relative flex w-full items-center gap-2.5 rounded-md text-[13px] outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/20 dark:focus-visible:ring-ring/40',
+    collapsed ? 'mx-auto h-9 w-9 justify-center px-0' : 'h-8 px-2.5',
+    depth > 0 && !collapsed && 'h-[30px] pl-8',
+    disabled
+      ? 'cursor-not-allowed text-primary-foreground/45 opacity-75 dark:text-muted-foreground/60'
+      : active
+        ? 'bg-white/12 font-medium text-white dark:bg-accent dark:text-accent-foreground'
+        : 'text-primary-foreground/72 hover:bg-white/10 hover:text-white dark:text-muted-foreground dark:hover:bg-secondary/70 dark:hover:text-foreground',
+  )
+
+  if (disabled) {
+    return (
+      <div title={disabledTitle ?? item.label} aria-disabled="true" className={className}>
+        {content}
+      </div>
+    )
+  }
 
   return (
     <Link
       href={resolveLocalizedPath(locale, item.to)}
       title={collapsed ? item.label : undefined}
-      className={cn(
-        'group relative flex w-full items-center gap-2.5 rounded-md text-[13px] outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/20 dark:focus-visible:ring-ring/40',
-        collapsed ? 'mx-auto h-9 w-9 justify-center px-0' : 'h-8 px-2.5',
-        depth > 0 && !collapsed && 'h-[30px] pl-8',
-        active
-          ? 'bg-white/12 font-medium text-white dark:bg-accent dark:text-accent-foreground'
-          : 'text-primary-foreground/72 hover:bg-white/10 hover:text-white dark:text-muted-foreground dark:hover:bg-secondary/70 dark:hover:text-foreground',
-      )}
+      className={className}
     >
       {active && !collapsed ? (
         <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-white dark:bg-primary" />
       ) : null}
-      <Icon
-        className={cn(
-          'shrink-0 transition-colors',
-          depth > 0 ? 'h-3.5 w-3.5' : 'h-4 w-4',
-          active ? 'text-white dark:text-primary' : 'text-primary-foreground/70 group-hover:text-white dark:text-muted-foreground dark:group-hover:text-foreground',
-        )}
-        strokeWidth={2}
-      />
-      {!collapsed ? (
-        <>
-          <span className="flex-1 truncate text-left">{item.label}</span>
-          {item.badge ? (
-            <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/90 dark:bg-[rgb(var(--chart-2))]/15 dark:text-[rgb(var(--chart-2))]">
-              {item.badge}
-            </span>
-          ) : null}
-        </>
-      ) : null}
+      {content}
     </Link>
   )
 }
@@ -249,6 +314,7 @@ function NavGroup({
   locale,
   pathname,
   searchParams,
+  planState,
   collapsed,
   onExpand,
 }: {
@@ -256,6 +322,7 @@ function NavGroup({
   locale: string
   pathname: string
   searchParams: ReadonlyURLSearchParams
+  planState: ReturnType<typeof usePlanStore.getState>['current']
   collapsed: boolean
   onExpand: () => void
 }) {
@@ -336,16 +403,22 @@ function NavGroup({
       >
         <div className="overflow-hidden">
           <div className="relative ml-[15px] mt-0.5 space-y-0.5 border-l border-white/12 py-0.5 pl-3 dark:border-border/80">
-            {item.children.map((child) => (
-              <NavLeaf
-                key={child.to}
-                item={child}
-                depth={1}
-                active={isItemActive(locale, pathname, searchParams, child)}
-                collapsed={false}
-                locale={locale}
-              />
-            ))}
+            {item.children.map((child) => {
+              const permissionState = getLeafPermissionState(child, planState)
+              return (
+                <NavLeaf
+                  key={child.to}
+                  item={child}
+                  depth={1}
+                  active={isItemActive(locale, pathname, searchParams, child)}
+                  disabled={permissionState.disabled}
+                  disabledBadge={permissionState.disabledBadge}
+                  disabledTitle={permissionState.disabledTitle}
+                  collapsed={false}
+                  locale={locale}
+                />
+              )
+            })}
           </div>
         </div>
       </div>
@@ -420,6 +493,9 @@ function UserPopover({
   roleLabel,
   profileLabel,
   settingsLabel,
+  subscriptionLabel,
+  teamLabel,
+  rolesLabel,
   notificationsLabel,
   changePinLabel,
   logoutLabel,
@@ -434,6 +510,9 @@ function UserPopover({
   roleLabel: string | null
   profileLabel: string
   settingsLabel: string
+  subscriptionLabel: string
+  teamLabel: string
+  rolesLabel: string
   notificationsLabel: string
   changePinLabel: string
   logoutLabel: string
@@ -518,6 +597,24 @@ function UserPopover({
               href={resolveLocalizedPath(locale, '/settings')}
               onSelect={() => setOpen(false)}
             />
+            <UserMenuItem
+              icon={CreditCard}
+              label={subscriptionLabel}
+              href={resolveLocalizedPath(locale, '/subscription')}
+              onSelect={() => setOpen(false)}
+            />
+            <UserMenuItem
+              icon={Users}
+              label={teamLabel}
+              href={resolveLocalizedPath(locale, '/settings/team')}
+              onSelect={() => setOpen(false)}
+            />
+            <UserMenuItem
+              icon={ShieldCheck}
+              label={rolesLabel}
+              href={resolveLocalizedPath(locale, '/settings/roles')}
+              onSelect={() => setOpen(false)}
+            />
             <UserMenuItem icon={Bell} label={notificationsLabel} disabled />
             <UserMenuItem icon={KeyRound} label={changePinLabel} disabled />
           </div>
@@ -550,6 +647,7 @@ export function Sidebar() {
   const businessName = useAuthStore((state) => state.businessName)
   const role = useAuthStore((state) => state.role)
   const clearSession = useAuthStore((state) => state.clearSession)
+  const planState = usePlanStore((state) => state.current)
   const payload = accessToken ? decodeJwtPayload<JwtPayload>(accessToken) : null
   const [collapsed, setCollapsed] = useState(false)
   const [hasLoadedCollapsed, setHasLoadedCollapsed] = useState(false)
@@ -572,30 +670,81 @@ export function Sidebar() {
   const navItems = useMemo<NavItem[]>(
     () => [
       { to: '/', label: t('home'), icon: Home },
-      { to: '/sell', label: t('sell'), icon: ShoppingCart, badge: t('active_badge') },
+      {
+        to: '/sell',
+        label: t('sell'),
+        icon: ShoppingCart,
+        badge: t('active_badge'),
+        requiredResource: Resource.SALES_CREATE,
+      },
       {
         label: t('products'),
         icon: Package,
         children: [
-          { to: '/products', label: t('all_products'), icon: Package },
-          { to: '/products/categories', label: t('categories'), icon: Tag },
-          { to: '/products/units', label: t('units_of_measure'), icon: Ruler },
+          {
+            to: '/products',
+            label: t('all_products'),
+            icon: Package,
+            requiredResource: Resource.PRODUCTS_VIEW,
+            inactiveChildRoutes: ['/products/categories', '/products/units'],
+          },
+          {
+            to: '/products/categories',
+            label: t('categories'),
+            icon: Tag,
+            requiredResource: Resource.PRODUCTS_VIEW,
+          },
+          {
+            to: '/products/units',
+            label: t('units_of_measure'),
+            icon: Ruler,
+            requiredResource: Resource.PRODUCTS_VIEW,
+          },
         ],
       },
-      { to: '/inventory', label: t('inventory'), icon: Boxes },
-      { to: '/sales', label: t('sales'), icon: Receipt },
+      { to: '/inventory', label: t('inventory'), icon: Boxes, requiredResource: Resource.INVENTORY_VIEW },
+      { to: '/sales', label: t('sales'), icon: Receipt, requiredResource: Resource.SALES_VIEW },
       {
         label: t('contacts'),
         icon: Users,
         children: [
-          { to: '/contacts', label: t('all_contacts'), icon: Users },
-          { to: '/contacts/debtors', label: t('debtors'), icon: HandCoins },
-          { to: '/contacts/creditors', label: t('creditors'), icon: CreditCard },
+          {
+            to: '/contacts',
+            label: t('all_contacts'),
+            icon: Users,
+            requiredResource: Resource.CONTACTS_VIEW,
+            inactiveChildRoutes: ['/contacts/debtors', '/contacts/creditors'],
+          },
+          {
+            to: '/contacts/debtors',
+            label: t('debtors'),
+            icon: HandCoins,
+            requiredResource: Resource.DEBTS_VIEW,
+          },
+          {
+            to: '/contacts/creditors',
+            label: t('creditors'),
+            icon: CreditCard,
+            requiredResource: Resource.DEBTS_VIEW,
+          },
         ],
       },
-      { to: '/expenses', label: t('expenses'), icon: Wallet },
-      { to: '/reports', label: t('reports'), icon: BarChart3 },
-      { to: '/settings', label: t('settings'), icon: Settings },
+      { to: '/expenses', label: t('expenses'), icon: Wallet, requiredResource: Resource.EXPENSES_VIEW },
+      { to: '/reports', label: t('reports'), icon: BarChart3, requiredResource: Resource.REPORTS_DAILY },
+      {
+        label: t('settings'),
+        icon: Settings,
+        children: [
+          {
+            to: '/settings',
+            label: t('settings_general'),
+            icon: Settings,
+            inactiveChildRoutes: ['/settings/team', '/settings/roles'],
+          },
+          { to: '/settings/team', label: t('team'), icon: Users },
+          { to: '/settings/roles', label: t('roles'), icon: ShieldCheck },
+        ],
+      },
     ],
     [t],
   )
@@ -667,18 +816,25 @@ export function Sidebar() {
               locale={locale}
               pathname={pathname}
               searchParams={searchParams}
+              planState={planState}
               collapsed={collapsed}
               onExpand={() => setCollapsed(false)}
             />
-          ) : (
-            <NavLeaf
-              key={item.to}
-              item={item}
-              active={isItemActive(locale, pathname, searchParams, item)}
-              collapsed={collapsed}
-              locale={locale}
-            />
-          ),
+          ) : (() => {
+              const permissionState = getLeafPermissionState(item, planState)
+              return (
+                <NavLeaf
+                  key={item.to}
+                  item={item}
+                  active={isItemActive(locale, pathname, searchParams, item)}
+                  disabled={permissionState.disabled}
+                  disabledBadge={permissionState.disabledBadge}
+                  disabledTitle={permissionState.disabledTitle}
+                  collapsed={collapsed}
+                  locale={locale}
+                />
+              )
+            })(),
         )}
       </nav>
 
@@ -692,6 +848,9 @@ export function Sidebar() {
         roleLabel={roleLabel}
         profileLabel={t('profile')}
         settingsLabel={t('settings')}
+        subscriptionLabel={t('subscription')}
+        teamLabel={t('team')}
+        rolesLabel={t('roles')}
         notificationsLabel={t('notifications')}
         changePinLabel={t('change_pin')}
         logoutLabel={t('logout')}

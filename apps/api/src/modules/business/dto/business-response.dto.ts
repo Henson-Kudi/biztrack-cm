@@ -2,6 +2,10 @@ import type {
   Business,
   BusinessMembershipBusinessSummary,
   BusinessMembershipSummary,
+  ListTeamMembersResponse,
+  RemoveTeamMemberResponse,
+  TeamMember,
+  UpdateMemberRoleResponse,
 } from '@biztrack/types'
 import { Business as BusinessEntity } from '@/entities/business.entity'
 import { BusinessMember } from '@/entities/business-member.entity'
@@ -102,3 +106,68 @@ export class BusinessMembershipSummaryDto implements BusinessMembershipSummary {
     return dto
   }
 }
+
+export class TeamMemberDto implements TeamMember {
+  memberId!: string
+  userId!: string
+  roleId!: string
+  roleName!: string
+  role!: TeamMember['role']
+  status!: TeamMember['status']
+  name!: string | null
+  email!: string | null
+  phone!: string | null
+  joinedAt!: string
+
+  static fromModel(m: TeamMember): TeamMemberDto {
+    const dto = new TeamMemberDto()
+    dto.memberId = m.memberId
+    dto.userId = m.userId
+    dto.roleId = m.roleId
+    dto.roleName = m.roleName
+    dto.role = m.role
+    dto.status = m.status
+    dto.name = m.name
+    dto.email = m.email
+    dto.phone = m.phone
+    dto.joinedAt = m.joinedAt
+    return dto
+  }
+}
+
+export class ListTeamMembersResponseDto implements ListTeamMembersResponse {
+  members!: TeamMember[]
+
+  static fromModel(response: ListTeamMembersResponse): ListTeamMembersResponseDto {
+    const dto = new ListTeamMembersResponseDto()
+    dto.members = response.members.map((m) => TeamMemberDto.fromModel(m))
+    return dto
+  }
+}
+
+export class RemoveTeamMemberResponseDto implements RemoveTeamMemberResponse {
+  removed!: boolean
+
+  static fromModel(response: RemoveTeamMemberResponse): RemoveTeamMemberResponseDto {
+    const dto = new RemoveTeamMemberResponseDto()
+    dto.removed = response.removed
+    return dto
+  }
+}
+
+export class UpdateMemberRoleResponseDto implements UpdateMemberRoleResponse {
+  memberId!: string
+  roleId!: string
+  roleName!: string
+  role!: UpdateMemberRoleResponse['role']
+
+  static fromModel(response: UpdateMemberRoleResponse): UpdateMemberRoleResponseDto {
+    const dto = new UpdateMemberRoleResponseDto()
+    dto.memberId = response.memberId
+    dto.roleId = response.roleId
+    dto.roleName = response.roleName
+    dto.role = response.role
+    return dto
+  }
+}
+

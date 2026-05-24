@@ -44,6 +44,7 @@ export interface I18nTranslations {
     unauthorized: string
     forbidden: string
     plan_upgrade_required: string
+    quota_upgrade_required: string
     wrong_onboarding_step: string
     select_business_required: string
     validation_failed: string
@@ -57,6 +58,8 @@ export interface I18nTranslations {
     invite_contact_required: string
     invite_already_member: string
     invite_already_pending: string
+    team_cannot_remove_self: string
+    team_cannot_change_own_role: string
     barcode_in_use: string
     invalid_barcode_check_digit: string
     invalid_sku_format: string

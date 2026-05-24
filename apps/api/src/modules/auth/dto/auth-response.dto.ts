@@ -10,6 +10,7 @@ import type {
   SendInviteResponse,
   TokensResponse,
 } from '@biztrack/types'
+import { BusinessMemberRole } from '@biztrack/types'
 import { toIsoString } from '@/common/http/serialization'
 
 export class AuthVerificationDto implements AuthVerification {
@@ -78,10 +79,12 @@ export class TokensResponseDto implements TokensResponse {
 
 export class InvitePreviewDto implements InvitePreviewResponse {
   businessName!: string
-  role!: InvitePreviewResponse['role']
+  role!: BusinessMemberRole | null
   invitedByName!: string | null
   expiresAt!: string
   sentTo!: string | null
+  email!: string | null
+  phone!: string | null
 
   static fromModel(
     model: Omit<InvitePreviewResponse, 'expiresAt'> & { expiresAt: Date | string },
@@ -92,6 +95,8 @@ export class InvitePreviewDto implements InvitePreviewResponse {
     dto.invitedByName = model.invitedByName
     dto.expiresAt = toIsoString(model.expiresAt) ?? ''
     dto.sentTo = model.sentTo
+    dto.email = model.email
+    dto.phone = model.phone
     return dto
   }
 }

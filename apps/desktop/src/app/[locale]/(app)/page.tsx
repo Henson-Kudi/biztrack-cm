@@ -80,14 +80,6 @@ type DashboardMetricCardProps = {
   valueClassName?: string
 }
 
-type DashboardChartPoint = {
-  label: string
-  current: number
-  previous: number
-  currentTitle: string
-  previousTitle: string
-}
-
 type TranslateFn = (key: string, values?: Record<string, string | number>) => string
 type SellTranslateFn = (key: string) => string
 

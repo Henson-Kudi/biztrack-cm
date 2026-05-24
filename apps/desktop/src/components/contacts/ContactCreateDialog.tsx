@@ -35,6 +35,7 @@ type ContactCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSaved: (contact: LocalContactRecord) => void
   contact?: LocalContactRecord | null
+  quotaReached?: boolean
 }
 
 type ContactCreateFormState = {
@@ -82,6 +83,7 @@ export function ContactCreateDialog({
   onOpenChange,
   onSaved,
   contact = null,
+  quotaReached = false,
 }: ContactCreateDialogProps) {
   const t = useTranslations('app.contacts')
   const isEditMode = Boolean(contact)
@@ -225,7 +227,7 @@ export function ContactCreateDialog({
             <Button
               type="submit"
               variant="primary"
-              disabled={saving || form.name.trim().length === 0 || form.phone.trim().length === 0}
+              disabled={saving || form.name.trim().length === 0 || form.phone.trim().length === 0 || (quotaReached && !isEditMode)}
             >
               {saving
                 ? isEditMode
@@ -258,6 +260,8 @@ function getContactCreateErrorMessage(
         return t('dialog.contact_exists')
       case 'CONTACT_TYPE_CONFLICT':
         return t('dialog.type_conflict')
+      case 'CONTACTS_QUOTA_REACHED':
+        return t('dialog.contacts_quota_reached')
       default:
         break
     }

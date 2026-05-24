@@ -1,4 +1,7 @@
-import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { execFile } from 'child_process'
+import { existsSync } from 'fs'
+import { promisify } from 'util'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { DatabaseService } from './services/database.service'
@@ -13,6 +16,8 @@ import { registerShareIpc } from './ipc/share.ipc'
 import { registerPrintIpc } from './ipc/print.ipc'
 import { registerDocumentIpc } from './ipc/document.ipc'
 import { startRendererServer } from './renderer-server'
+
+const execFileAsync = promisify(execFile)
 
 const isForcedProduction =
   process.env.NODE_ENV === 'production' || process.env.DESKTOP_FORCE_PRODUCTION === '1'
@@ -103,6 +108,33 @@ app.whenReady().then(async () => {
   registerShareIpc()
   registerPrintIpc()
   registerDocumentIpc()
+
+  ipcMain.handle('app:open-external', async (_event, url: string) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
+  })
+
+  ipcMain.handle('app:is-whatsapp-installed', async () => {
+    try {
+      if (process.platform === 'win32') {
+        try {
+          await execFileAsync('reg', ['query', 'HKCR\\WhatsApp'], { timeout: 3000 })
+          return { installed: true }
+        } catch {
+          return { installed: false }
+        }
+      } else if (process.platform === 'darwin') {
+        return { installed: existsSync('/Applications/WhatsApp.app') }
+      }
+      return { installed: false }
+    } catch {
+      return { installed: false }
+    }
+  })
 
   ipcMain.on('set-theme', (_event, theme: 'light' | 'dark' | 'system') => {
     nativeTheme.themeSource = theme

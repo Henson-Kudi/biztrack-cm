@@ -50,7 +50,7 @@ export class Debt extends TypeOrmBaseEntity {
   @Column({ name: 'source_id', type: 'uuid' })
   sourceId!: string
 
-  @Column({ name: 'source_reference', type: 'varchar', length: 30 })
+  @Column({ name: 'source_reference', type: 'varchar', length: 100 })
   sourceReference!: string
 
   @Column({

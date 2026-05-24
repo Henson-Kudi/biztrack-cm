@@ -6,6 +6,7 @@ import {
   DebtDirection,
   DebtStatus,
   PaymentMethod,
+  Resource,
   type Contact,
   type ContactListResult,
   type Debt,
@@ -14,6 +15,8 @@ import {
   type CreateContactRequest,
   type UpdateContactRequest,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess, getLocalQuotaGate } from '@/lib/plan-access'
+import { usePlanStore } from '@/stores/plan.store'
 import { listDebtsForContactsLocal } from './debts.local'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
 import { buildOutboxEventOperation, requestBackgroundSync } from './sync.local'
@@ -139,8 +142,10 @@ export class ContactLocalError extends Error {
       | 'CONTACT_NOT_FOUND'
       | 'CONTACT_INACTIVE'
       | 'CONTACT_TYPE_INVALID'
-      | 'CONTACT_TYPE_CONFLICT',
+      | 'CONTACT_TYPE_CONFLICT'
+      | 'CONTACTS_QUOTA_REACHED',
     message?: string,
+    public readonly details?: unknown,
   ) {
     super(message ?? code)
     this.name = 'ContactLocalError'
@@ -399,6 +404,7 @@ export async function updateContactLocal(
   input: LocalContactUpdateInput,
 ): Promise<LocalContactRecord> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.CONTACTS_MANAGE)
   const normalizedContactId = contactId.trim()
 
   if (!normalizedContactId) {
@@ -499,6 +505,7 @@ async function createContactLocal(
   input: LocalContactCreateInput,
 ): Promise<LocalContactRecord> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.CONTACTS_MANAGE)
   const name = input.name.trim()
   const phone = normalizeRequiredPhone(input.phone)
   const phoneAlt = normalizeOptionalPhone(input.phoneAlt)
@@ -539,6 +546,14 @@ async function createContactLocal(
   const now = new Date().toISOString()
   const contactId = crypto.randomUUID()
   const createdById = normalizeOptionalUuid(input.createdById)
+
+  // The desktop keeps contacts local first, but quota enforcement still has to
+  // happen before the insert so we do not queue a contact that the API would
+  // reject later as soon as connectivity returns.
+  const contactQuota = await getLocalQuotaGate(normalizedBusinessId, 'contacts')
+  if (!contactQuota.allowed) {
+    throw new ContactLocalError('CONTACTS_QUOTA_REACHED', undefined, contactQuota)
+  }
 
   const payload: ContactSyncPayload = {
     type,
@@ -586,6 +601,7 @@ async function createContactLocal(
     buildOutboxEventOperation('contacts', contactId, payload),
   ])
 
+  void usePlanStore.getState().recalculateLocalUsage(normalizedBusinessId)
   requestBackgroundSync()
   return (await getContactByIdLocal(normalizedBusinessId, contactId)) as LocalContactRecord
 }
@@ -648,6 +664,14 @@ async function reuseExistingContactLocal(
   }
 
   const now = new Date().toISOString()
+  if (!contact.isActive) {
+    // Reactivating an archived contact consumes a live quota slot again, so we
+    // block locally before the row is reintroduced to the sync outbox.
+    const contactQuota = await getLocalQuotaGate(businessId, 'contacts')
+    if (!contactQuota.allowed) {
+      throw new ContactLocalError('CONTACTS_QUOTA_REACHED', undefined, contactQuota)
+    }
+  }
   const payload: ContactSyncPayload = {
     type: nextType,
     name: contact.name,
@@ -687,6 +711,7 @@ async function reuseExistingContactLocal(
     buildOutboxEventOperation('contacts', contact.id, payload),
   ])
 
+  void usePlanStore.getState().recalculateLocalUsage(businessId)
   requestBackgroundSync()
   return (await getContactByIdLocal(businessId, contact.id)) as LocalContactRecord
 }

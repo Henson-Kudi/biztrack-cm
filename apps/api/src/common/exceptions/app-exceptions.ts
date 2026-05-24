@@ -19,6 +19,12 @@ export class AppForbiddenException extends AppException {
   }
 }
 
+export class AppPaymentRequiredException extends AppException {
+  constructor(message = 'Payment required', code = 'PAYMENT_REQUIRED', details?: unknown) {
+    super(message, HttpStatus.PAYMENT_REQUIRED, code, details)
+  }
+}
+
 export class AppNotFoundException extends AppException {
   constructor(message = 'Not found', code = 'NOT_FOUND', details?: unknown) {
     super(message, HttpStatus.NOT_FOUND, code, details)

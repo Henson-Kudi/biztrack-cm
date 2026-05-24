@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm'
 import { BaseEntity } from '@/common/entities/base.entity'
 import { Business } from './business.entity'
 import { User } from './user.entity'
+import { Role } from './role.entity'
 import { BusinessMemberRole, BusinessMemberStatus } from '@biztrack/types'
 
 @Entity('business_members')
@@ -22,6 +23,13 @@ export class BusinessMember extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id', foreignKeyConstraintName: 'fk_business_members_user_id' })
   user?: User
+
+  @Column({ name: 'role_id', nullable: true, type: 'uuid' })
+  roleId!: string | null
+
+  @ManyToOne(() => Role, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'role_id', foreignKeyConstraintName: 'fk_business_members_role_id' })
+  roleRecord?: Role | null
 
   @Column({ type: 'enum', enum: BusinessMemberRole, default: BusinessMemberRole.CASHIER })
   role!: BusinessMemberRole

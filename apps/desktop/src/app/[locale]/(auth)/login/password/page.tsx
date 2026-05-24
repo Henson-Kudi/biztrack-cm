@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { AuthNextStep } from '@biztrack/types'
@@ -28,7 +28,7 @@ export default function PasswordLoginPage() {
 
   const goTo = (path: string) => router.push(`/${locale}${path}`)
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!pendingIdentifier) {
       return goTo('/login')
@@ -76,7 +76,7 @@ export default function PasswordLoginPage() {
           <Input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setPassword(event.target.value)}
             placeholder={t('password.placeholder')}
             required
           />

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator'
@@ -60,6 +61,7 @@ export class RestockDto implements RestockRequest {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   referenceNumber?: string
 
   @ApiPropertyOptional()

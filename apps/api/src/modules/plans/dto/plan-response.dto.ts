@@ -3,6 +3,8 @@ import type {
   CurrentSubscriptionResponse,
   ListPlansResponse,
   PlanResourceSummary,
+  PlanStateResponse,
+  QuotaUsageResponse,
   SelectPlanResponse,
   UpgradePlanResponse,
 } from '@biztrack/types'
@@ -14,6 +16,7 @@ export class PlanResourceSummaryDto implements PlanResourceSummary {
   priceXAF!: number
   trialDays!: number
   resources!: string[]
+  quotas!: PlanResourceSummary['quotas']
   inheritsFrom!: PlanResourceSummary['inheritsFrom']
   additionalResources!: string[]
 
@@ -118,6 +121,67 @@ export class CancelPlanResponseDto implements CancelPlanResponse {
     const dto = new CancelPlanResponseDto()
     dto.cancelAtPeriodEnd = model.cancelAtPeriodEnd
     dto.currentPeriodEnd = toIsoString(model.currentPeriodEnd) ?? null
+    return dto
+  }
+}
+
+export class PlanStateResponseDto implements PlanStateResponse {
+  selectedPlan!: PlanStateResponse['selectedPlan']
+  effectivePlan!: PlanStateResponse['effectivePlan']
+  status!: PlanStateResponse['status']
+  trialStartedAt!: string | null
+  trialEndsAt!: string | null
+  currentPeriodStart!: string | null
+  currentPeriodEnd!: string | null
+  cancelAtPeriodEnd!: boolean
+  entitlementValid!: boolean
+  entitlementExpiresAt!: string | null
+  fetchedAt!: string
+  staleAfter!: string
+  authPermissions!: PlanStateResponse['authPermissions']
+  quotas!: PlanStateResponse['quotas']
+  quotaUsage!: PlanStateResponse['quotaUsage']
+
+  static fromModel(model: Omit<PlanStateResponse, 'fetchedAt' | 'staleAfter'> & {
+    fetchedAt: Date | string | number
+    staleAfter: Date | string | number
+  }): PlanStateResponseDto {
+    const dto = new PlanStateResponseDto()
+    dto.selectedPlan = model.selectedPlan
+    dto.effectivePlan = model.effectivePlan
+    dto.status = model.status
+    dto.trialStartedAt = toIsoString(model.trialStartedAt) ?? null
+    dto.trialEndsAt = toIsoString(model.trialEndsAt) ?? null
+    dto.currentPeriodStart = toIsoString(model.currentPeriodStart) ?? null
+    dto.currentPeriodEnd = toIsoString(model.currentPeriodEnd) ?? null
+    dto.cancelAtPeriodEnd = model.cancelAtPeriodEnd
+    dto.entitlementValid = model.entitlementValid
+    dto.entitlementExpiresAt = toIsoString(model.entitlementExpiresAt) ?? null
+    dto.fetchedAt = toIsoString(model.fetchedAt) ?? new Date().toISOString()
+    dto.staleAfter = toIsoString(model.staleAfter) ?? new Date().toISOString()
+    dto.authPermissions = model.authPermissions
+    dto.quotas = model.quotas
+    dto.quotaUsage = model.quotaUsage
+    return dto
+  }
+}
+
+export class QuotaUsageResponseDto implements QuotaUsageResponse {
+  selectedPlan!: QuotaUsageResponse['selectedPlan']
+  effectivePlan!: QuotaUsageResponse['effectivePlan']
+  entitlementValid!: boolean
+  fetchedAt!: string
+  quotaUsage!: QuotaUsageResponse['quotaUsage']
+
+  static fromModel(model: Omit<QuotaUsageResponse, 'fetchedAt'> & {
+    fetchedAt: Date | string | number
+  }): QuotaUsageResponseDto {
+    const dto = new QuotaUsageResponseDto()
+    dto.selectedPlan = model.selectedPlan
+    dto.effectivePlan = model.effectivePlan
+    dto.entitlementValid = model.entitlementValid
+    dto.fetchedAt = toIsoString(model.fetchedAt) ?? new Date().toISOString()
+    dto.quotaUsage = model.quotaUsage
     return dto
   }
 }

@@ -64,7 +64,7 @@ export class MonthlyExpenseSummaryService {
     }
 
     await summaryRepo.upsert(
-      summaryRepo.create({
+      {
         businessId,
         summaryYear: year,
         summaryMonth: month,
@@ -72,7 +72,7 @@ export class MonthlyExpenseSummaryService {
         categoryBreakdown,
         expenseCount,
         recurringAmount: this.roundMoney(recurringAmount),
-      } as unknown as Partial<MonthlyExpenseSummary>),
+      } as any,
       ['businessId', 'summaryYear', 'summaryMonth'],
     )
   }

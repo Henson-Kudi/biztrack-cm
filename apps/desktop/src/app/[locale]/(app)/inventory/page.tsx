@@ -56,6 +56,7 @@ import {
 import { type LocalContactRecord } from '@/services/contacts.local'
 import { listCategoriesLocal, listProductsLocal, listUnitOfMeasuresLocal } from '@/services/products.local'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 import Link from 'next/link'
 
 type InventoryStatus = 'healthy' | 'low' | 'out' | 'reorder'
@@ -602,6 +603,12 @@ export default function InventoryPage() {
   const locale = useLocale()
   const tProducts = useTranslations('app.products')
   const businessId = useAuthStore((state) => state.businessId)
+  const planState = usePlanStore((state) => state.current)
+  const productsQuotaUsage =
+    planState?.quotaUsage.find((entry) => entry.resource === 'products' && !entry.unlimited) ?? null
+  const productsQuotaReached = Boolean(
+    productsQuotaUsage && productsQuotaUsage.used >= (productsQuotaUsage.limit ?? 0),
+  )
   const invoiceInputRef = useRef<HTMLInputElement | null>(null)
   const [inventoryItems, setInventoryItems] = useState<InventoryListItem[]>([])
   const [movements, setMovements] = useState<InventoryMovement[]>([])
@@ -2478,6 +2485,7 @@ export default function InventoryPage() {
         open={restockCreateProductOpen}
         onOpenChange={setRestockCreateProductOpen}
         onCreated={handleRestockProductCreated}
+        quotaReached={productsQuotaReached}
       />
 
       <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>

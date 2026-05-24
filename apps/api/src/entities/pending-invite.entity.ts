@@ -4,6 +4,7 @@ import { dateTransformer } from '@/common/entities/transformers'
 import { BusinessMemberRole } from '@biztrack/types'
 import { Business } from './business.entity'
 import { User } from './user.entity'
+import { Role } from './role.entity'
 
 @Entity('pending_invites')
 @Index('unq_pending_invites_token', ['token'], { unique: true })
@@ -19,8 +20,15 @@ export class PendingInvite extends ImmutableBaseEntity {
   @JoinColumn({ name: 'business_id', foreignKeyConstraintName: 'fk_pending_invites_business_id' })
   business?: Business
 
-  @Column({ type: 'enum', enum: BusinessMemberRole })
-  role!: BusinessMemberRole
+  @Column({ name: 'role_id', nullable: true, type: 'uuid' })
+  roleId!: string | null
+
+  @ManyToOne(() => Role, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'role_id', foreignKeyConstraintName: 'fk_pending_invites_role_id' })
+  roleRecord?: Role | null
+
+  @Column({ type: 'enum', enum: BusinessMemberRole, nullable: true })
+  role!: BusinessMemberRole | null
 
   @Column({ nullable: true, type: 'varchar', length: 20 })
   phone?: string | null

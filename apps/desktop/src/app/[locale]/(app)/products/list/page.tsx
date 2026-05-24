@@ -45,15 +45,18 @@ import {
   listUnitOfMeasuresLocal,
 } from '@/services/products.local'
 import { useAuthStore } from '@/stores/auth.store'
+import { usePlanStore } from '@/stores/plan.store'
 
 type ActivityFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
 type TypeFilter = 'ALL' | 'TRACKED' | 'SERVICE'
 
 export default function ProductsListPage() {
   const t = useTranslations('app.products')
+  const planGateT = useTranslations('app.plan_gate')
   const locale = useLocale()
   const router = useRouter()
   const businessId = useAuthStore((state) => state.businessId)
+  const planState = usePlanStore((state) => state.current)
   const [products, setProducts] = useState<PaginatedResult<Product> | null>(null)
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [units, setUnits] = useState<UnitOfMeasure[]>([])
@@ -183,6 +186,11 @@ export default function ProductsListPage() {
   }, [activityFilter, businessId, categoryId, deferredSearch, page, reloadKey, t, typeFilter])
 
   const rows = useMemo(() => products?.data ?? [], [products])
+  const productsQuotaUsage =
+    planState?.quotaUsage.find((entry) => entry.resource === 'products' && !entry.unlimited) ?? null
+  const productsQuotaReached = Boolean(
+    productsQuotaUsage && productsQuotaUsage.used >= (productsQuotaUsage.limit ?? 0),
+  )
   const allCategoriesOption = useMemo<CommandSelectOption>(
     () => ({
       value: 'ALL',
@@ -281,6 +289,21 @@ export default function ProductsListPage() {
           <p className="text-sm text-muted-foreground">{t('list.description')}</p>
         </div>
 
+        {productsQuotaReached ? (
+          <p className="text-sm text-muted-foreground">
+            {planGateT.rich('quota_hint', {
+              link: (chunks) => (
+                <a
+                  href={`/${locale}/subscription`}
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  {chunks}
+                </a>
+              ),
+            })}
+          </p>
+        ) : null}
+
         <SurfaceCard>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <Button variant="ghost" onClick={() => router.back()} className="px-0">
@@ -305,7 +328,7 @@ export default function ProductsListPage() {
               <Button
                 variant="primary"
                 onClick={() => setIsAddProductOpen(true)}
-                disabled={metadataLoading}
+                disabled={metadataLoading || productsQuotaReached}
               >
                 {t('actions.add_product')}
               </Button>
@@ -557,6 +580,7 @@ export default function ProductsListPage() {
           setPage(1)
           setReloadKey((current) => current + 1)
         }}
+        quotaReached={productsQuotaReached}
       />
     </>
   )

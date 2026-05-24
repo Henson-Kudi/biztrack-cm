@@ -7,6 +7,7 @@ import {
   DebtSource,
   DebtStatus,
   PaymentMethod,
+  Resource,
   type ContactStatement,
   type Debt,
   type DebtSyncPayload,
@@ -16,6 +17,7 @@ import {
   type RecordDebtPaymentRequest,
   type WriteOffDebtRequest,
 } from '@biztrack/types'
+import { assertLocalPermissionAccess } from '@/lib/plan-access'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
 import { assertBusinessId } from './products.local'
 import { buildOutboxEventOperation, requestBackgroundSync } from './sync.local'
@@ -334,6 +336,7 @@ export async function recordDebtPaymentLocal(
   },
 ): Promise<Debt> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.DEBTS_RECORD_PAYMENT)
   const normalizedDebtId = debtId.trim()
   const paymentDate = assertDateOnly(payload.paymentDate)
   const amount = roundMoney(payload.amount)
@@ -395,6 +398,7 @@ export async function deleteDebtPaymentLocal(
   direction: DebtDirection,
 ): Promise<void> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.DEBTS_DELETE_PAYMENT)
   const normalizedDebtId = debtId.trim()
   const normalizedPaymentId = paymentId.trim()
 
@@ -456,6 +460,7 @@ export async function writeOffDebtLocal(
   },
 ): Promise<Debt> {
   const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.DEBTS_WRITE_OFF)
   const normalizedDebtId = debtId.trim()
   const reason = normalizeWriteOffReason(payload.reason)
   const debt = await getDebtByIdLocal(normalizedBusinessId, normalizedDebtId, direction)
@@ -933,7 +938,7 @@ export async function requireCreditContactLocal(
 ) {
   const contact = await requireContactLocal(contactId, businessId)
 
-  if (!Boolean(contact.is_active ?? 1)) {
+  if ((contact.is_active ?? 1) === 0) {
     throw new DebtLocalError('CONTACT_INACTIVE')
   }
 

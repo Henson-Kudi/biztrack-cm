@@ -113,7 +113,7 @@ export interface LogoutResponse {
 }
 
 export interface SendInviteRequest {
-  role: BusinessMemberRole
+  roleId: string
   phone?: string
   email?: string
 }
@@ -214,22 +214,27 @@ export interface TokensResponse {
 
 export interface InvitePreviewResponse {
   businessName: string
-  role: BusinessMemberRole
+  role: BusinessMemberRole | null
   invitedByName: string | null
   expiresAt: IsoDateString
   sentTo: string | null
+  /** Unmasked — used to pre-fill the register/login form for the invitee */
+  email: string | null
+  phone: string | null
 }
 
 export interface SendInvitePendingMemberResponse {
   status: 'pending_member'
   businessId: string
   userId: string
+  inviteUrl: string | null
 }
 
 export interface SendInvitePendingInviteResponse {
   status: 'pending_invite'
   token: string
   expiresAt: IsoDateString
+  inviteUrl: string
 }
 
 export type SendInviteResponse = SendInvitePendingMemberResponse | SendInvitePendingInviteResponse
@@ -245,6 +250,10 @@ export interface JwtPayload {
   email?: string | null
   phone?: string | null
   role?: BusinessMemberRole | null
+  roleId?: string | null
+  isOwner?: boolean
   businessId?: string | null
-  type?: 'phase1' | 'phase2'
+  deviceId?: string | null
+  tokenId?: string | null
+  type?: 'phase1' | 'phase2' | 'sync'
 }
