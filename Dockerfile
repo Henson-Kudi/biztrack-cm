@@ -16,7 +16,7 @@ RUN pnpm install --filter @biztrack/api... --frozen-lockfile
 FROM base AS build
 COPY --from=deps /app ./
 COPY . .
-RUN pnpm --filter @biztrack/logger --filter @biztrack/types --filter @biztrack/utils build --filter @biztrack/http-client build
+RUN pnpm --filter @biztrack/logger --filter @biztrack/types --filter @biztrack/utils --filter @biztrack/http-client build
 RUN pnpm --filter @biztrack/validators build
 RUN pnpm --filter @biztrack/api build
 
