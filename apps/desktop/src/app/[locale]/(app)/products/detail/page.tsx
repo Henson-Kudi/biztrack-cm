@@ -268,6 +268,7 @@ export default function ProductDetailPage() {
   const searchParams = useSearchParams()
   const productId = searchParams.get('productId') ?? ''
   const businessId = useAuthStore((state) => state.businessId)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const [product, setProduct] = useState<Product | null>(null)
   const [inventoryDetail, setInventoryDetail] = useState<InventoryDetail | null>(null)
   const [recentMovements, setRecentMovements] = useState<PaginatedResult<InventoryMovement> | null>(
@@ -650,7 +651,7 @@ export default function ProductDetailPage() {
 
     return Math.max(0, restockEffectiveTotal - restockAmountPaid)
   }, [restockAmountPaid, restockEffectiveTotal])
-  const currencyCode = product?.currency || 'XAF'
+  const currencyCode = product?.currency || businessCurrency
   const inventorySummary = inventoryDetail?.binSummary ?? null
   const displayMovements = inventoryDetail?.movements ?? recentMovementItems
   const stockQuantity = product?.trackInventory
@@ -1796,7 +1797,7 @@ export default function ProductDetailPage() {
                         ? '-'
                         : new Intl.NumberFormat(locale, {
                             style: 'currency',
-                            currency: 'XAF',
+                            currency: currencyCode,
                             maximumFractionDigits: 0,
                           }).format(restockComputedTotal)
                     }
@@ -1854,7 +1855,7 @@ export default function ProductDetailPage() {
                       ? '-'
                       : new Intl.NumberFormat(locale, {
                           style: 'currency',
-                          currency: 'XAF',
+                          currency: currencyCode,
                           maximumFractionDigits: 0,
                         }).format(restockEffectiveTotal)
                   }
@@ -1865,7 +1866,7 @@ export default function ProductDetailPage() {
                   label={inventoryT('restock.amount_paid')}
                   value={new Intl.NumberFormat(locale, {
                     style: 'currency',
-                    currency: 'XAF',
+                    currency: currencyCode,
                     maximumFractionDigits: 0,
                   }).format(restockAmountPaid)}
                   readOnly
@@ -1878,7 +1879,7 @@ export default function ProductDetailPage() {
                       ? '-'
                       : new Intl.NumberFormat(locale, {
                           style: 'currency',
-                          currency: 'XAF',
+                          currency: currencyCode,
                           maximumFractionDigits: 0,
                         }).format(restockCreditAmount)
                   }

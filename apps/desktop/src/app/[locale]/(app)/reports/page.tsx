@@ -42,7 +42,7 @@ import {
   type TemplateTone,
 } from '@/reports/templates'
 import { listAllDebtsByDirectionLocal } from '@/services/debts.local'
-import { listExpenseCategoriesLocal, listExpensesLocal } from '@/services/expenses.local'
+import { listExpensesLocal } from '@/services/expenses.local'
 import { listInventoryLocal, listInventoryMovementsLocal } from '@/services/inventory.local'
 import { hasDesktopIpc, ipc } from '@/services/ipc.bridge'
 import {
@@ -476,28 +476,28 @@ function parseDateKey(dateKey: string) {
   return new Date(year || 1970, (month || 1) - 1, day || 1)
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${new Intl.NumberFormat(localeTag, {
+function formatCurrencyBase(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${new Intl.NumberFormat(localeTag, {
     maximumFractionDigits: 0,
   }).format(Math.round(value))}`
 }
 
-function formatCurrencyCompact(value: number, localeTag: string) {
+function formatCurrencyCompactBase(value: number, localeTag: string, currency = 'XAF') {
   if (Math.abs(value) >= 1_000_000) {
-    return `XAF ${(value / 1_000_000).toLocaleString(localeTag, {
+    return `${currency} ${(value / 1_000_000).toLocaleString(localeTag, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 1,
     })}M`
   }
 
   if (Math.abs(value) >= 1_000) {
-    return `XAF ${(value / 1_000).toLocaleString(localeTag, {
+    return `${currency} ${(value / 1_000).toLocaleString(localeTag, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 1,
     })}k`
   }
 
-  return formatCurrency(value, localeTag)
+  return formatCurrencyBase(value, localeTag, currency)
 }
 
 function formatNumber(value: number, localeTag: string) {
@@ -1244,6 +1244,7 @@ export default function ReportsPage() {
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const defaultRange = useMemo(() => resolvePresetRange('thisMonth'), [])
   const [previewReportId, setPreviewReportId] = useState<ReportId>(DEFAULT_REPORT.id)
@@ -1313,7 +1314,6 @@ export default function ReportsPage() {
             listAllDebtsByDirectionLocal(currentBusinessId, DebtDirection.PAYABLE, {
               includePayments: true,
             }),
-            listExpenseCategoriesLocal(currentBusinessId),
           ])
 
         if (!active) {
@@ -1815,19 +1815,19 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.revenue'),
-            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
             hint: `${formatNumber(derived.completedSales.length, localeTag)} ${t('stats.transactions_hint')}`,
             tone: 'positive',
           },
           {
             label: t('stats.gross_profit'),
-            value: formatCurrencyCompact(derived.grossProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.grossProfit, localeTag, businessCurrency),
             hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t('stats.margin_hint')}`,
             tone: derived.grossProfit >= 0 ? 'info' : 'danger',
           },
           {
             label: t('stats.avg_basket'),
-            value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+            value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
             hint: t('stats.avg_basket_hint'),
             tone: 'default',
           },
@@ -1837,7 +1837,7 @@ export default function ReportsPage() {
           secondary: t('preview.legend_transactions'),
         },
         points,
-        primaryMaxLabel: formatCurrencyCompact(Math.max(...points.map((point) => point.primary), 0), localeTag),
+        primaryMaxLabel: formatCurrencyCompactBase(Math.max(...points.map((point) => point.primary), 0), localeTag, businessCurrency),
         secondaryMaxLabel: formatNumber(Math.max(...points.map((point) => point.secondary), 0), localeTag),
         empty: t('preview.no_sales_data'),
         exportModel: {
@@ -1845,15 +1845,15 @@ export default function ReportsPage() {
           description: `${selectedReport.description} (${rangeLabel})`,
           filenameBase: exportBase,
           summaryRows: [
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
-            { label: t('stats.gross_profit'), value: formatCurrency(derived.grossProfit, localeTag) },
-            { label: t('stats.avg_basket'), value: formatCurrency(derived.averageOrderValue, localeTag) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+            { label: t('stats.gross_profit'), value: formatCurrencyBase(derived.grossProfit, localeTag, businessCurrency) },
+            { label: t('stats.avg_basket'), value: formatCurrencyBase(derived.averageOrderValue, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.period'), t('preview.legend_revenue'), t('preview.legend_transactions')],
             rows: points.map((point) => [
               point.label,
-              formatCurrency(point.primary, localeTag),
+              formatCurrencyBase(point.primary, localeTag, businessCurrency),
               formatNumber(point.secondary, localeTag),
             ]),
           },
@@ -1876,7 +1876,7 @@ export default function ReportsPage() {
           sale.sold_at ? new Intl.DateTimeFormat(localeTag, { hour: '2-digit', minute: '2-digit' }).format(new Date(sale.sold_at)) : '-',
           sale.customer_name || t('walk_in'),
           getPaymentLabel(sale.payment_method, tSell),
-          formatCurrency(sale.total_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.total_amount ?? 0, localeTag, businessCurrency),
           sale.status === SaleStatus.VOIDED ? 'Voided' : 'Completed',
         ]),
       }
@@ -1901,7 +1901,7 @@ export default function ReportsPage() {
           {
             label: t('stats.voided'),
             value: formatNumber(derived.voidedSales.length, localeTag),
-            hint: formatCurrency(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag),
+            hint: formatCurrencyBase(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag, businessCurrency),
             tone: 'danger',
           },
         ],
@@ -1924,8 +1924,8 @@ export default function ReportsPage() {
     if (selectedReport.id === 'top-products') {
       const rows = derived.topProducts.slice(0, 10).map((product) => ({
         label: product.productName,
-        valueLabel: formatCurrency(product.revenue, localeTag),
-        meta: `${formatNumber(product.quantity, localeTag)} ${t('stats.units_sold_hint')} · ${formatCurrency(product.revenue - product.cost, localeTag)} ${t('stats.gross_contribution_hint')}`,
+        valueLabel: formatCurrencyBase(product.revenue, localeTag, businessCurrency),
+        meta: `${formatNumber(product.quantity, localeTag)} ${t('stats.units_sold_hint')} · ${formatCurrencyBase(product.revenue - product.cost, localeTag, businessCurrency)} ${t('stats.gross_contribution_hint')}`,
         tone: 'positive' as const,
       }))
 
@@ -1962,15 +1962,15 @@ export default function ReportsPage() {
           summaryRows: [
             { label: t('stats.products'), value: formatNumber(derived.topProducts.length, localeTag) },
             { label: t('stats.units_sold'), value: formatNumber(sumNumbers(derived.topProducts.map((product) => product.quantity)), localeTag) },
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.product'), t('table.revenue'), t('table.units'), t('table.margin')],
             rows: derived.topProducts.slice(0, 12).map((product) => [
               product.productName,
-              formatCurrency(product.revenue, localeTag),
+              formatCurrencyBase(product.revenue, localeTag, businessCurrency),
               formatNumber(product.quantity, localeTag),
-              formatCurrency(product.revenue - product.cost, localeTag),
+              formatCurrencyBase(product.revenue - product.cost, localeTag, businessCurrency),
             ]),
           },
         },
@@ -1982,7 +1982,7 @@ export default function ReportsPage() {
         columns: [t('table.cashier'), t('table.revenue'), t('table.completed'), t('table.void_rate')],
         rows: derived.cashierRows.slice(0, 10).map((cashier) => [
           cashier.cashierName,
-          formatCurrency(cashier.revenue, localeTag),
+          formatCurrencyBase(cashier.revenue, localeTag, businessCurrency),
           formatNumber(cashier.completedSales, localeTag),
           `${formatPercent(percentageOf(cashier.voidedSales, cashier.totalSales), localeTag)}%`,
         ]),
@@ -2002,12 +2002,12 @@ export default function ReportsPage() {
           {
             label: t('stats.top_cashier'),
             value: derived.cashierRows[0]?.cashierName || '-',
-            hint: derived.cashierRows[0] ? formatCurrency(derived.cashierRows[0].revenue, localeTag) : t('preview.no_sales_data'),
+            hint: derived.cashierRows[0] ? formatCurrencyBase(derived.cashierRows[0].revenue, localeTag, businessCurrency) : t('preview.no_sales_data'),
             tone: 'positive',
           },
           {
             label: t('stats.avg_basket'),
-            value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+            value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
             hint: t('stats.avg_basket_hint'),
             tone: 'default',
           },
@@ -2020,8 +2020,8 @@ export default function ReportsPage() {
           filenameBase: exportBase,
           summaryRows: [
             { label: t('stats.cashiers'), value: formatNumber(derived.cashierRows.length, localeTag) },
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
-            { label: t('stats.avg_basket'), value: formatCurrency(derived.averageOrderValue, localeTag) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+            { label: t('stats.avg_basket'), value: formatCurrencyBase(derived.averageOrderValue, localeTag, businessCurrency) },
           ],
           table,
         },
@@ -2039,7 +2039,7 @@ export default function ReportsPage() {
         const amount = derived.paymentTotals.get(row.method) ?? 0
         return {
           label: row.label,
-          valueLabel: formatCurrency(amount, localeTag),
+          valueLabel: formatCurrencyBase(amount, localeTag, businessCurrency),
           percentage: Number(percentageOf(amount, derived.totalRevenue).toFixed(1)),
           tone: row.tone,
           meta: `${formatPercent(percentageOf(amount, derived.totalRevenue), localeTag)}%`,
@@ -2047,7 +2047,7 @@ export default function ReportsPage() {
       })
       bars.push({
         label: 'Unpaid credit',
-        valueLabel: formatCurrency(derived.totalCreditIssued, localeTag),
+        valueLabel: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
         percentage: Number(percentageOf(derived.totalCreditIssued, derived.totalRevenue).toFixed(1)),
         tone: 'danger',
       })
@@ -2059,13 +2059,13 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.collected'),
-            value: formatCurrencyCompact(sumNumbers(Array.from(derived.paymentTotals.values())), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(Array.from(derived.paymentTotals.values())), localeTag, businessCurrency),
             hint: t('stats.cash_in_hand_hint'),
             tone: 'positive',
           },
           {
             label: t('stats.credit_issued'),
-            value: formatCurrencyCompact(derived.totalCreditIssued, localeTag),
+            value: formatCurrencyCompactBase(derived.totalCreditIssued, localeTag, businessCurrency),
             hint: t('stats.unpaid_credit_hint'),
             tone: 'danger',
           },
@@ -2083,9 +2083,9 @@ export default function ReportsPage() {
           description: `${selectedReport.description} (${rangeLabel})`,
           filenameBase: exportBase,
           summaryRows: [
-            { label: t('stats.collected'), value: formatCurrency(sumNumbers(Array.from(derived.paymentTotals.values())), localeTag) },
-            { label: t('stats.credit_issued'), value: formatCurrency(derived.totalCreditIssued, localeTag) },
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
+            { label: t('stats.collected'), value: formatCurrencyBase(sumNumbers(Array.from(derived.paymentTotals.values())), localeTag, businessCurrency) },
+            { label: t('stats.credit_issued'), value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.method'), t('table.amount'), t('table.share')],
@@ -2102,7 +2102,7 @@ export default function ReportsPage() {
           sale.sale_number || sale.receipt_number || sale.id,
           sale.sold_at ? formatDateTimeLabel(sale.sold_at, localeTag) : '-',
           sale.customer_name || t('walk_in'),
-          formatCurrency(sale.total_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.total_amount ?? 0, localeTag, businessCurrency),
           sale.void_reason || t('not_set'),
         ]),
       }
@@ -2120,7 +2120,7 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.voided_value'),
-            value: formatCurrencyCompact(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag, businessCurrency),
             hint: t('stats.reversed_value_hint'),
             tone: 'warning',
           },
@@ -2139,7 +2139,7 @@ export default function ReportsPage() {
           filenameBase: exportBase,
           summaryRows: [
             { label: t('stats.voided'), value: formatNumber(derived.voidedSales.length, localeTag) },
-            { label: t('stats.voided_value'), value: formatCurrency(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag) },
+            { label: t('stats.voided_value'), value: formatCurrencyBase(sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)), localeTag, businessCurrency) },
           ],
           table,
         },
@@ -2318,9 +2318,9 @@ export default function ReportsPage() {
         rows: derived.restocks.slice(0, 14).map((restock) => [
           restock.reference_number || restock.id,
           restock.supplier_name || t('not_set'),
-          formatCurrency(restock.total_cost ?? restock.total_amount ?? 0, localeTag),
-          formatCurrency(restock.amount_paid ?? 0, localeTag),
-          formatCurrency(restock.credit_amount ?? 0, localeTag),
+          formatCurrencyBase(restock.total_cost ?? restock.total_amount ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(restock.amount_paid ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(restock.credit_amount ?? 0, localeTag, businessCurrency),
         ]),
       }
 
@@ -2337,13 +2337,13 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.total_cost'),
-            value: formatCurrencyCompact(sumNumbers(derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0)), localeTag, businessCurrency),
             hint: t('stats.stock_investment_hint'),
             tone: 'warning',
           },
           {
             label: t('stats.credit_issued'),
-            value: formatCurrencyCompact(sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)), localeTag, businessCurrency),
             hint: t('stats.supplier_credit_hint'),
             tone: 'danger',
           },
@@ -2356,7 +2356,7 @@ export default function ReportsPage() {
           filenameBase: exportBase,
           summaryRows: [
             { label: t('stats.restocks'), value: formatNumber(derived.restocks.length, localeTag) },
-            { label: t('stats.total_cost'), value: formatCurrency(sumNumbers(derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0)), localeTag) },
+            { label: t('stats.total_cost'), value: formatCurrencyBase(sumNumbers(derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0)), localeTag, businessCurrency) },
           ],
           table,
         },
@@ -2371,26 +2371,26 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.revenue'),
-            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
             hint: t('stats.topline_hint'),
             tone: 'positive',
           },
           {
             label: t('stats.expenses'),
-            value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+            value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
             hint: t('stats.total_expense_hint'),
             tone: 'warning',
           },
           {
             label: t('stats.net_profit'),
-            value: formatCurrencyCompact(derived.netProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.netProfit, localeTag, businessCurrency),
             hint: `${formatPercent(percentageOf(derived.netProfit, derived.totalRevenue), localeTag)}% ${t('stats.net_margin_hint')}`,
             tone: derived.netProfit >= 0 ? 'positive' : 'danger',
           },
         ],
         bars: pnlRows.map((row) => ({
           label: row.label,
-          valueLabel: formatCurrency(row.value, localeTag),
+          valueLabel: formatCurrencyBase(row.value, localeTag, businessCurrency),
           percentage: row.percent,
           tone: row.tone,
         })),
@@ -2400,14 +2400,14 @@ export default function ReportsPage() {
           description: `${selectedReport.description} (${rangeLabel})`,
           filenameBase: exportBase,
           summaryRows: [
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
-            { label: t('stats.cogs'), value: formatCurrency(derived.totalCost, localeTag) },
-            { label: t('stats.expenses'), value: formatCurrency(derived.totalExpenses, localeTag) },
-            { label: t('stats.net_profit'), value: formatCurrency(derived.netProfit, localeTag) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+            { label: t('stats.cogs'), value: formatCurrencyBase(derived.totalCost, localeTag, businessCurrency) },
+            { label: t('stats.expenses'), value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency) },
+            { label: t('stats.net_profit'), value: formatCurrencyBase(derived.netProfit, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.line_item'), t('table.amount')],
-            rows: pnlRows.map((row) => [row.label, formatCurrency(row.value, localeTag)]),
+            rows: pnlRows.map((row) => [row.label, formatCurrencyBase(row.value, localeTag, businessCurrency)]),
           },
         },
       }
@@ -2416,10 +2416,10 @@ export default function ReportsPage() {
     if (selectedReport.id === 'expense-breakdown') {
       const bars = derived.expenseCategoryRows.map((row) => ({
         label: row.name,
-        valueLabel: formatCurrency(row.amount, localeTag),
+        valueLabel: formatCurrencyBase(row.amount, localeTag, businessCurrency),
         percentage: Number(percentageOf(row.amount, derived.totalExpenses).toFixed(1)),
         tone: row.recurringAmount > 0 ? ('warning' as const) : ('default' as const),
-        meta: `${formatNumber(row.count, localeTag)} ${t('stats.entries_hint')} · ${formatCurrency(row.recurringAmount, localeTag)} ${t('stats.recurring_hint')}`,
+        meta: `${formatNumber(row.count, localeTag)} ${t('stats.entries_hint')} · ${formatCurrencyBase(row.recurringAmount, localeTag, businessCurrency)} ${t('stats.recurring_hint')}`,
       }))
 
       return {
@@ -2429,13 +2429,13 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.expenses'),
-            value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+            value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
             hint: `${formatNumber(derived.expenses.length, localeTag)} ${t('stats.entries_hint')}`,
             tone: 'warning',
           },
           {
             label: t('stats.recurring'),
-            value: formatCurrencyCompact(sumNumbers(derived.expenses.filter((expense) => expense.isRecurring).map((expense) => expense.amount)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.expenses.filter((expense) => expense.isRecurring).map((expense) => expense.amount)), localeTag, businessCurrency),
             hint: t('stats.recurring_expenses_hint'),
             tone: 'info',
           },
@@ -2453,14 +2453,14 @@ export default function ReportsPage() {
           description: `${selectedReport.description} (${rangeLabel})`,
           filenameBase: exportBase,
           summaryRows: [
-            { label: t('stats.expenses'), value: formatCurrency(derived.totalExpenses, localeTag) },
+            { label: t('stats.expenses'), value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency) },
             { label: t('stats.categories'), value: formatNumber(derived.expenseCategoryRows.length, localeTag) },
           ],
           table: {
             columns: [t('table.category'), t('table.amount'), t('table.share')],
             rows: derived.expenseCategoryRows.map((row) => [
               row.name,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.amount, derived.totalExpenses), localeTag)}%`,
             ]),
           },
@@ -2478,19 +2478,19 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.revenue'),
-            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
             hint: t('stats.topline_hint'),
             tone: 'positive',
           },
           {
             label: t('stats.expenses'),
-            value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+            value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
             hint: t('stats.total_expense_hint'),
             tone: 'warning',
           },
           {
             label: t('stats.net_profit'),
-            value: formatCurrencyCompact(derived.netProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.netProfit, localeTag, businessCurrency),
             hint: t('stats.range_result_hint'),
             tone: derived.netProfit >= 0 ? 'positive' : 'danger',
           },
@@ -2500,24 +2500,24 @@ export default function ReportsPage() {
           secondary: t('preview.legend_expenses'),
         },
         points,
-        primaryMaxLabel: formatCurrencyCompact(Math.max(...points.map((point) => point.primary), 0), localeTag),
-        secondaryMaxLabel: formatCurrencyCompact(Math.max(...points.map((point) => point.secondary), 0), localeTag),
+        primaryMaxLabel: formatCurrencyCompactBase(Math.max(...points.map((point) => point.primary), 0), localeTag, businessCurrency),
+        secondaryMaxLabel: formatCurrencyCompactBase(Math.max(...points.map((point) => point.secondary), 0), localeTag, businessCurrency),
         empty: t('preview.no_expense_data'),
         exportModel: {
           title: selectedReport.name,
           description: `${selectedReport.description} (${rangeLabel})`,
           filenameBase: exportBase,
           summaryRows: [
-            { label: t('stats.revenue'), value: formatCurrency(derived.totalRevenue, localeTag) },
-            { label: t('stats.expenses'), value: formatCurrency(derived.totalExpenses, localeTag) },
-            { label: t('stats.net_profit'), value: formatCurrency(derived.netProfit, localeTag) },
+            { label: t('stats.revenue'), value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+            { label: t('stats.expenses'), value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency) },
+            { label: t('stats.net_profit'), value: formatCurrencyBase(derived.netProfit, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.period'), t('preview.legend_revenue'), t('preview.legend_expenses')],
             rows: points.map((point) => [
               point.label,
-              formatCurrency(point.primary, localeTag),
-              formatCurrency(point.secondary, localeTag),
+              formatCurrencyBase(point.primary, localeTag, businessCurrency),
+              formatCurrencyBase(point.secondary, localeTag, businessCurrency),
             ]),
           },
         },
@@ -2531,7 +2531,7 @@ export default function ReportsPage() {
       const totalOutstanding = sumNumbers(openRows.map((debt) => debt.outstandingAmount))
       const bars = ageingRows.map((row) => ({
         label: row.label,
-        valueLabel: formatCurrency(row.amount, localeTag),
+        valueLabel: formatCurrencyBase(row.amount, localeTag, businessCurrency),
         percentage: row.percentage,
         tone: row.label === '30+ days' ? ('danger' as const) : row.label === '16-30 days' ? ('warning' as const) : ('info' as const),
         meta: `${formatNumber(row.count, localeTag)} ${t('stats.balances_hint')}`,
@@ -2550,13 +2550,13 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.outstanding'),
-            value: formatCurrencyCompact(totalOutstanding, localeTag),
+            value: formatCurrencyCompactBase(totalOutstanding, localeTag, businessCurrency),
             hint: t('stats.current_exposure_hint'),
             tone: isReceivable ? 'danger' : 'warning',
           },
           {
             label: t('stats.oldest_bucket'),
-            value: formatCurrencyCompact(ageingRows[3]?.amount ?? 0, localeTag),
+            value: formatCurrencyCompactBase(ageingRows[3]?.amount ?? 0, localeTag, businessCurrency),
             hint: t('stats.oldest_bucket_hint'),
             tone: 'danger',
           },
@@ -2569,13 +2569,13 @@ export default function ReportsPage() {
           filenameBase: exportBase,
           summaryRows: [
             { label: t('stats.open_balances'), value: formatNumber(openRows.length, localeTag) },
-            { label: t('stats.outstanding'), value: formatCurrency(totalOutstanding, localeTag) },
+            { label: t('stats.outstanding'), value: formatCurrencyBase(totalOutstanding, localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.bucket'), t('table.amount'), t('table.count')],
             rows: ageingRows.map((row) => [
               row.label,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               formatNumber(row.count, localeTag),
             ]),
           },
@@ -2600,34 +2600,34 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.receivables'),
-            value: formatCurrencyCompact(sumNumbers(derived.openReceivableDebts.map((debt) => debt.outstandingAmount)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.openReceivableDebts.map((debt) => debt.outstandingAmount)), localeTag, businessCurrency),
             hint: t('stats.customer_balances_hint'),
             tone: 'positive',
           },
           {
             label: t('stats.payables'),
-            value: formatCurrencyCompact(sumNumbers(derived.openPayableDebts.map((debt) => debt.outstandingAmount)), localeTag),
+            value: formatCurrencyCompactBase(sumNumbers(derived.openPayableDebts.map((debt) => debt.outstandingAmount)), localeTag, businessCurrency),
             hint: t('stats.supplier_balances_hint'),
             tone: 'warning',
           },
         ],
         note,
-        bullets: topContacts.slice(0, 5).map((contact) => `${contact.contactName} · ${contact.direction === DebtDirection.RECEIVABLE ? 'Receivable' : 'Payable'} · ${formatCurrency(contact.balance, localeTag)} · ${contact.reference}`),
+        bullets: topContacts.slice(0, 5).map((contact) => `${contact.contactName} · ${contact.direction === DebtDirection.RECEIVABLE ? 'Receivable' : 'Payable'} · ${formatCurrencyBase(contact.balance, localeTag, businessCurrency)} · ${contact.reference}`),
         exportModel: {
           title: selectedReport.name,
           description: selectedReport.description,
           filenameBase: exportBase,
           summaryRows: [
             { label: t('stats.contacts'), value: formatNumber(topContacts.length, localeTag) },
-            { label: t('stats.receivables'), value: formatCurrency(sumNumbers(derived.openReceivableDebts.map((debt) => debt.outstandingAmount)), localeTag) },
-            { label: t('stats.payables'), value: formatCurrency(sumNumbers(derived.openPayableDebts.map((debt) => debt.outstandingAmount)), localeTag) },
+            { label: t('stats.receivables'), value: formatCurrencyBase(sumNumbers(derived.openReceivableDebts.map((debt) => debt.outstandingAmount)), localeTag, businessCurrency) },
+            { label: t('stats.payables'), value: formatCurrencyBase(sumNumbers(derived.openPayableDebts.map((debt) => debt.outstandingAmount)), localeTag, businessCurrency) },
           ],
           table: {
             columns: [t('table.contact'), t('table.direction'), t('table.balance'), t('table.reference')],
             rows: topContacts.map((contact) => [
               contact.contactName,
               contact.direction === DebtDirection.RECEIVABLE ? 'Receivable' : 'Payable',
-              formatCurrency(contact.balance, localeTag),
+              formatCurrencyBase(contact.balance, localeTag, businessCurrency),
               contact.reference,
             ]),
           },
@@ -2638,19 +2638,19 @@ export default function ReportsPage() {
     const bars = [
       {
         label: t('stats.credit_issued'),
-        valueLabel: formatCurrency(derived.issuedReceivable, localeTag),
+        valueLabel: formatCurrencyBase(derived.issuedReceivable, localeTag, businessCurrency),
         percentage: Number(percentageOf(derived.issuedReceivable, Math.max(derived.issuedReceivable, derived.collectedReceivable, derived.writtenOffReceivable, 1)).toFixed(1)),
         tone: 'warning' as const,
       },
       {
         label: t('stats.collected'),
-        valueLabel: formatCurrency(derived.collectedReceivable, localeTag),
+        valueLabel: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency),
         percentage: Number(percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, derived.collectedReceivable, derived.writtenOffReceivable, 1)).toFixed(1)),
         tone: 'positive' as const,
       },
       {
         label: t('stats.written_off'),
-        valueLabel: formatCurrency(derived.writtenOffReceivable, localeTag),
+        valueLabel: formatCurrencyBase(derived.writtenOffReceivable, localeTag, businessCurrency),
         percentage: Number(percentageOf(derived.writtenOffReceivable, Math.max(derived.issuedReceivable, derived.collectedReceivable, derived.writtenOffReceivable, 1)).toFixed(1)),
         tone: 'danger' as const,
       },
@@ -2663,19 +2663,19 @@ export default function ReportsPage() {
       stats: [
         {
           label: t('stats.credit_issued'),
-          value: formatCurrencyCompact(derived.issuedReceivable, localeTag),
+          value: formatCurrencyCompactBase(derived.issuedReceivable, localeTag, businessCurrency),
           hint: t('stats.new_credit_hint'),
           tone: 'warning',
         },
         {
           label: t('stats.collected'),
-          value: formatCurrencyCompact(derived.collectedReceivable, localeTag),
+          value: formatCurrencyCompactBase(derived.collectedReceivable, localeTag, businessCurrency),
           hint: t('stats.collection_hint'),
           tone: 'positive',
         },
         {
           label: t('stats.written_off'),
-          value: formatCurrencyCompact(derived.writtenOffReceivable, localeTag),
+          value: formatCurrencyCompactBase(derived.writtenOffReceivable, localeTag, businessCurrency),
           hint: t('stats.write_off_hint'),
           tone: 'danger',
         },
@@ -2687,9 +2687,9 @@ export default function ReportsPage() {
         description: `${selectedReport.description} (${rangeLabel})`,
         filenameBase: exportBase,
         summaryRows: [
-          { label: t('stats.credit_issued'), value: formatCurrency(derived.issuedReceivable, localeTag) },
-          { label: t('stats.collected'), value: formatCurrency(derived.collectedReceivable, localeTag) },
-          { label: t('stats.written_off'), value: formatCurrency(derived.writtenOffReceivable, localeTag) },
+          { label: t('stats.credit_issued'), value: formatCurrencyBase(derived.issuedReceivable, localeTag, businessCurrency) },
+          { label: t('stats.collected'), value: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency) },
+          { label: t('stats.written_off'), value: formatCurrencyBase(derived.writtenOffReceivable, localeTag, businessCurrency) },
         ],
         table: {
           columns: [t('table.metric'), t('table.amount')],
@@ -2750,7 +2750,7 @@ export default function ReportsPage() {
           .sort((left, right) => right[1] - left[1])
           .map(([label, amount]) => ({
             label,
-            amount: formatCurrency(amount, localeTag),
+            amount: formatCurrencyBase(amount, localeTag, businessCurrency),
             share: `${formatPercent(percentageOf(amount, derived.totalRevenue), localeTag)}%`,
           }))
 
@@ -2763,7 +2763,7 @@ export default function ReportsPage() {
           title,
           rows: entries,
           subtotalLabel,
-          subtotalAmount: formatCurrency(subtotal, localeTag),
+          subtotalAmount: formatCurrencyBase(subtotal, localeTag, businessCurrency),
           subtotalShare: `${formatPercent(percentageOf(subtotal, derived.totalRevenue), localeTag)}%`,
         }
       }
@@ -2772,8 +2772,8 @@ export default function ReportsPage() {
       const oneOffGroup = toExpenseGroup('One-off expenses', oneOffMap, 'Subtotal one-off')
       const netResultAmount =
         derived.netProfit < 0
-          ? `-${formatCurrency(Math.abs(derived.netProfit), localeTag)}`
-          : formatCurrency(derived.netProfit, localeTag)
+          ? `-${formatCurrencyBase(Math.abs(derived.netProfit), localeTag, businessCurrency)}`
+          : formatCurrencyBase(derived.netProfit, localeTag, businessCurrency)
 
       return buildProfitLossReportTemplate({
         businessName: fallbackBusinessName,
@@ -2793,7 +2793,7 @@ export default function ReportsPage() {
             label: 'Expense categories',
             value: formatNumber(derived.expenseCategoryRows.length, localeTag),
           },
-          { label: 'Currency', value: 'XAF', tone: 'info' },
+          { label: 'Currency', value: businessCurrency, tone: 'info' },
         ],
         summaryRows: reportViewModel.exportModel.summaryRows,
         excelSections: [
@@ -2801,20 +2801,20 @@ export default function ReportsPage() {
             title: 'Profit and loss',
             columns: ['Line item', 'Amount', 'Share'],
             rows: [
-              ['Completed sales revenue', formatCurrency(derived.totalRevenue, localeTag), '100.0%'],
+              ['Completed sales revenue', formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency), '100.0%'],
               [
                 'Cost of goods sold',
-                formatCurrency(derived.totalCost, localeTag),
+                formatCurrencyBase(derived.totalCost, localeTag, businessCurrency),
                 `${formatPercent(percentageOf(derived.totalCost, derived.totalRevenue), localeTag)}%`,
               ],
               [
                 'Gross profit',
-                formatCurrency(derived.grossProfit, localeTag),
+                formatCurrencyBase(derived.grossProfit, localeTag, businessCurrency),
                 `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}%`,
               ],
               [
                 'Operating expenses',
-                formatCurrency(derived.totalExpenses, localeTag),
+                formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency),
                 `${formatPercent(percentageOf(derived.totalExpenses, derived.totalRevenue), localeTag)}%`,
               ],
               [
@@ -2829,7 +2829,7 @@ export default function ReportsPage() {
             columns: ['Category', 'Amount', 'Share'],
             rows: derived.expenseCategoryRows.map((row) => [
               row.name,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.amount, derived.totalRevenue), localeTag)}%`,
             ]),
           },
@@ -2837,13 +2837,13 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.revenue'),
-            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
             hint: t('stats.topline_hint'),
             tone: 'success',
           },
           {
             label: t('stats.gross_profit'),
-            value: formatCurrencyCompact(derived.grossProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.grossProfit, localeTag, businessCurrency),
             hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
               'stats.margin_hint',
             )}`,
@@ -2851,13 +2851,13 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.expenses'),
-            value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+            value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
             hint: t('stats.total_expense_hint'),
             tone: 'warning',
           },
           {
             label: t('stats.net_profit'),
-            value: formatCurrencyCompact(derived.netProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.netProfit, localeTag, businessCurrency),
             hint: `${formatPercent(percentageOf(derived.netProfit, derived.totalRevenue), localeTag)}% ${t(
               'stats.net_margin_hint',
             )}`,
@@ -2867,26 +2867,26 @@ export default function ReportsPage() {
         revenueRows: [
           {
             label: 'Completed sales revenue',
-            amount: formatCurrency(derived.totalRevenue, localeTag),
+            amount: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
             share: '100.0%',
           },
         ],
         cogsRows: [
           {
             label: 'Cost of goods sold',
-            amount: formatCurrency(derived.totalCost, localeTag),
+            amount: formatCurrencyBase(derived.totalCost, localeTag, businessCurrency),
             share: `${formatPercent(percentageOf(derived.totalCost, derived.totalRevenue), localeTag)}%`,
           },
         ],
         recurringGroup,
         oneOffGroup,
         grossProfit: {
-          amount: formatCurrency(derived.grossProfit, localeTag),
+          amount: formatCurrencyBase(derived.grossProfit, localeTag, businessCurrency),
           share: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}%`,
           positive: derived.grossProfit >= 0,
         },
         totalExpenses: {
-          amount: formatCurrency(derived.totalExpenses, localeTag),
+          amount: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency),
           share: `${formatPercent(percentageOf(derived.totalExpenses, derived.totalRevenue), localeTag)}%`,
         },
         netResult: {
@@ -2916,12 +2916,12 @@ export default function ReportsPage() {
         rows: revenueAnalysisRows.map((row) => [
           row.label,
           row.secondaryLabel,
-          formatCurrency(row.revenue, localeTag),
-          formatCurrency(row.cost, localeTag),
-          formatCurrency(row.grossProfit, localeTag),
+          formatCurrencyBase(row.revenue, localeTag, businessCurrency),
+          formatCurrencyBase(row.cost, localeTag, businessCurrency),
+          formatCurrencyBase(row.grossProfit, localeTag, businessCurrency),
           `${formatPercent(row.marginPercent, localeTag)}%`,
           formatNumber(row.transactions, localeTag),
-          formatCurrency(row.averageBasket, localeTag),
+          formatCurrencyBase(row.averageBasket, localeTag, businessCurrency),
           row.revenue === highestRevenue
             ? 'Peak period'
             : row.revenue === lowestRevenue
@@ -2948,7 +2948,7 @@ export default function ReportsPage() {
             label: 'Transactions',
             value: formatNumber(derived.completedSales.length, localeTag),
           },
-          { label: 'Currency', value: 'XAF', tone: 'info' },
+          { label: 'Currency', value: businessCurrency, tone: 'info' },
         ],
         summaryRows: reportViewModel.exportModel.summaryRows,
         excelSections: [
@@ -2958,7 +2958,7 @@ export default function ReportsPage() {
             columns: ['Method', 'Amount', 'Share'],
             rows: revenuePaymentRows.map((row) => [
               row.label,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.amount, paymentTotalBase), localeTag)}%`,
             ]),
           },
@@ -2966,7 +2966,7 @@ export default function ReportsPage() {
         stats: [
           {
             label: t('stats.revenue'),
-            value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+            value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
             hint: `${formatNumber(derived.completedSales.length, localeTag)} ${t(
               'stats.transactions_hint',
             )}`,
@@ -2974,7 +2974,7 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.gross_profit'),
-            value: formatCurrencyCompact(derived.grossProfit, localeTag),
+            value: formatCurrencyCompactBase(derived.grossProfit, localeTag, businessCurrency),
             hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
               'stats.margin_hint',
             )}`,
@@ -2982,7 +2982,7 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.avg_basket'),
-            value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+            value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
             hint: t('stats.avg_basket_hint'),
             tone: 'default',
           },
@@ -3002,7 +3002,7 @@ export default function ReportsPage() {
         table: detailTable,
         paymentRows: revenuePaymentRows.map((row) => ({
           label: row.label,
-          amount: formatCurrency(row.amount, localeTag),
+          amount: formatCurrencyBase(row.amount, localeTag, businessCurrency),
           share: `${formatPercent(percentageOf(row.amount, paymentTotalBase), localeTag)}% of revenue`,
           percent: Number(percentageOf(row.amount, paymentTotalBase).toFixed(1)),
           tone: row.tone,
@@ -3159,7 +3159,7 @@ export default function ReportsPage() {
         meta: [
           {
             label: 'Total outstanding',
-            value: formatCurrency(totalOutstanding, localeTag),
+            value: formatCurrencyBase(totalOutstanding, localeTag, businessCurrency),
             tone: 'danger',
           },
           {
@@ -3184,7 +3184,7 @@ export default function ReportsPage() {
             columns: ['Bucket', 'Amount', 'Count', 'Share'],
             rows: derived.receivableAgeing.map((row) => [
               row.label,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               formatNumber(row.count, localeTag),
               `${formatPercent(row.percentage, localeTag)}%`,
             ]),
@@ -3199,9 +3199,9 @@ export default function ReportsPage() {
                 debt.sourceReference,
                 formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
                 `${ageDays}d`,
-                formatCurrency(debt.originalAmount, localeTag),
-                formatCurrency(debt.paidAmount, localeTag),
-                formatCurrency(debt.outstandingAmount, localeTag),
+                formatCurrencyBase(debt.originalAmount, localeTag, businessCurrency),
+                formatCurrencyBase(debt.paidAmount, localeTag, businessCurrency),
+                formatCurrencyBase(debt.outstandingAmount, localeTag, businessCurrency),
                 ageDays > 30
                   ? 'Overdue'
                   : debt.status === DebtStatus.PARTIALLY_PAID
@@ -3221,26 +3221,26 @@ export default function ReportsPage() {
           },
           {
             label: t('stats.outstanding'),
-            value: formatCurrencyCompact(totalOutstanding, localeTag),
+            value: formatCurrencyCompactBase(totalOutstanding, localeTag, businessCurrency),
             hint: t('stats.current_exposure_hint'),
             tone: 'danger',
           },
           {
             label: t('stats.oldest_bucket'),
-            value: formatCurrencyCompact(derived.receivableAgeing[3]?.amount ?? 0, localeTag),
+            value: formatCurrencyCompactBase(derived.receivableAgeing[3]?.amount ?? 0, localeTag, businessCurrency),
             hint: t('stats.oldest_bucket_hint'),
             tone: 'warning',
           },
           {
             label: t('stats.collected'),
-            value: formatCurrencyCompact(derived.collectedReceivable, localeTag),
+            value: formatCurrencyCompactBase(derived.collectedReceivable, localeTag, businessCurrency),
             hint: `${formatPercent(collectionRate, localeTag)}% collection rate`,
             tone: 'success',
           },
         ],
         ageingCards: derived.receivableAgeing.map((row, index) => ({
           label: row.label,
-          value: formatCurrency(row.amount, localeTag),
+          value: formatCurrencyBase(row.amount, localeTag, businessCurrency),
           hint: `${formatNumber(row.count, localeTag)} balances · ${formatPercent(
             row.percentage,
             localeTag,
@@ -3255,9 +3255,9 @@ export default function ReportsPage() {
             reference: debt.sourceReference,
             saleDate: formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
             age: `${ageDays}d`,
-            originalAmount: formatCurrency(debt.originalAmount, localeTag),
-            paidAmount: formatCurrency(debt.paidAmount, localeTag),
-            outstandingAmount: formatCurrency(debt.outstandingAmount, localeTag),
+            originalAmount: formatCurrencyBase(debt.originalAmount, localeTag, businessCurrency),
+            paidAmount: formatCurrencyBase(debt.paidAmount, localeTag, businessCurrency),
+            outstandingAmount: formatCurrencyBase(debt.outstandingAmount, localeTag, businessCurrency),
             statusLabel:
               ageDays > 30
                 ? 'Overdue'
@@ -3307,7 +3307,7 @@ export default function ReportsPage() {
           initials: getInitials(cashier.cashierName),
           name: cashier.cashierName,
           subtitle: `${formatNumber(cashierCompletedSales.length, localeTag)} completed sales in range`,
-          value: formatCurrency(cashier.revenue, localeTag),
+          value: formatCurrencyBase(cashier.revenue, localeTag, businessCurrency),
           hint: `${formatPercent(percentageOf(cashier.revenue, derived.totalRevenue), localeTag)}% of revenue`,
           accent:
             index === 0
@@ -3322,14 +3322,13 @@ export default function ReportsPage() {
             },
             {
               label: 'Revenue',
-              value: formatCurrencyCompact(cashier.revenue, localeTag),
+              value: formatCurrencyCompactBase(cashier.revenue, localeTag, businessCurrency),
             },
             {
               label: 'Avg basket',
-              value: formatCurrencyCompact(
+              value: formatCurrencyCompactBase(
                 cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
-                localeTag,
-              ),
+                localeTag, businessCurrency),
             },
             {
               label: 'Voids',
@@ -3346,7 +3345,7 @@ export default function ReportsPage() {
               const amount = paymentMap.get(method) ?? 0
               return {
                 label: getPaymentLabel(method, tSell),
-                value: formatCurrency(amount, localeTag),
+                value: formatCurrencyBase(amount, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(amount, Math.max(cashier.revenue, 1)), localeTag)}% of cashier revenue`,
                 percent: percentageOf(amount, Math.max(cashier.revenue, 1)),
                 tone:
@@ -3379,9 +3378,9 @@ export default function ReportsPage() {
           sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
           sale.customer_name || t('walk_in'),
           sale.cashier_name || 'Local user',
-          formatCurrency(sale.total_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.total_amount ?? 0, localeTag, businessCurrency),
           getPaymentLabel(sale.payment_method, tSell),
-          formatCurrency(sale.credit_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.credit_amount ?? 0, localeTag, businessCurrency),
           sale.synced_at ? 'Synced' : 'Pending',
         ]),
         footer: [
@@ -3390,9 +3389,9 @@ export default function ReportsPage() {
           '',
           '',
           '',
-          formatCurrency(derived.totalRevenue, localeTag),
+          formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
           '',
-          formatCurrency(derived.totalCreditIssued, localeTag),
+          formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
           '',
         ],
       }
@@ -3403,7 +3402,7 @@ export default function ReportsPage() {
           sale.sale_number || sale.receipt_number || sale.id,
           sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
           sale.cashier_name || 'Local user',
-          formatCurrency(sale.total_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.total_amount ?? 0, localeTag, businessCurrency),
           'Recorded on device',
           sale.void_reason || t('not_set'),
         ]),
@@ -3411,10 +3410,9 @@ export default function ReportsPage() {
           'Total voided',
           '',
           '',
-          formatCurrency(
+          formatCurrencyBase(
             sumNumbers(derived.voidedSales.map((sale) => sale.total_amount ?? 0)),
-            localeTag,
-          ),
+            localeTag, businessCurrency),
           '',
           '',
         ],
@@ -3435,7 +3433,7 @@ export default function ReportsPage() {
           },
           {
             label: 'Total revenue',
-            value: formatCurrency(derived.totalRevenue, localeTag),
+            value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
             tone: 'success',
           },
           {
@@ -3450,9 +3448,9 @@ export default function ReportsPage() {
         ],
         summaryRows: [
           { label: 'Completed sales', value: formatNumber(derived.completedSales.length, localeTag) },
-          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
-          { label: 'Collected cash', value: formatCurrency(totalCollected, localeTag) },
-          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+          { label: 'Revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+          { label: 'Collected cash', value: formatCurrencyBase(totalCollected, localeTag, businessCurrency) },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency) },
         ],
         excelSections: [
           transactionTable,
@@ -3461,7 +3459,7 @@ export default function ReportsPage() {
             columns: ['Method', 'Amount', 'Share'],
             rows: revenuePaymentRows.map((row) => [
               row.label,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.amount, Math.max(totalCollected, 1)), localeTag)}%`,
             ]),
           },
@@ -3479,19 +3477,19 @@ export default function ReportsPage() {
               },
               {
                 label: t('stats.revenue'),
-                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
-                hint: `${formatCurrency(totalCollected, localeTag)} collected`,
+                value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
+                hint: `${formatCurrencyBase(totalCollected, localeTag, businessCurrency)} collected`,
                 tone: 'success',
               },
               {
                 label: t('stats.credit_issued'),
-                value: formatCurrencyCompact(derived.totalCreditIssued, localeTag),
+                value: formatCurrencyCompactBase(derived.totalCreditIssued, localeTag, businessCurrency),
                 hint: `${formatNumber(creditSalesCount, localeTag)} credit sales`,
                 tone: 'warning',
               },
               {
                 label: t('stats.avg_basket'),
-                value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+                value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
                 hint: `${formatNumber(syncPendingCount, localeTag)} pending sync`,
                 tone: syncPendingCount > 0 ? 'warning' : 'default',
               },
@@ -3504,30 +3502,30 @@ export default function ReportsPage() {
             cards: [
               {
                 label: 'Revenue',
-                value: formatCurrency(derived.totalRevenue, localeTag),
+                value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
                 hint: 'completed sales only',
               },
               {
                 label: 'Gross profit',
-                value: formatCurrency(derived.grossProfit, localeTag),
+                value: formatCurrencyBase(derived.grossProfit, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% margin`,
                 tone: derived.grossProfit >= 0 ? 'success' : 'danger',
               },
               {
                 label: 'Collected cash',
-                value: formatCurrency(totalCollected, localeTag),
+                value: formatCurrencyBase(totalCollected, localeTag, businessCurrency),
                 hint: 'payments recorded on completed sales',
                 tone: 'success',
               },
               {
                 label: 'Credit issued',
-                value: formatCurrency(derived.totalCreditIssued, localeTag),
+                value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
                 hint: `${formatNumber(creditSalesCount, localeTag)} credit sales`,
                 tone: 'warning',
               },
               {
                 label: 'Avg basket',
-                value: formatCurrency(derived.averageOrderValue, localeTag),
+                value: formatCurrencyBase(derived.averageOrderValue, localeTag, businessCurrency),
                 hint: 'per completed sale',
               },
             ],
@@ -3549,7 +3547,7 @@ export default function ReportsPage() {
               .filter((row) => row.amount > 0)
               .map((row) => ({
                 label: row.label,
-                value: formatCurrency(row.amount, localeTag),
+                value: formatCurrencyBase(row.amount, localeTag, businessCurrency),
                 hint:
                   row.label === 'Unpaid credit'
                     ? 'included in revenue, not in collected cash'
@@ -3615,11 +3613,11 @@ export default function ReportsPage() {
             product.productName,
             categoryByProductId.get(product.productId) || t('uncategorized'),
             formatNumber(product.quantity, localeTag),
-            formatCurrency(product.quantity > 0 ? product.revenue / product.quantity : 0, localeTag),
-            formatCurrency(product.revenue, localeTag),
+            formatCurrencyBase(product.quantity > 0 ? product.revenue / product.quantity : 0, localeTag, businessCurrency),
+            formatCurrencyBase(product.revenue, localeTag, businessCurrency),
             `${formatPercent(percentageOf(product.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
-            formatCurrency(product.cost, localeTag),
-            formatCurrency(product.revenue - product.cost, localeTag),
+            formatCurrencyBase(product.cost, localeTag, businessCurrency),
+            formatCurrencyBase(product.revenue - product.cost, localeTag, businessCurrency),
             `${formatPercent(marginPercent, localeTag)}%`,
           ]
         }),
@@ -3629,13 +3627,13 @@ export default function ReportsPage() {
           '',
           formatNumber(sumNumbers(derived.topProducts.map((product) => product.quantity)), localeTag),
           '',
-          formatCurrency(derived.totalRevenue, localeTag),
+          formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
           '100.0%',
-          formatCurrency(sumNumbers(derived.topProducts.map((product) => product.cost)), localeTag),
-          formatCurrency(
+          formatCurrencyBase(sumNumbers(derived.topProducts.map((product) => product.cost)), localeTag, businessCurrency),
+          formatCurrencyBase(
             sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
             localeTag,
-          ),
+            businessCurrency),
           `${formatPercent(
             percentageOf(
               sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
@@ -3656,7 +3654,7 @@ export default function ReportsPage() {
         filenameBase,
         meta: [
           { label: 'Products analysed', value: formatNumber(derived.topProducts.length, localeTag) },
-          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Total revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
           {
             label: 'Units sold',
             value: formatNumber(
@@ -3671,7 +3669,7 @@ export default function ReportsPage() {
         ],
         summaryRows: [
           { label: 'Products analysed', value: formatNumber(derived.topProducts.length, localeTag) },
-          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Total revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
           {
             label: 'Units sold',
             value: formatNumber(
@@ -3695,7 +3693,7 @@ export default function ReportsPage() {
                 label: t('stats.best_seller'),
                 value: derived.topProducts[0]?.productName || '-',
                 hint: derived.topProducts[0]
-                  ? formatCurrency(derived.topProducts[0].revenue, localeTag)
+                  ? formatCurrencyBase(derived.topProducts[0].revenue, localeTag, businessCurrency)
                   : t('preview.no_sales_data'),
                 tone: 'success',
               },
@@ -3709,10 +3707,10 @@ export default function ReportsPage() {
               },
               {
                 label: 'Gross contribution',
-                value: formatCurrencyCompact(
+                value: formatCurrencyCompactBase(
                   sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
                   localeTag,
-                ),
+                  businessCurrency),
                 hint: `${formatPercent(
                   percentageOf(
                     sumNumbers(derived.topProducts.map((product) => product.revenue - product.cost)),
@@ -3777,7 +3775,7 @@ export default function ReportsPage() {
           initials: getInitials(cashier.cashierName),
           name: cashier.cashierName,
           subtitle: 'Cashier profile for the selected range',
-          value: formatCurrency(cashier.revenue, localeTag),
+          value: formatCurrencyBase(cashier.revenue, localeTag, businessCurrency),
           hint: `${formatPercent(percentageOf(cashier.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}% of period revenue`,
           accent:
             index === 0
@@ -3789,10 +3787,10 @@ export default function ReportsPage() {
             { label: 'Sales', value: formatNumber(cashier.totalSales, localeTag) },
             {
               label: 'Avg. basket',
-              value: formatCurrency(
+              value: formatCurrencyBase(
                 cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
                 localeTag,
-              ),
+                businessCurrency),
             },
             {
               label: 'Voids',
@@ -3806,10 +3804,10 @@ export default function ReportsPage() {
             },
             {
               label: 'Credit issued',
-              value: formatCurrency(
+              value: formatCurrencyBase(
                 sumNumbers(cashierCompletedSales.map((sale) => sale.credit_amount ?? 0)),
                 localeTag,
-              ),
+                businessCurrency),
               tone: 'warning' as const,
             },
             {
@@ -3826,7 +3824,7 @@ export default function ReportsPage() {
               const amount = paymentMap.get(method) ?? 0
               return {
                 label: getPaymentLabel(method, tSell),
-                value: formatCurrency(amount, localeTag),
+                value: formatCurrencyBase(amount, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(amount, Math.max(cashier.revenue, 1)), localeTag)}% of cashier revenue`,
                 percent: percentageOf(amount, Math.max(cashier.revenue, 1)),
                 tone:
@@ -3855,29 +3853,29 @@ export default function ReportsPage() {
         rows: derived.cashierRows.map((cashier) => [
           cashier.cashierName,
           formatNumber(cashier.totalSales, localeTag),
-          formatCurrency(cashier.revenue, localeTag),
+          formatCurrencyBase(cashier.revenue, localeTag, businessCurrency),
           `${formatPercent(percentageOf(cashier.revenue, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
-          formatCurrency(
+          formatCurrencyBase(
             cashier.completedSales > 0 ? cashier.revenue / cashier.completedSales : 0,
             localeTag,
-          ),
+            businessCurrency),
           formatNumber(cashier.voidedSales, localeTag),
           `${formatPercent(percentageOf(cashier.voidedSales, Math.max(cashier.totalSales, 1)), localeTag)}%`,
-          formatCurrency(
+          formatCurrencyBase(
             sumNumbers(
               derived.completedSales
                 .filter((sale) => sale.cashier_id === cashier.cashierId)
                 .map((sale) => sale.credit_amount ?? 0),
             ),
             localeTag,
-          ),
+            businessCurrency),
         ]),
         footer: [
           'Total',
           formatNumber(sumNumbers(derived.cashierRows.map((cashier) => cashier.totalSales)), localeTag),
-          formatCurrency(derived.totalRevenue, localeTag),
+          formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
           '100.0%',
-          formatCurrency(derived.averageOrderValue, localeTag),
+          formatCurrencyBase(derived.averageOrderValue, localeTag, businessCurrency),
           formatNumber(sumNumbers(derived.cashierRows.map((cashier) => cashier.voidedSales)), localeTag),
           `${formatPercent(
             percentageOf(
@@ -3886,7 +3884,7 @@ export default function ReportsPage() {
             ),
             localeTag,
           )}%`,
-          formatCurrency(derived.totalCreditIssued, localeTag),
+          formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
         ],
       }
 
@@ -3904,7 +3902,7 @@ export default function ReportsPage() {
             label: 'Total transactions',
             value: formatNumber(derived.completedSales.length, localeTag),
           },
-          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
+          { label: 'Total revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
           {
             label: 'Overall void rate',
             value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
@@ -3914,8 +3912,8 @@ export default function ReportsPage() {
         summaryRows: [
           { label: 'Active cashiers', value: formatNumber(derived.cashierRows.length, localeTag) },
           { label: 'Transactions', value: formatNumber(derived.completedSales.length, localeTag) },
-          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
-          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+          { label: 'Revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency) },
         ],
         excelSections: [summaryTable],
         sections: [
@@ -3932,13 +3930,13 @@ export default function ReportsPage() {
                 label: t('stats.top_cashier'),
                 value: derived.cashierRows[0]?.cashierName || '-',
                 hint: derived.cashierRows[0]
-                  ? formatCurrency(derived.cashierRows[0].revenue, localeTag)
+                  ? formatCurrencyBase(derived.cashierRows[0].revenue, localeTag, businessCurrency)
                   : t('preview.no_sales_data'),
                 tone: 'success',
               },
               {
                 label: t('stats.avg_basket'),
-                value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+                value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
                 hint: t('stats.avg_basket_hint'),
               },
               {
@@ -4043,22 +4041,22 @@ export default function ReportsPage() {
           .sort((left, right) => left.date.localeCompare(right.date))
           .map((row) => [
             formatDateLabel(row.date, localeTag),
-            formatCurrency(row.revenue, localeTag),
-            formatCurrency(row.cash, localeTag),
-            formatCurrency(row.mtn, localeTag),
-            formatCurrency(row.orange, localeTag),
-            formatCurrency(row.card, localeTag),
-            formatCurrency(row.credit, localeTag),
+            formatCurrencyBase(row.revenue, localeTag, businessCurrency),
+            formatCurrencyBase(row.cash, localeTag, businessCurrency),
+            formatCurrencyBase(row.mtn, localeTag, businessCurrency),
+            formatCurrencyBase(row.orange, localeTag, businessCurrency),
+            formatCurrencyBase(row.card, localeTag, businessCurrency),
+            formatCurrencyBase(row.credit, localeTag, businessCurrency),
             `${formatPercent(percentageOf(row.credit, Math.max(row.revenue, 1)), localeTag)}%`,
           ]),
         footer: [
           'Total',
-          formatCurrency(derived.totalRevenue, localeTag),
-          formatCurrency(derived.paymentTotals.get(PaymentMethod.CASH) ?? 0, localeTag),
-          formatCurrency(derived.paymentTotals.get(PaymentMethod.MTN_MOMO) ?? 0, localeTag),
-          formatCurrency(derived.paymentTotals.get(PaymentMethod.ORANGE_MONEY) ?? 0, localeTag),
-          formatCurrency(derived.paymentTotals.get(PaymentMethod.CARD) ?? 0, localeTag),
-          formatCurrency(derived.totalCreditIssued, localeTag),
+          formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency),
+          formatCurrencyBase(derived.paymentTotals.get(PaymentMethod.CASH) ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(derived.paymentTotals.get(PaymentMethod.MTN_MOMO) ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(derived.paymentTotals.get(PaymentMethod.ORANGE_MONEY) ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(derived.paymentTotals.get(PaymentMethod.CARD) ?? 0, localeTag, businessCurrency),
+          formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
           `${formatPercent(percentageOf(derived.totalCreditIssued, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
         ],
       }
@@ -4072,18 +4070,18 @@ export default function ReportsPage() {
         generatedLabel: previewGeneratedLabel,
         filenameBase,
         meta: [
-          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
-          { label: 'Cash collected', value: formatCurrency(totalCollected, localeTag), tone: 'success' },
-          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag), tone: 'warning' },
+          { label: 'Total revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+          { label: 'Cash collected', value: formatCurrencyBase(totalCollected, localeTag, businessCurrency), tone: 'success' },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency), tone: 'warning' },
           {
             label: 'Collection rate',
             value: `${formatPercent(percentageOf(totalCollected, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
           },
         ],
         summaryRows: [
-          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
-          { label: 'Cash collected', value: formatCurrency(totalCollected, localeTag) },
-          { label: 'Credit issued', value: formatCurrency(derived.totalCreditIssued, localeTag) },
+          { label: 'Revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+          { label: 'Cash collected', value: formatCurrencyBase(totalCollected, localeTag, businessCurrency) },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency) },
         ],
         excelSections: [dailyPaymentTable],
         sections: [
@@ -4092,19 +4090,19 @@ export default function ReportsPage() {
             cards: [
               {
                 label: t('stats.revenue'),
-                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+                value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
                 hint: t('stats.topline_hint'),
                 tone: 'success',
               },
               {
                 label: t('stats.collected'),
-                value: formatCurrencyCompact(totalCollected, localeTag),
+                value: formatCurrencyCompactBase(totalCollected, localeTag, businessCurrency),
                 hint: t('stats.cash_in_hand_hint'),
                 tone: 'success',
               },
               {
                 label: t('stats.credit_issued'),
-                value: formatCurrencyCompact(derived.totalCreditIssued, localeTag),
+                value: formatCurrencyCompactBase(derived.totalCreditIssued, localeTag, businessCurrency),
                 hint: t('stats.unpaid_credit_hint'),
                 tone: 'warning',
               },
@@ -4121,7 +4119,7 @@ export default function ReportsPage() {
             columns: 4,
             cards: revenuePaymentRows.map((row) => ({
               label: row.label,
-              value: formatCurrency(row.amount, localeTag),
+              value: formatCurrencyBase(row.amount, localeTag, businessCurrency),
               hint:
                 row.label === 'Unpaid credit'
                   ? `${formatPercent(percentageOf(row.amount, Math.max(derived.totalRevenue, 1)), localeTag)}% of revenue`
@@ -4136,13 +4134,13 @@ export default function ReportsPage() {
             cards: [
               {
                 label: 'Credit issued',
-                value: formatCurrency(derived.totalCreditIssued, localeTag),
+                value: formatCurrencyBase(derived.totalCreditIssued, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(derived.totalCreditIssued, Math.max(derived.totalRevenue, 1)), localeTag)}% of revenue`,
                 tone: 'warning',
               },
               {
                 label: 'Credit collected',
-                value: formatCurrency(derived.collectedReceivable, localeTag),
+                value: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency),
                 hint: `${formatPercent(
                   percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, 1)),
                   localeTag,
@@ -4199,7 +4197,7 @@ export default function ReportsPage() {
           sale.sale_date ? formatDateLabel(sale.sale_date, localeTag) : '-',
           sale.sold_at ? formatTimeLabel(sale.sold_at, localeTag) : '-',
           sale.cashier_name || 'Local user',
-          formatCurrency(sale.total_amount ?? 0, localeTag),
+          formatCurrencyBase(sale.total_amount ?? 0, localeTag, businessCurrency),
           'Recorded on device',
           sale.void_reason || t('not_set'),
           voidReversalRefs.has(sale.id) ? 'Confirmed' : 'Pending review',
@@ -4209,7 +4207,7 @@ export default function ReportsPage() {
           '',
           '',
           '',
-          formatCurrency(totalVoidedValue, localeTag),
+          formatCurrencyBase(totalVoidedValue, localeTag, businessCurrency),
           '',
           '',
           `${formatNumber(confirmedReversals, localeTag)} / ${formatNumber(derived.voidedSales.length, localeTag)} confirmed`,
@@ -4226,7 +4224,7 @@ export default function ReportsPage() {
         filenameBase,
         meta: [
           { label: 'Total voided', value: formatNumber(derived.voidedSales.length, localeTag), tone: 'danger' },
-          { label: 'Value reversed', value: formatCurrency(totalVoidedValue, localeTag), tone: 'danger' },
+          { label: 'Value reversed', value: formatCurrencyBase(totalVoidedValue, localeTag, businessCurrency), tone: 'danger' },
           {
             label: 'Void rate',
             value: `${formatPercent(percentageOf(derived.voidedSales.length, Math.max(derived.sales.length, 1)), localeTag)}%`,
@@ -4240,7 +4238,7 @@ export default function ReportsPage() {
         ],
         summaryRows: [
           { label: 'Voided sales', value: formatNumber(derived.voidedSales.length, localeTag) },
-          { label: 'Value reversed', value: formatCurrency(totalVoidedValue, localeTag) },
+          { label: 'Value reversed', value: formatCurrencyBase(totalVoidedValue, localeTag, businessCurrency) },
           {
             label: 'Inventory reversals confirmed',
             value: formatNumber(confirmedReversals, localeTag),
@@ -4259,7 +4257,7 @@ export default function ReportsPage() {
               },
               {
                 label: t('stats.voided_value'),
-                value: formatCurrencyCompact(totalVoidedValue, localeTag),
+                value: formatCurrencyCompactBase(totalVoidedValue, localeTag, businessCurrency),
                 hint: t('stats.reversed_value_hint'),
                 tone: 'warning',
               },
@@ -4433,7 +4431,7 @@ export default function ReportsPage() {
           restockQty: formatNumber(restockQty, localeTag),
           estimatedCost,
           estimatedCostLabel:
-            estimatedCost > 0 ? formatCurrency(estimatedCost, localeTag) : 'No cost history',
+            estimatedCost > 0 ? formatCurrencyBase(estimatedCost, localeTag, businessCurrency) : 'No cost history',
           tone,
         }
       })
@@ -4470,7 +4468,7 @@ export default function ReportsPage() {
           '',
           '',
           '',
-          formatCurrency(totalRestockCost, localeTag),
+          formatCurrencyBase(totalRestockCost, localeTag, businessCurrency),
         ],
       }
 
@@ -4492,13 +4490,13 @@ export default function ReportsPage() {
             ),
             tone: 'danger',
           },
-          { label: 'Est. restock cost', value: formatCurrency(totalRestockCost, localeTag) },
+          { label: 'Est. restock cost', value: formatCurrencyBase(totalRestockCost, localeTag, businessCurrency) },
           { label: 'Highest urgency', value: alertRows[0]?.product || '-' },
         ],
         summaryRows: [
           { label: 'Low-stock alerts', value: formatNumber(alertRows.length, localeTag) },
           { label: 'Out of stock', value: formatNumber(derived.inventoryItems.filter((item) => item.quantity <= 0).length, localeTag) },
-          { label: 'Estimated restock cost', value: formatCurrency(totalRestockCost, localeTag) },
+          { label: 'Estimated restock cost', value: formatCurrencyBase(totalRestockCost, localeTag, businessCurrency) },
         ],
         excelSections: [alertTable],
         sections: [
@@ -4522,7 +4520,7 @@ export default function ReportsPage() {
               },
               {
                 label: 'Restock estimate',
-                value: formatCurrencyCompact(totalRestockCost, localeTag),
+                value: formatCurrencyCompactBase(totalRestockCost, localeTag, businessCurrency),
                 hint: 'based on latest known unit cost',
                 tone: 'warning',
               },
@@ -4548,7 +4546,7 @@ export default function ReportsPage() {
                 ? `${alertRows[0].product} currently has the highest urgency in this range.`
                 : 'No critical stock alerts are available for this range.',
               totalRestockCost > 0
-                ? `Estimated restock investment is ${formatCurrency(totalRestockCost, localeTag)} across visible alert products.`
+                ? `Estimated restock investment is ${formatCurrencyBase(totalRestockCost, localeTag, businessCurrency)} across visible alert products.`
                 : 'Estimated restock costs are unavailable until at least one unit-cost history exists for the affected products.',
             ],
           },
@@ -4601,9 +4599,9 @@ export default function ReportsPage() {
               .map((item) => item.product_name || item.product_id)
               .join(', ') || '-',
             formatNumber(units, localeTag),
-            formatCurrency(totalCost, localeTag),
-            formatCurrency(restock.amount_paid ?? 0, localeTag),
-            formatCurrency(onCredit, localeTag),
+            formatCurrencyBase(totalCost, localeTag, businessCurrency),
+            formatCurrencyBase(restock.amount_paid ?? 0, localeTag, businessCurrency),
+            formatCurrencyBase(onCredit, localeTag, businessCurrency),
           ]
         }),
       }
@@ -4616,8 +4614,8 @@ export default function ReportsPage() {
             row.supplier,
             formatNumber(row.deliveries, localeTag),
             formatNumber(row.units, localeTag),
-            formatCurrency(row.totalCost, localeTag),
-            formatCurrency(row.onCredit, localeTag),
+            formatCurrencyBase(row.totalCost, localeTag, businessCurrency),
+            formatCurrencyBase(row.onCredit, localeTag, businessCurrency),
           ]),
       }
 
@@ -4640,20 +4638,20 @@ export default function ReportsPage() {
           },
           {
             label: 'Total cost',
-            value: formatCurrency(
+            value: formatCurrencyBase(
               sumNumbers(
                 derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
               ),
               localeTag,
-            ),
+              businessCurrency),
             tone: 'warning',
           },
           {
             label: 'On credit',
-            value: formatCurrency(
+            value: formatCurrencyBase(
               sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)),
               localeTag,
-            ),
+              businessCurrency),
             tone: 'danger',
           },
         ],
@@ -4668,12 +4666,12 @@ export default function ReportsPage() {
           },
           {
             label: 'Total cost',
-            value: formatCurrency(
+            value: formatCurrencyBase(
               sumNumbers(
                 derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
               ),
               localeTag,
-            ),
+              businessCurrency),
           },
         ],
         excelSections: [restockTable, supplierTable],
@@ -4689,21 +4687,21 @@ export default function ReportsPage() {
               },
               {
                 label: t('stats.total_cost'),
-                value: formatCurrencyCompact(
+                value: formatCurrencyCompactBase(
                   sumNumbers(
                     derived.restocks.map((restock) => restock.total_cost ?? restock.total_amount ?? 0),
                   ),
                   localeTag,
-                ),
+                  businessCurrency),
                 hint: t('stats.stock_investment_hint'),
                 tone: 'warning',
               },
               {
                 label: t('stats.credit_issued'),
-                value: formatCurrencyCompact(
+                value: formatCurrencyCompactBase(
                   sumNumbers(derived.restocks.map((restock) => restock.credit_amount ?? 0)),
                   localeTag,
-                ),
+                  businessCurrency),
                 hint: t('stats.supplier_credit_hint'),
                 tone: 'danger',
               },
@@ -4761,7 +4759,7 @@ export default function ReportsPage() {
             formatDateLabel(expense.expenseDate, localeTag),
             expense.category?.name || t('uncategorized'),
             expense.vendor || '-',
-            formatCurrency(expense.amount, localeTag),
+            formatCurrencyBase(expense.amount, localeTag, businessCurrency),
             expense.isRecurring ? 'Recurring' : 'One-off',
             expense.recordedBy?.name || 'Local user',
           ]),
@@ -4776,17 +4774,17 @@ export default function ReportsPage() {
         generatedLabel: previewGeneratedLabel,
         filenameBase,
         meta: [
-          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag), tone: 'danger' },
+          { label: 'Total expenses', value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency), tone: 'danger' },
           {
             label: 'Recurring',
-            value: `${formatCurrency(recurringTotal, localeTag)} (${formatPercent(
+            value: `${formatCurrencyBase(recurringTotal, localeTag, businessCurrency)} (${formatPercent(
               percentageOf(recurringTotal, Math.max(derived.totalExpenses, 1)),
               localeTag,
             )}%)`,
           },
           {
             label: 'One-off',
-            value: `${formatCurrency(oneOffTotal, localeTag)} (${formatPercent(
+            value: `${formatCurrencyBase(oneOffTotal, localeTag, businessCurrency)} (${formatPercent(
               percentageOf(oneOffTotal, Math.max(derived.totalExpenses, 1)),
               localeTag,
             )}%)`,
@@ -4797,9 +4795,9 @@ export default function ReportsPage() {
           },
         ],
         summaryRows: [
-          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag) },
-          { label: 'Recurring', value: formatCurrency(recurringTotal, localeTag) },
-          { label: 'One-off', value: formatCurrency(oneOffTotal, localeTag) },
+          { label: 'Total expenses', value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency) },
+          { label: 'Recurring', value: formatCurrencyBase(recurringTotal, localeTag, businessCurrency) },
+          { label: 'One-off', value: formatCurrencyBase(oneOffTotal, localeTag, businessCurrency) },
         ],
         excelSections: [
           {
@@ -4807,7 +4805,7 @@ export default function ReportsPage() {
             columns: ['Category', 'Amount', 'Share', 'Entries'],
             rows: derived.expenseCategoryRows.map((row) => [
               row.name,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.amount, Math.max(derived.totalExpenses, 1)), localeTag)}%`,
               formatNumber(row.count, localeTag),
             ]),
@@ -4820,19 +4818,19 @@ export default function ReportsPage() {
             cards: [
               {
                 label: t('stats.expenses'),
-                value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+                value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
                 hint: `${formatNumber(derived.expenses.length, localeTag)} ${t('stats.entries_hint')}`,
                 tone: 'warning',
               },
               {
                 label: t('stats.recurring'),
-                value: formatCurrencyCompact(recurringTotal, localeTag),
+                value: formatCurrencyCompactBase(recurringTotal, localeTag, businessCurrency),
                 hint: t('stats.recurring_expenses_hint'),
                 tone: 'info',
               },
               {
                 label: 'One-off',
-                value: formatCurrencyCompact(oneOffTotal, localeTag),
+                value: formatCurrencyCompactBase(oneOffTotal, localeTag, businessCurrency),
                 hint: 'variable or one-time entries',
                 tone: 'default',
               },
@@ -4848,7 +4846,7 @@ export default function ReportsPage() {
             title: 'Expense by category',
             rows: derived.expenseCategoryRows.map((row) => ({
               label: row.name,
-              value: formatCurrency(row.amount, localeTag),
+              value: formatCurrencyBase(row.amount, localeTag, businessCurrency),
               hint: `${formatPercent(percentageOf(row.amount, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses · ${formatNumber(row.count, localeTag)} entries`,
               percent: percentageOf(row.amount, Math.max(derived.totalExpenses, 1)),
               tone: row.recurringAmount > 0 ? 'warning' : 'info',
@@ -4861,13 +4859,13 @@ export default function ReportsPage() {
             cards: [
               {
                 label: 'Fixed / recurring total',
-                value: formatCurrency(recurringTotal, localeTag),
+                value: formatCurrencyBase(recurringTotal, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(recurringTotal, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses`,
                 tone: 'info',
               },
               {
                 label: 'Variable / one-off total',
-                value: formatCurrency(oneOffTotal, localeTag),
+                value: formatCurrencyBase(oneOffTotal, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(oneOffTotal, Math.max(derived.totalExpenses, 1)), localeTag)}% of expenses`,
               },
             ],
@@ -4884,7 +4882,7 @@ export default function ReportsPage() {
             lines: [
               'Recurring flags are informational and depend on how the expense was recorded on this device.',
               largestExpenseCategory
-                ? `Largest expense category in range is ${largestExpenseCategory.name} at ${formatCurrency(largestExpenseCategory.amount, localeTag)}.`
+                ? `Largest expense category in range is ${largestExpenseCategory.name} at ${formatCurrencyBase(largestExpenseCategory.amount, localeTag, businessCurrency)}.`
                 : 'No expense categories were recorded in this range.',
               'Use the exported detail sheet to review vendors, categories and one-off spending outliers.',
             ],
@@ -4952,29 +4950,29 @@ export default function ReportsPage() {
           const netProfit = grossProfit - row.expenses
           return [
             row.label,
-            formatCurrency(row.revenue, localeTag),
-            formatCurrency(row.cogs, localeTag),
-            formatCurrency(grossProfit, localeTag),
+            formatCurrencyBase(row.revenue, localeTag, businessCurrency),
+            formatCurrencyBase(row.cogs, localeTag, businessCurrency),
+            formatCurrencyBase(grossProfit, localeTag, businessCurrency),
             `${formatPercent(percentageOf(grossProfit, Math.max(row.revenue, 1)), localeTag)}%`,
-            formatCurrency(row.expenses, localeTag),
-            formatCurrency(netProfit, localeTag),
+            formatCurrencyBase(row.expenses, localeTag, businessCurrency),
+            formatCurrencyBase(netProfit, localeTag, businessCurrency),
             `${formatPercent(percentageOf(netProfit, Math.max(row.revenue, 1)), localeTag)}%`,
           ]
         }),
         footer: [
           'Total / Avg.',
-          formatCurrency(sumNumbers(monthlyRows.map((row) => row.revenue)), localeTag),
-          formatCurrency(sumNumbers(monthlyRows.map((row) => row.cogs)), localeTag),
-          formatCurrency(
+          formatCurrencyBase(sumNumbers(monthlyRows.map((row) => row.revenue)), localeTag, businessCurrency),
+          formatCurrencyBase(sumNumbers(monthlyRows.map((row) => row.cogs)), localeTag, businessCurrency),
+          formatCurrencyBase(
             sumNumbers(monthlyRows.map((row) => row.revenue - row.cogs)),
             localeTag,
-          ),
+            businessCurrency),
           `${formatPercent(percentageOf(derived.grossProfit, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
-          formatCurrency(sumNumbers(monthlyRows.map((row) => row.expenses)), localeTag),
-          formatCurrency(
+          formatCurrencyBase(sumNumbers(monthlyRows.map((row) => row.expenses)), localeTag, businessCurrency),
+          formatCurrencyBase(
             sumNumbers(monthlyRows.map((row) => row.revenue - row.cogs - row.expenses)),
             localeTag,
-          ),
+            businessCurrency),
           `${formatPercent(percentageOf(derived.netProfit, Math.max(derived.totalRevenue, 1)), localeTag)}%`,
         ],
       }
@@ -4989,19 +4987,19 @@ export default function ReportsPage() {
         filenameBase,
         meta: [
           { label: 'Period', value: rangeLabel },
-          { label: 'Total revenue', value: formatCurrency(derived.totalRevenue, localeTag), tone: 'success' },
-          { label: 'Total expenses', value: formatCurrency(derived.totalExpenses, localeTag), tone: 'danger' },
+          { label: 'Total revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency), tone: 'success' },
+          { label: 'Total expenses', value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency), tone: 'danger' },
           {
             label: 'Net result',
-            value: formatCurrency(derived.netProfit, localeTag),
+            value: formatCurrencyBase(derived.netProfit, localeTag, businessCurrency),
             tone: derived.netProfit >= 0 ? 'success' : 'danger',
           },
         ],
         summaryRows: [
-          { label: 'Revenue', value: formatCurrency(derived.totalRevenue, localeTag) },
-          { label: 'COGS', value: formatCurrency(derived.totalCost, localeTag) },
-          { label: 'Expenses', value: formatCurrency(derived.totalExpenses, localeTag) },
-          { label: 'Net profit', value: formatCurrency(derived.netProfit, localeTag) },
+          { label: 'Revenue', value: formatCurrencyBase(derived.totalRevenue, localeTag, businessCurrency) },
+          { label: 'COGS', value: formatCurrencyBase(derived.totalCost, localeTag, businessCurrency) },
+          { label: 'Expenses', value: formatCurrencyBase(derived.totalExpenses, localeTag, businessCurrency) },
+          { label: 'Net profit', value: formatCurrencyBase(derived.netProfit, localeTag, businessCurrency) },
         ],
         excelSections: [trendTable],
         sections: [
@@ -5010,25 +5008,25 @@ export default function ReportsPage() {
             cards: [
               {
                 label: t('stats.revenue'),
-                value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+                value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
                 hint: t('stats.topline_hint'),
                 tone: 'success',
               },
               {
                 label: t('stats.gross_profit'),
-                value: formatCurrencyCompact(derived.grossProfit, localeTag),
+                value: formatCurrencyCompactBase(derived.grossProfit, localeTag, businessCurrency),
                 hint: `${formatPercent(percentageOf(derived.grossProfit, Math.max(derived.totalRevenue, 1)), localeTag)}% gross margin`,
                 tone: derived.grossProfit >= 0 ? 'info' : 'danger',
               },
               {
                 label: t('stats.expenses'),
-                value: formatCurrencyCompact(derived.totalExpenses, localeTag),
+                value: formatCurrencyCompactBase(derived.totalExpenses, localeTag, businessCurrency),
                 hint: t('stats.total_expense_hint'),
                 tone: 'warning',
               },
               {
                 label: t('stats.net_profit'),
-                value: formatCurrencyCompact(derived.netProfit, localeTag),
+                value: formatCurrencyCompactBase(derived.netProfit, localeTag, businessCurrency),
                 hint: t('stats.range_result_hint'),
                 tone: derived.netProfit >= 0 ? 'success' : 'danger',
               },
@@ -5060,13 +5058,13 @@ export default function ReportsPage() {
             tone: derived.netProfit >= 0 ? 'info' : 'warning',
             lines: [
               highestRevenueRow
-                ? `Highest revenue month in range: ${highestRevenueRow.label} with ${formatCurrency(highestRevenueRow.revenue, localeTag)}.`
+                ? `Highest revenue month in range: ${highestRevenueRow.label} with ${formatCurrencyBase(highestRevenueRow.revenue, localeTag, businessCurrency)}.`
                 : 'No monthly revenue row is available for the selected range.',
               weakestNetRow
-                ? `Weakest net month in range: ${weakestNetRow.label} with ${formatCurrency(
+                ? `Weakest net month in range: ${weakestNetRow.label} with ${formatCurrencyBase(
                     weakestNetRow.revenue - weakestNetRow.cogs - weakestNetRow.expenses,
                     localeTag,
-                  )}.`
+                    businessCurrency)}.`
                 : 'No monthly expense row is available for the selected range.',
               'Use this report to compare gross profit generation against expense pressure month over month.',
             ],
@@ -5112,9 +5110,9 @@ export default function ReportsPage() {
             debt.sourceReference,
             formatDateLabel(debt.createdAt.slice(0, 10), localeTag),
             `${ageDays}d`,
-            formatCurrency(debt.originalAmount, localeTag),
-            formatCurrency(debt.paidAmount, localeTag),
-            formatCurrency(debt.outstandingAmount, localeTag),
+            formatCurrencyBase(debt.originalAmount, localeTag, businessCurrency),
+            formatCurrencyBase(debt.paidAmount, localeTag, businessCurrency),
+            formatCurrencyBase(debt.outstandingAmount, localeTag, businessCurrency),
             isOverdue
               ? 'Overdue'
               : debt.status === DebtStatus.PARTIALLY_PAID
@@ -5128,9 +5126,9 @@ export default function ReportsPage() {
           '',
           '',
           '',
-          formatCurrency(sumNumbers(openDebts.map((debt) => debt.originalAmount)), localeTag),
-          formatCurrency(sumNumbers(openDebts.map((debt) => debt.paidAmount)), localeTag),
-          formatCurrency(totalOutstanding, localeTag),
+          formatCurrencyBase(sumNumbers(openDebts.map((debt) => debt.originalAmount)), localeTag, businessCurrency),
+          formatCurrencyBase(sumNumbers(openDebts.map((debt) => debt.paidAmount)), localeTag, businessCurrency),
+          formatCurrencyBase(totalOutstanding, localeTag, businessCurrency),
           '',
           '',
         ],
@@ -5145,13 +5143,13 @@ export default function ReportsPage() {
         generatedLabel: previewGeneratedLabel,
         filenameBase,
         meta: [
-          { label: 'Total payable', value: formatCurrency(totalOutstanding, localeTag), tone: 'danger' },
+          { label: 'Total payable', value: formatCurrencyBase(totalOutstanding, localeTag, businessCurrency), tone: 'danger' },
           { label: 'Active creditors', value: formatNumber(openDebts.length, localeTag) },
           { label: 'Overdue', value: formatNumber(overdueCount, localeTag), tone: 'danger' },
-          { label: 'Due within 7 days', value: formatCurrency(dueWithinSevenDays, localeTag), tone: 'warning' },
+          { label: 'Due within 7 days', value: formatCurrencyBase(dueWithinSevenDays, localeTag, businessCurrency), tone: 'warning' },
         ],
         summaryRows: [
-          { label: 'Total payable', value: formatCurrency(totalOutstanding, localeTag) },
+          { label: 'Total payable', value: formatCurrencyBase(totalOutstanding, localeTag, businessCurrency) },
           { label: 'Active creditors', value: formatNumber(openDebts.length, localeTag) },
           { label: 'Overdue', value: formatNumber(overdueCount, localeTag) },
         ],
@@ -5161,7 +5159,7 @@ export default function ReportsPage() {
             columns: ['Bucket', 'Amount', 'Count', 'Share'],
             rows: derived.payableAgeing.map((row) => [
               row.label,
-              formatCurrency(row.amount, localeTag),
+              formatCurrencyBase(row.amount, localeTag, businessCurrency),
               formatNumber(row.count, localeTag),
               `${formatPercent(row.percentage, localeTag)}%`,
             ]),
@@ -5180,7 +5178,7 @@ export default function ReportsPage() {
               },
               {
                 label: t('stats.outstanding'),
-                value: formatCurrencyCompact(totalOutstanding, localeTag),
+                value: formatCurrencyCompactBase(totalOutstanding, localeTag, businessCurrency),
                 hint: t('stats.current_exposure_hint'),
                 tone: 'warning',
               },
@@ -5192,7 +5190,7 @@ export default function ReportsPage() {
               },
               {
                 label: 'Due soon',
-                value: formatCurrencyCompact(dueWithinSevenDays, localeTag),
+                value: formatCurrencyCompactBase(dueWithinSevenDays, localeTag, businessCurrency),
                 hint: 'due within the next 7 days',
                 tone: 'warning',
               },
@@ -5204,7 +5202,7 @@ export default function ReportsPage() {
             columns: 4,
             cards: derived.payableAgeing.map((row, index) => ({
               label: row.label,
-              value: formatCurrency(row.amount, localeTag),
+              value: formatCurrencyBase(row.amount, localeTag, businessCurrency),
               hint: `${formatNumber(row.count, localeTag)} debts · ${formatPercent(row.percentage, localeTag)}%`,
               tone:
                 index === 3 ? ('danger' as const) : index === 2 ? ('warning' as const) : ('info' as const),
@@ -5224,7 +5222,7 @@ export default function ReportsPage() {
                 ? `${formatNumber(overdueCount, localeTag)} supplier balances are currently overdue and should be prioritised.`
                 : 'No supplier balances are currently overdue on this device.',
               dueWithinSevenDays > 0
-                ? `${formatCurrency(dueWithinSevenDays, localeTag)} is due within the next 7 days.`
+                ? `${formatCurrencyBase(dueWithinSevenDays, localeTag, businessCurrency)} is due within the next 7 days.`
                 : 'No supplier balances are falling due within the next 7 days.',
             ],
           },
@@ -5320,9 +5318,9 @@ export default function ReportsPage() {
               event.reference,
               event.type,
               event.description,
-              event.debit > 0 ? formatCurrency(event.debit, localeTag) : '-',
-              event.credit > 0 ? formatCurrency(event.credit, localeTag) : '-',
-              formatCurrency(Math.abs(runningBalance), localeTag),
+              event.debit > 0 ? formatCurrencyBase(event.debit, localeTag, businessCurrency) : '-',
+              event.credit > 0 ? formatCurrencyBase(event.credit, localeTag, businessCurrency) : '-',
+              formatCurrencyBase(Math.abs(runningBalance), localeTag, businessCurrency),
             ]
           })
 
@@ -5337,7 +5335,7 @@ export default function ReportsPage() {
             '',
             '',
             '',
-            formatCurrency(closingBalance, localeTag),
+            formatCurrencyBase(closingBalance, localeTag, businessCurrency),
           ],
         }
 
@@ -5356,17 +5354,17 @@ export default function ReportsPage() {
                 statementDirection === DebtDirection.RECEIVABLE ? 'Customer' : 'Supplier',
             },
             { label: 'Phone', value: primaryDebt.contact?.phone || '-' },
-            { label: 'Opening balance', value: formatCurrency(Math.abs(openingBalance), localeTag) },
+            { label: 'Opening balance', value: formatCurrencyBase(Math.abs(openingBalance), localeTag, businessCurrency) },
             {
               label: 'Closing balance',
-              value: formatCurrency(closingBalance, localeTag),
+              value: formatCurrencyBase(closingBalance, localeTag, businessCurrency),
               tone: closingBalance > 0 ? 'danger' : 'success',
             },
           ],
           summaryRows: [
             { label: 'Contact', value: primaryDebt.contact?.name || primaryDebt.sourceReference },
-            { label: 'Opening balance', value: formatCurrency(Math.abs(openingBalance), localeTag) },
-            { label: 'Closing balance', value: formatCurrency(closingBalance, localeTag) },
+            { label: 'Opening balance', value: formatCurrencyBase(Math.abs(openingBalance), localeTag, businessCurrency) },
+            { label: 'Closing balance', value: formatCurrencyBase(closingBalance, localeTag, businessCurrency) },
           ],
           excelSections: [statementTable],
           sections: [
@@ -5389,7 +5387,7 @@ export default function ReportsPage() {
                 },
                 {
                   label: t('stats.outstanding'),
-                  value: formatCurrencyCompact(closingBalance, localeTag),
+                  value: formatCurrencyCompactBase(closingBalance, localeTag, businessCurrency),
                   hint:
                     statementDirection === DebtDirection.RECEIVABLE
                       ? 'still owed to the business'
@@ -5398,7 +5396,7 @@ export default function ReportsPage() {
                 },
                 {
                   label: 'Opening balance',
-                  value: formatCurrencyCompact(Math.abs(openingBalance), localeTag),
+                  value: formatCurrencyCompactBase(Math.abs(openingBalance), localeTag, businessCurrency),
                   hint: 'balance brought into range',
                 },
               ],
@@ -5514,7 +5512,7 @@ export default function ReportsPage() {
         .slice(0, 6)
         .map((row) => ({
           label: row.label,
-          value: formatCurrency(row.outstanding, localeTag),
+          value: formatCurrencyBase(row.outstanding, localeTag, businessCurrency),
           hint: `${formatNumber(row.count, localeTag)} debts · ${formatPercent(
             percentageOf(row.paid, Math.max(row.original, 1)),
             localeTag,
@@ -5537,8 +5535,8 @@ export default function ReportsPage() {
         generatedLabel: previewGeneratedLabel,
         filenameBase,
         meta: [
-          { label: 'Credit issued', value: formatCurrency(derived.issuedReceivable, localeTag), tone: 'warning' },
-          { label: 'Collected', value: formatCurrency(derived.collectedReceivable, localeTag), tone: 'success' },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.issuedReceivable, localeTag, businessCurrency), tone: 'warning' },
+          { label: 'Collected', value: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency), tone: 'success' },
           {
             label: 'Collection rate',
             value: `${formatPercent(
@@ -5552,10 +5550,10 @@ export default function ReportsPage() {
           },
         ],
         summaryRows: [
-          { label: 'Credit issued', value: formatCurrency(derived.issuedReceivable, localeTag) },
-          { label: 'Collected', value: formatCurrency(derived.collectedReceivable, localeTag) },
-          { label: 'Outstanding', value: formatCurrency(receivableOutstanding, localeTag) },
-          { label: 'Written off', value: formatCurrency(derived.writtenOffReceivable, localeTag) },
+          { label: 'Credit issued', value: formatCurrencyBase(derived.issuedReceivable, localeTag, businessCurrency) },
+          { label: 'Collected', value: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency) },
+          { label: 'Outstanding', value: formatCurrencyBase(receivableOutstanding, localeTag, businessCurrency) },
+          { label: 'Written off', value: formatCurrencyBase(derived.writtenOffReceivable, localeTag, businessCurrency) },
         ],
         excelSections: [
           {
@@ -5563,9 +5561,9 @@ export default function ReportsPage() {
             columns: ['Contact', 'Original', 'Paid', 'Outstanding', 'Collection rate'],
             rows: Array.from(receivableByContact.values()).map((row) => [
               row.label,
-              formatCurrency(row.original, localeTag),
-              formatCurrency(row.paid, localeTag),
-              formatCurrency(row.outstanding, localeTag),
+              formatCurrencyBase(row.original, localeTag, businessCurrency),
+              formatCurrencyBase(row.paid, localeTag, businessCurrency),
+              formatCurrencyBase(row.outstanding, localeTag, businessCurrency),
               `${formatPercent(percentageOf(row.paid, Math.max(row.original, 1)), localeTag)}%`,
             ]),
           },
@@ -5576,19 +5574,19 @@ export default function ReportsPage() {
             cards: [
               {
                 label: t('stats.credit_issued'),
-                value: formatCurrencyCompact(derived.issuedReceivable, localeTag),
+                value: formatCurrencyCompactBase(derived.issuedReceivable, localeTag, businessCurrency),
                 hint: t('stats.new_credit_hint'),
                 tone: 'warning',
               },
               {
                 label: t('stats.collected'),
-                value: formatCurrencyCompact(derived.collectedReceivable, localeTag),
+                value: formatCurrencyCompactBase(derived.collectedReceivable, localeTag, businessCurrency),
                 hint: t('stats.collection_hint'),
                 tone: 'success',
               },
               {
                 label: t('stats.written_off'),
-                value: formatCurrencyCompact(derived.writtenOffReceivable, localeTag),
+                value: formatCurrencyCompactBase(derived.writtenOffReceivable, localeTag, businessCurrency),
                 hint: t('stats.write_off_hint'),
                 tone: 'danger',
               },
@@ -5606,7 +5604,7 @@ export default function ReportsPage() {
             cards: [
               {
                 label: 'Credit issued',
-                value: formatCurrency(derived.issuedReceivable, localeTag),
+                value: formatCurrencyBase(derived.issuedReceivable, localeTag, businessCurrency),
                 hint: `${formatNumber(
                   derived.receivableDebts.filter(
                     (debt) =>
@@ -5619,7 +5617,7 @@ export default function ReportsPage() {
               },
               {
                 label: 'Collected',
-                value: formatCurrency(derived.collectedReceivable, localeTag),
+                value: formatCurrencyBase(derived.collectedReceivable, localeTag, businessCurrency),
                 hint: `${formatPercent(
                   percentageOf(derived.collectedReceivable, Math.max(derived.issuedReceivable, 1)),
                   localeTag,
@@ -5628,13 +5626,13 @@ export default function ReportsPage() {
               },
               {
                 label: 'Still outstanding',
-                value: formatCurrency(receivableOutstanding, localeTag),
+                value: formatCurrencyBase(receivableOutstanding, localeTag, businessCurrency),
                 hint: `${formatNumber(derived.openReceivableDebts.length, localeTag)} open debts`,
                 tone: 'warning',
               },
               {
                 label: 'Written off',
-                value: formatCurrency(derived.writtenOffReceivable, localeTag),
+                value: formatCurrencyBase(derived.writtenOffReceivable, localeTag, businessCurrency),
                 hint: 'receivables written off in range',
                 tone: 'danger',
               },
@@ -5652,7 +5650,7 @@ export default function ReportsPage() {
             cards: [
               {
                 label: 'Credit taken',
-                value: formatCurrency(payableIssued, localeTag),
+                value: formatCurrencyBase(payableIssued, localeTag, businessCurrency),
                 hint: `${formatNumber(
                   derived.payableDebts.filter(
                     (debt) =>
@@ -5665,7 +5663,7 @@ export default function ReportsPage() {
               },
               {
                 label: 'Paid to suppliers',
-                value: formatCurrency(payableCollected, localeTag),
+                value: formatCurrencyBase(payableCollected, localeTag, businessCurrency),
                 hint: `${formatPercent(
                   percentageOf(payableCollected, Math.max(payableIssued, 1)),
                   localeTag,
@@ -5674,7 +5672,7 @@ export default function ReportsPage() {
               },
               {
                 label: 'Still owed',
-                value: formatCurrency(payableOutstanding, localeTag),
+                value: formatCurrencyBase(payableOutstanding, localeTag, businessCurrency),
                 hint: `${formatNumber(derived.openPayableDebts.length, localeTag)} open payables`,
                 tone: 'warning',
               },
@@ -5693,7 +5691,7 @@ export default function ReportsPage() {
               avgPayableDays > 0 && avgReceivableDays > 0 && avgPayableDays < avgReceivableDays
                 ? 'The business is paying suppliers faster than it collects from customers, which can widen the cash gap.'
                 : 'Supplier and customer credit cycles are relatively aligned in the visible data range.',
-              `Open customer exposure is ${formatCurrency(receivableOutstanding, localeTag)} while open supplier exposure is ${formatCurrency(payableOutstanding, localeTag)}.`,
+              `Open customer exposure is ${formatCurrencyBase(receivableOutstanding, localeTag, businessCurrency)} while open supplier exposure is ${formatCurrencyBase(payableOutstanding, localeTag, businessCurrency)}.`,
             ],
           },
         ],
@@ -5712,7 +5710,7 @@ export default function ReportsPage() {
         { label: 'Period', value: rangeLabel },
         { label: 'Report', value: selectedReport.badge },
         { label: 'Source', value: selectedReport.source },
-        { label: 'Currency', value: 'XAF', tone: 'info' },
+        { label: 'Currency', value: businessCurrency, tone: 'info' },
       ],
       summaryRows: reportViewModel.exportModel.summaryRows,
       excelSections: reportViewModel.exportModel.table
@@ -5747,7 +5745,7 @@ export default function ReportsPage() {
     () => [
       {
         label: t('stats.revenue'),
-        value: formatCurrencyCompact(derived.totalRevenue, localeTag),
+        value: formatCurrencyCompactBase(derived.totalRevenue, localeTag, businessCurrency),
         hint: `${formatNumber(derived.completedSales.length, localeTag)} ${t(
           'stats.transactions_hint',
         )}`,
@@ -5755,7 +5753,7 @@ export default function ReportsPage() {
       },
       {
         label: t('stats.gross_profit'),
-        value: formatCurrencyCompact(derived.grossProfit, localeTag),
+        value: formatCurrencyCompactBase(derived.grossProfit, localeTag, businessCurrency),
         hint: `${formatPercent(percentageOf(derived.grossProfit, derived.totalRevenue), localeTag)}% ${t(
           'stats.margin_hint',
         )}`,
@@ -5763,7 +5761,7 @@ export default function ReportsPage() {
       },
       {
         label: t('stats.avg_basket'),
-        value: formatCurrencyCompact(derived.averageOrderValue, localeTag),
+        value: formatCurrencyCompactBase(derived.averageOrderValue, localeTag, businessCurrency),
         hint: t('stats.avg_basket_hint'),
         tone: 'default',
       },
@@ -5952,11 +5950,7 @@ export default function ReportsPage() {
   const visibleSections = sections
     .map((section) => ({
       ...section,
-      reports: filteredReports.filter((report) => {
-        if (report.section !== section.key) return false
-        const access = reportAccessById.get(report.id)
-        return access?.allowed ?? true
-      }),
+      reports: filteredReports.filter((report) => report.section === section.key),
     }))
     .filter((section) => section.reports.length > 0)
 
@@ -5994,6 +5988,25 @@ export default function ReportsPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t('search.placeholder')}
+            className="h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border/80 hover:text-foreground"
+            >
+              {t('search.clear')}
+            </button>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -6088,7 +6101,7 @@ export default function ReportsPage() {
                           row.tone === 'danger' && 'text-danger-600 dark:text-danger-400',
                         )}
                       >
-                        {formatCurrency(row.value, localeTag)}
+                        {formatCurrencyBase(row.value, localeTag, businessCurrency)}
                       </div>
                     </div>
                   </div>
@@ -6142,10 +6155,10 @@ export default function ReportsPage() {
                       </div>
                       <DualSeriesTrendChart
                         points={revenueTrendPoints}
-                        primaryMaxLabel={formatCurrencyCompact(
+                        primaryMaxLabel={formatCurrencyCompactBase(
                           Math.max(...revenueTrendPoints.map((point) => point.primary), 0),
                           localeTag,
-                        )}
+                          businessCurrency)}
                         secondaryMaxLabel={formatNumber(
                           Math.max(...revenueTrendPoints.map((point) => point.secondary), 0),
                           localeTag,

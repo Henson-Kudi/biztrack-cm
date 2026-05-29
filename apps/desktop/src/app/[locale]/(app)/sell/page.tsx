@@ -54,14 +54,49 @@ import {
   listProductsLocal,
   listUnitOfMeasuresLocal,
 } from '@/services/products.local'
-import { createSaleLocal, SaleLocalError, type LocalSaleRecord } from '@/services/sales.local'
+import { createSaleLocal, SaleLocalError, type LocalSaleRecord, type SaleChargeLineInput, type SaleDiscountLineInput } from '@/services/sales.local'
+import { listChargeTypesLocal, type LocalChargeType } from '@/services/charges.local'
+import { getSavingsAccountByCustomerLocal } from '@/services/savings.local'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePlanStore } from '@/stores/plan.store'
 
 type ViewMode = 'grid' | 'list'
 type Stage = 'cart' | 'payment' | 'success'
 type DiscountType = 'percent' | 'amount'
-type PaymentOption = 'cash' | 'mtn' | 'orange' | 'card'
+
+type PaymentLine = {
+  id: string
+  method: PaymentMethod
+  amount: string
+  momoNumber: string
+  momoReference: string
+  savingsAccountId?: string | null
+}
+
+type SaleChargeLine = {
+  id: string
+  chargeTypeId: string | null
+  name: string
+  rateType: 'PERCENT' | 'FIXED'
+  rateValue: number
+  amount: number
+}
+
+type SaleDiscountLine = {
+  id: string
+  description: string
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+  rate: number | null
+  amount: number
+}
+
+function newLineId() {
+  return `PL${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+}
+
+function defaultCashLine(): PaymentLine {
+  return { id: newLineId(), method: PaymentMethod.CASH, amount: '', momoNumber: '', momoReference: '' }
+}
 
 type SellCustomer = {
   id: string
@@ -89,19 +124,19 @@ type HeldSale = {
   saleId: string
   items: SellCartItem[]
   customer: SellCustomer | null
-  discount: {
+  discount?: {
     type: DiscountType
     value: number
   }
   chargesAmount: number
+  saleChargeLines?: SaleChargeLine[]
+  saleDiscountLines?: SaleDiscountLine[]
   createdAt: string
 }
 
 type CompletedSaleSummary = {
   sale: LocalSaleRecord
-  paymentOption: PaymentOption
   momoNumber: string
-  momoReference: string
   receiptText: string
 }
 
@@ -111,6 +146,7 @@ const THERMAL_RECEIPT_TEXT_COLUMNS = 27
 
 type SellCopy = {
   localeTag: string
+  currency: string
   pos: string
   searchPlaceholder: string
   scan: string
@@ -164,6 +200,7 @@ type SellCopy = {
   hold: string
   charge: string
   selectPayment: string
+  paymentMethods: string
   cash: string
   mtnMomo: string
   orangeMoney: string
@@ -173,6 +210,9 @@ type SellCopy = {
   momoNumber: string
   referenceId: string
   quickAmounts: string
+  addPaymentMethod: string
+  totalPaid: string
+  splitPayment: string
   confirmPayment: string
   processing: string
   cardHint: string
@@ -196,8 +236,12 @@ type SellCopy = {
   cancel: string
   discountTitle: string
   discountBy: string
+  discountDescription: string
+  discountDescriptionPlaceholder: string
   chargesTitle: string
   chargesHint: string
+  chargesDone: string
+  chargesApplied: string
   percent: string
   amount: string
   customValue: string
@@ -222,10 +266,18 @@ type SellCopy = {
   receiptShareUnavailable: string
   receiptShareFailed: string
   receiptShareSaved: string
+  addCharge: string
+  addCustomCharge: string
+  chargeTypePercent: string
+  chargeTypeFixed: string
+  chargeAutoCalc: string
   saleSaved: string
   paymentBack: string
   businessRequired: string
   loadError: string
+  savings: string
+  savingsAvailable: string
+  savingsMaxUsable: string
   errors: Record<string, string>
 }
 
@@ -249,20 +301,6 @@ function formatEditableQuantity(value: number) {
   }
 
   return value.toFixed(3).replace(/\.?0+$/, '')
-}
-
-function translatePayment(copy: SellCopy, option: PaymentOption) {
-  if (option === 'cash') return copy.cash
-  if (option === 'mtn') return copy.mtnMomo
-  if (option === 'orange') return copy.orangeMoney
-  return copy.card
-}
-
-function toPaymentMethod(option: PaymentOption) {
-  if (option === 'cash') return PaymentMethod.CASH
-  if (option === 'mtn') return PaymentMethod.MTN_MOMO
-  if (option === 'orange') return PaymentMethod.ORANGE_MONEY
-  return PaymentMethod.CARD
 }
 
 function parseOptionalNumber(value: string) {
@@ -460,14 +498,12 @@ function buildReceiptText({
   businessName,
   copy,
   sale,
-  paymentOption,
   momoNumber,
   paperWidthMm = THERMAL_RECEIPT_PAPER_WIDTH_MM,
 }: {
   businessName: string
   copy: SellCopy
   sale: LocalSaleRecord
-  paymentOption: PaymentOption
   momoNumber: string
   paperWidthMm?: number
 }) {
@@ -507,34 +543,69 @@ function buildReceiptText({
   for (const item of sale.items) {
     const itemTotal = amount(item.totalPrice)
     lines.push(padLine(item.productName, itemTotal, cols))
-    lines.push(`  ${formatQuantity(item.quantity)} x ${amount(item.unitPrice)} XAF`)
+    lines.push(`  ${formatQuantity(item.quantity)} x ${amount(item.unitPrice)} ${copy.currency}`)
   }
 
   lines.push(divider)
 
-  if (sale.discountAmount > 0 || sale.chargesAmount > 0) {
-    lines.push(padLine(copy.subtotal, `${amount(sale.subtotalAmount)} XAF`, cols))
-    if (sale.discountAmount > 0) {
-      lines.push(padLine(copy.discount, `-${amount(sale.discountAmount)} XAF`, cols))
+  const hasDiscountLines = sale.discountLines && sale.discountLines.length > 0
+  const hasChargeLines = sale.chargeLines && sale.chargeLines.length > 0
+  if (hasDiscountLines || hasChargeLines || sale.discountAmount > 0 || sale.chargesAmount > 0) {
+    lines.push(padLine(copy.subtotal, `${amount(sale.subtotalAmount)} ${copy.currency}`, cols))
+    if (hasDiscountLines) {
+      for (const disc of sale.discountLines!) {
+        lines.push(padLine(disc.description || copy.discount, `-${amount(disc.amount)} ${copy.currency}`, cols))
+      }
+    } else if (sale.discountAmount > 0) {
+      lines.push(padLine(copy.discount, `-${amount(sale.discountAmount)} ${copy.currency}`, cols))
     }
-    if (sale.chargesAmount > 0) {
-      lines.push(padLine(copy.charges, `+${amount(sale.chargesAmount)} XAF`, cols))
+    if (hasChargeLines) {
+      for (const charge of sale.chargeLines!) {
+        lines.push(padLine(charge.name, `+${amount(charge.amount)} ${copy.currency}`, cols))
+      }
+    } else if (sale.chargesAmount > 0) {
+      lines.push(padLine(copy.charges, `+${amount(sale.chargesAmount)} ${copy.currency}`, cols))
     }
   }
 
   lines.push(heavyDivider)
-  lines.push(padLine(copy.total, `${amount(sale.totalAmount)} XAF`, cols))
+  lines.push(padLine(copy.total, `${amount(sale.totalAmount)} ${copy.currency}`, cols))
   lines.push(heavyDivider)
-  lines.push(padLine(translatePayment(copy, paymentOption), `${amount(sale.amountPaid)} XAF`, cols))
+
+  const paymentsToShow = sale.payments.length > 0
+    ? sale.payments
+    : sale.amountPaid > 0
+      ? [{ method: PaymentMethod.CASH, amount: sale.amountPaid, mobileMoneyReference: null }]
+      : []
+
+  for (const payment of paymentsToShow) {
+    let methodLabel: string
+    if (payment.method === PaymentMethod.MTN_MOMO) {
+      methodLabel = copy.mtnMomo
+    } else if (payment.method === PaymentMethod.ORANGE_MONEY) {
+      methodLabel = copy.orangeMoney
+    } else if (payment.method === PaymentMethod.CARD) {
+      methodLabel = copy.card
+    } else if (payment.method === PaymentMethod.SAVINGS) {
+      methodLabel = copy.savings
+    } else {
+      methodLabel = copy.cash
+    }
+    lines.push(padLine(methodLabel, `${amount(payment.amount)} ${copy.currency}`, cols))
+  }
+
   if (sale.creditAmount > 0) {
-    lines.push(padLine(copy.receiptBalanceLabel, `${amount(sale.creditAmount)} XAF`, cols))
+    lines.push(padLine(copy.receiptBalanceLabel, `${amount(sale.creditAmount)} ${copy.currency}`, cols))
   }
 
   if (sale.changeGiven > 0) {
-    lines.push(padLine(copy.changeDue, `${amount(sale.changeGiven)} XAF`, cols))
+    lines.push(padLine(copy.changeDue, `${amount(sale.changeGiven)} ${copy.currency}`, cols))
   }
 
-  if (paymentOption === 'mtn' || paymentOption === 'orange') {
+  const hasMomo = paymentsToShow.some(
+    (p) => p.method === PaymentMethod.MTN_MOMO || p.method === PaymentMethod.ORANGE_MONEY,
+  )
+  if (hasMomo) {
     lines.push(`${copy.receiptPhoneLabel}: ${momoNumber || sale.customerPhone || '-'}`)
     if (sale.momoReference) {
       lines.push(`${copy.receiptReferenceLabel}: ${sale.momoReference}`)
@@ -857,6 +928,7 @@ export default function SellPage() {
   const t = useTranslations('app.sell')
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const accessToken = useAuthStore((state) => state.accessToken)
   const role = useAuthStore((state) => state.role)
   const planState = usePlanStore((state) => state.current)
@@ -883,23 +955,20 @@ export default function SellPage() {
   const [cart, setCart] = useState<SellCartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<SellCustomer | null>(null)
   const [cartQuantityInputs, setCartQuantityInputs] = useState<Record<string, string>>({})
-  const [discount, setDiscount] = useState<{ type: DiscountType; value: number }>({
-    type: 'percent',
-    value: 0,
-  })
-  const [chargesAmount, setChargesAmount] = useState(0)
-  const [discountOpen, setDiscountOpen] = useState(false)
-  const [discountDraftType, setDiscountDraftType] = useState<DiscountType>('percent')
-  const [discountDraftValue, setDiscountDraftValue] = useState('')
-  const [chargesOpen, setChargesOpen] = useState(false)
-  const [chargesDraftValue, setChargesDraftValue] = useState('')
+  const [saleDiscountLines, setSaleDiscountLines] = useState<SaleDiscountLine[]>([])
+  const [saleChargeLines, setSaleChargeLines] = useState<SaleChargeLine[]>([])
+  const [addDiscountOpen, setAddDiscountOpen] = useState(false)
+  const [addDiscountDraftType, setAddDiscountDraftType] = useState<'PERCENTAGE' | 'FIXED_AMOUNT'>('PERCENTAGE')
+  const [addDiscountAmountDraft, setAddDiscountAmountDraft] = useState('')
+  const [addDiscountDescDraft, setAddDiscountDescDraft] = useState('')
+  const [addChargeOpen, setAddChargeOpen] = useState(false)
+  const [selectedAddChargeType, setSelectedAddChargeType] = useState<LocalChargeType | null>(null)
+  const [chargeAmountDraft, setChargeAmountDraft] = useState('')
+  const [availableChargeTypes, setAvailableChargeTypes] = useState<LocalChargeType[]>([])
   const [isCartSummaryHidden, setIsCartSummaryHidden] = useState(false)
   const [holds, setHolds] = useState<HeldSale[]>([])
   const [holdsOpen, setHoldsOpen] = useState(false)
-  const [paymentOption, setPaymentOption] = useState<PaymentOption>('cash')
-  const [amountReceived, setAmountReceived] = useState('')
-  const [momoNumber, setMomoNumber] = useState('')
-  const [momoReference, setMomoReference] = useState('')
+  const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([defaultCashLine()])
   const [processingSale, setProcessingSale] = useState(false)
   const [isPrintingReceipt, setIsPrintingReceipt] = useState(false)
   const [isSharingReceipt, setIsSharingReceipt] = useState(false)
@@ -911,6 +980,8 @@ export default function SellPage() {
   const [barcodePromptOpen, setBarcodePromptOpen] = useState(false)
   const [isAddScannedProductOpen, setIsAddScannedProductOpen] = useState(false)
   const [scanResolving, setScanResolving] = useState(false)
+  const [customerSavingsAccountId, setCustomerSavingsAccountId] = useState<string | null>(null)
+  const [customerSavingsBalance, setCustomerSavingsBalance] = useState<number>(0)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
   const holdsKey = businessId ? `biztrack.sell.holds.${businessId}` : null
@@ -923,8 +994,8 @@ export default function SellPage() {
   const scannerEnabled =
     stage === 'cart' &&
     !customerDialogOpen &&
-    !discountOpen &&
-    !chargesOpen &&
+    !addDiscountOpen &&
+    !addChargeOpen &&
     !holdsOpen &&
     !barcodePromptOpen &&
     !isAddScannedProductOpen &&
@@ -933,6 +1004,7 @@ export default function SellPage() {
   const copy = useMemo<SellCopy>(
     () => ({
       localeTag: locale.startsWith('fr') ? 'fr-CM' : 'en-GB',
+      currency: businessCurrency,
       pos: t('pos'),
       searchPlaceholder: t('search_placeholder'),
       scan: t('scan'),
@@ -986,6 +1058,7 @@ export default function SellPage() {
       hold: t('hold'),
       charge: t('charge'),
       selectPayment: t('select_payment'),
+      paymentMethods: t('payment_methods'),
       cash: t('cash'),
       mtnMomo: t('mtn_momo'),
       orangeMoney: t('orange_money'),
@@ -995,6 +1068,9 @@ export default function SellPage() {
       momoNumber: t('momo_number'),
       referenceId: t('reference_id'),
       quickAmounts: t('quick_amounts'),
+      addPaymentMethod: t('add_payment_method'),
+      totalPaid: t('total_paid'),
+      splitPayment: t('split_payment'),
       confirmPayment: t('confirm_payment'),
       processing: t('processing'),
       cardHint: t('card_hint'),
@@ -1018,8 +1094,12 @@ export default function SellPage() {
       cancel: t('cancel'),
       discountTitle: t('discount_title'),
       discountBy: t('discount_by'),
+      discountDescription: t('discount_description'),
+      discountDescriptionPlaceholder: t('discount_description_placeholder'),
       chargesTitle: t('charges_title'),
       chargesHint: t('charges_hint'),
+      chargesDone: t('charges_done'),
+      chargesApplied: t('charges_applied'),
       percent: t('percent'),
       amount: t('amount'),
       customValue: t('custom_value'),
@@ -1044,10 +1124,18 @@ export default function SellPage() {
       receiptShareUnavailable: t('receipt_share_unavailable'),
       receiptShareFailed: t('receipt_share_failed'),
       receiptShareSaved: t('receipt_share_saved'),
+      addCharge: t('add_charge'),
+      addCustomCharge: t('add_custom_charge'),
+      chargeTypePercent: t('charge_type_percent'),
+      chargeTypeFixed: t('charge_type_fixed'),
+      chargeAutoCalc: t('charge_auto_calc'),
       saleSaved: t('sale_saved'),
       paymentBack: t('payment_back'),
       businessRequired: t('business_required'),
       loadError: t('load_error'),
+      savings: t('savings'),
+      savingsAvailable: t('savings_available'),
+      savingsMaxUsable: t('savings_max_usable'),
       errors: {
         SALE_EMPTY: t('errors.SALE_EMPTY'),
         SALE_QUANTITY_INVALID: t('errors.SALE_QUANTITY_INVALID'),
@@ -1065,7 +1153,7 @@ export default function SellPage() {
         SALE_CUSTOMER_TYPE_INVALID: t('errors.SALE_CUSTOMER_TYPE_INVALID'),
       },
     }),
-    [locale, t],
+    [locale, t, businessCurrency],
   )
 
   useEffect(() => {
@@ -1101,6 +1189,13 @@ export default function SellPage() {
       setHolds([])
     }
   }, [holdsKey])
+
+  useEffect(() => {
+    if (!businessId) return
+    listChargeTypesLocal(businessId)
+      .then(setAvailableChargeTypes)
+      .catch(() => {})
+  }, [businessId])
 
   useEffect(() => {
     if (!holdsKey || typeof window === 'undefined') return
@@ -1291,13 +1386,15 @@ export default function SellPage() {
     [cart],
   )
 
-  const discountAmount = useMemo(() => {
-    if (discount.value <= 0) return 0
-    if (discount.type === 'percent') {
-      return subtotalAmount * (discount.value / 100)
-    }
-    return Math.min(discount.value, subtotalAmount)
-  }, [discount, subtotalAmount])
+  const discountAmount = useMemo(
+    () => saleDiscountLines.reduce((sum, d) => sum + d.amount, 0),
+    [saleDiscountLines],
+  )
+
+  const chargesAmount = useMemo(
+    () => saleChargeLines.reduce((sum, c) => sum + c.amount, 0),
+    [saleChargeLines],
+  )
 
   const totalAmount = useMemo(
     () => Math.max(0, subtotalAmount - discountAmount + chargesAmount),
@@ -1305,72 +1402,55 @@ export default function SellPage() {
   )
 
   const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.qty, 0), [cart])
-  const enteredAmountReceived = useMemo(
-    () => Math.max(0, parseOptionalNumber(amountReceived)),
-    [amountReceived],
+
+  const totalPaid = useMemo(
+    () => paymentLines.reduce((sum, line) => sum + Math.max(0, parseOptionalNumber(line.amount)), 0),
+    [paymentLines],
   )
 
-  const paymentAmountReceived = useMemo(() => {
-    if (paymentOption === 'cash') {
-      return enteredAmountReceived
-    }
+  const balanceDue = useMemo(() => Math.max(0, totalAmount - totalPaid), [totalAmount, totalPaid])
+  const changeDue = useMemo(() => Math.max(0, totalPaid - totalAmount), [totalAmount, totalPaid])
 
-    return Math.min(totalAmount, enteredAmountReceived)
-  }, [enteredAmountReceived, paymentOption, totalAmount])
-
-  const changeDue = useMemo(() => {
-    if (paymentOption !== 'cash') return 0
-    return Math.max(0, paymentAmountReceived - totalAmount)
-  }, [paymentAmountReceived, paymentOption, totalAmount])
-
-  const balanceDue = useMemo(() => {
-    return Math.max(0, totalAmount - paymentAmountReceived)
-  }, [paymentAmountReceived, totalAmount])
+  const savingsCoversFull = useMemo(() => {
+    const savingsLine = paymentLines.find((l) => l.method === PaymentMethod.SAVINGS)
+    if (!savingsLine) return false
+    return parseOptionalNumber(savingsLine.amount) >= totalAmount && totalAmount > 0
+  }, [paymentLines, totalAmount])
 
   const quickAmounts = useMemo(() => {
-    if (totalAmount <= 0) return []
+    const target = balanceDue > 0 ? balanceDue : totalAmount
+    if (target <= 0) return []
 
     const roundUp = (value: number, step: number) => Math.ceil(value / step) * step
     const values = new Set<number>([
-      Math.ceil(totalAmount),
-      roundUp(totalAmount, 500),
-      roundUp(totalAmount, 1000),
-      roundUp(totalAmount, 5000),
-      roundUp(totalAmount, 10000),
+      Math.ceil(target),
+      roundUp(target, 500),
+      roundUp(target, 1000),
+      roundUp(target, 5000),
+      roundUp(target, 10000),
     ])
 
     return Array.from(values)
-      .filter((value) => value >= totalAmount)
+      .filter((value) => value >= target)
       .sort((left, right) => left - right)
       .slice(0, 5)
-  }, [totalAmount])
+  }, [balanceDue, totalAmount])
 
   const canConfirmPayment = useMemo(() => {
     if (cart.length === 0 || totalAmount <= 0) return false
+    if (balanceDue > 0 && !selectedCustomer) return false
 
-    if (balanceDue > 0) {
-      return Boolean(selectedCustomer)
-    }
+    const activeLines = paymentLines.filter((l) => parseOptionalNumber(l.amount) > 0)
 
-    if (paymentAmountReceived <= 0) {
-      return Boolean(selectedCustomer)
-    }
-
-    if (paymentOption === 'mtn' || paymentOption === 'orange') {
-      return momoNumber.replace(/\D/g, '').length >= 9 && momoReference.trim().length >= 4
+    for (const line of activeLines) {
+      if (line.method === PaymentMethod.MTN_MOMO || line.method === PaymentMethod.ORANGE_MONEY) {
+        if (line.momoNumber.replace(/\D/g, '').length < 9) return false
+        if (line.momoReference.trim().length < 4) return false
+      }
     }
 
     return true
-  }, [
-    balanceDue,
-    cart.length,
-    momoNumber,
-    momoReference,
-    paymentAmountReceived,
-    paymentOption,
-    selectedCustomer,
-    totalAmount,
-  ])
+  }, [balanceDue, cart.length, paymentLines, selectedCustomer, totalAmount])
 
   useEffect(() => {
     if (stage !== 'success' || !completedSale) {
@@ -1387,21 +1467,18 @@ export default function SellPage() {
   const resetDraftSale = () => {
     setCart([])
     setSelectedCustomer(null)
-    setDiscount({ type: 'percent', value: 0 })
-    setChargesAmount(0)
-    setChargesOpen(false)
-    setChargesDraftValue('')
+    setSaleDiscountLines([])
+    setSaleChargeLines([])
     setStage('cart')
     setCompletedSale(null)
     setShowPaymentSummaryToast(false)
-    setPaymentOption('cash')
-    setAmountReceived('')
-    setMomoNumber('')
-    setMomoReference('')
+    setPaymentLines([defaultCashLine()])
     setIsPrintingReceipt(false)
     setIsSharingReceipt(false)
     setCustomerDialogOpen(false)
     setDraftId(draftSaleId())
+    setCustomerSavingsAccountId(null)
+    setCustomerSavingsBalance(0)
   }
 
   const ensureCartStage = () => {
@@ -1630,20 +1707,78 @@ export default function SellPage() {
     setCart((current) => current.filter((item) => item.productId !== productId))
   }
 
-  const applyDiscount = (event: FormEvent) => {
+  const handleAddDiscountConfirm = (event: FormEvent) => {
     event.preventDefault()
-    const value = Math.max(0, parseOptionalNumber(discountDraftValue))
-    setDiscount({
-      type: discountDraftType,
-      value: discountDraftType === 'percent' ? Math.min(value, 100) : value,
-    })
-    setDiscountOpen(false)
+    const rawValue = Math.max(0, parseOptionalNumber(addDiscountAmountDraft))
+    if (rawValue <= 0) return
+
+    const currentNetSubtotal = Math.max(0, subtotalAmount - discountAmount)
+    let amount: number
+    let rate: number | null
+
+    if (addDiscountDraftType === 'PERCENTAGE') {
+      rate = Math.min(rawValue, 100)
+      amount = Math.round(currentNetSubtotal * (rate / 100))
+    } else {
+      rate = null
+      amount = Math.round(rawValue)
+    }
+
+    if (amount <= 0) return
+
+    const desc =
+      addDiscountDescDraft.trim() ||
+      (addDiscountDraftType === 'PERCENTAGE'
+        ? `${rate}%`
+        : `${formatAmount(amount, copy.localeTag)} ${copy.currency}`)
+
+    setSaleDiscountLines((prev) => [
+      ...prev,
+      { id: newLineId(), description: desc, discountType: addDiscountDraftType, rate, amount },
+    ])
+    setAddDiscountAmountDraft('')
+    setAddDiscountDescDraft('')
+    setAddDiscountOpen(false)
   }
 
-  const applyCharges = (event: FormEvent) => {
+  const removeDiscountLine = (id: string) => {
+    setSaleDiscountLines((prev) => prev.filter((d) => d.id !== id))
+  }
+
+  const handleSelectChargeType = (ct: LocalChargeType) => {
+    const calculatedAmount =
+      ct.rateType === 'PERCENT'
+        ? String(Math.round((subtotalAmount * ct.defaultValue) / 100))
+        : ct.defaultValue > 0
+          ? String(ct.defaultValue)
+          : ''
+    setSelectedAddChargeType(ct)
+    setChargeAmountDraft(calculatedAmount)
+  }
+
+  const handleAddChargeConfirm = (event: FormEvent) => {
     event.preventDefault()
-    setChargesAmount(Math.max(0, parseOptionalNumber(chargesDraftValue)))
-    setChargesOpen(false)
+    if (!selectedAddChargeType) return
+    const amount = Math.max(0, parseOptionalNumber(chargeAmountDraft))
+    if (amount <= 0) return
+    setSaleChargeLines((prev) => [
+      ...prev,
+      {
+        id: newLineId(),
+        chargeTypeId: selectedAddChargeType.id,
+        name: selectedAddChargeType.name,
+        rateType: selectedAddChargeType.rateType,
+        rateValue: selectedAddChargeType.defaultValue,
+        amount,
+      },
+    ])
+    // Stay open — reset selection so user can add another charge type
+    setSelectedAddChargeType(null)
+    setChargeAmountDraft('')
+  }
+
+  const removeChargeLine = (id: string) => {
+    setSaleChargeLines((prev) => prev.filter((c) => c.id !== id))
   }
 
   const holdCurrentSale = () => {
@@ -1655,8 +1790,9 @@ export default function SellPage() {
         saleId: draftId,
         items: cart,
         customer: selectedCustomer,
-        discount,
         chargesAmount,
+        saleChargeLines,
+        saleDiscountLines,
         createdAt: new Date().toISOString(),
       },
       ...current,
@@ -1669,8 +1805,46 @@ export default function SellPage() {
   const resumeHold = (hold: HeldSale) => {
     setCart(hold.items)
     setSelectedCustomer(hold.customer ?? null)
-    setDiscount(hold.discount)
-    setChargesAmount(hold.chargesAmount ?? 0)
+    // Discount lines — with backward compat for old held sales that used single discount
+    if (Array.isArray(hold.saleDiscountLines) && hold.saleDiscountLines.length > 0) {
+      setSaleDiscountLines(hold.saleDiscountLines)
+    } else if (hold.discount?.value && hold.discount.value > 0) {
+      const holdSubtotal = hold.items.reduce((sum, item) => sum + item.price * item.qty, 0)
+      const rate = hold.discount.type === 'percent' ? hold.discount.value : null
+      const amount =
+        hold.discount.type === 'percent'
+          ? Math.round(holdSubtotal * (hold.discount.value / 100))
+          : hold.discount.value
+      setSaleDiscountLines([
+        {
+          id: newLineId(),
+          description:
+            hold.discount.type === 'percent'
+              ? `${hold.discount.value}%`
+              : `${formatAmount(hold.discount.value, copy.localeTag)} ${copy.currency}`,
+          discountType: hold.discount.type === 'percent' ? 'PERCENTAGE' : 'FIXED_AMOUNT',
+          rate,
+          amount,
+        },
+      ])
+    } else {
+      setSaleDiscountLines([])
+    }
+    // Charge lines — with backward compat
+    if (Array.isArray(hold.saleChargeLines) && hold.saleChargeLines.length > 0) {
+      setSaleChargeLines(hold.saleChargeLines)
+    } else if ((hold.chargesAmount ?? 0) > 0) {
+      setSaleChargeLines([{
+        id: newLineId(),
+        chargeTypeId: null,
+        name: copy.charges,
+        rateType: 'FIXED',
+        rateValue: hold.chargesAmount,
+        amount: hold.chargesAmount,
+      }])
+    } else {
+      setSaleChargeLines([])
+    }
     setStage('cart')
     setCompletedSale(null)
     setDraftId(hold.saleId)
@@ -1681,9 +1855,12 @@ export default function SellPage() {
   const clearCurrentSale = () => {
     setCart([])
     setSelectedCustomer(null)
-    setDiscount({ type: 'percent', value: 0 })
-    setChargesAmount(0)
+    setSaleDiscountLines([])
+    setSaleChargeLines([])
     setDraftId(draftSaleId())
+    setPaymentLines([defaultCashLine()])
+    setCustomerSavingsAccountId(null)
+    setCustomerSavingsBalance(0)
   }
 
   const openCustomerDialog = () => {
@@ -1700,6 +1877,42 @@ export default function SellPage() {
       name: customer.name,
       phone: customer.phone ?? null,
     })
+    // Remove any existing SAVINGS payment line when customer changes
+    setPaymentLines((prev) => {
+      const filtered = prev.filter((l) => l.method !== PaymentMethod.SAVINGS)
+      return filtered.length > 0 ? filtered : [defaultCashLine()]
+    })
+    setCustomerSavingsAccountId(null)
+    setCustomerSavingsBalance(0)
+    if (businessId) {
+      getSavingsAccountByCustomerLocal(businessId, customer.id)
+        .then((account) => {
+          const savingsId = account?.id ?? null
+          const balance = account?.balance ?? 0
+          setCustomerSavingsAccountId(savingsId)
+          setCustomerSavingsBalance(balance)
+          if (savingsId && balance > 0) {
+            setPaymentLines((prev) => {
+              const withoutSavings = prev.filter((l) => l.method !== PaymentMethod.SAVINGS)
+              return [
+                {
+                  id: newLineId(),
+                  method: PaymentMethod.SAVINGS,
+                  amount: '',
+                  momoNumber: '',
+                  momoReference: '',
+                  savingsAccountId: savingsId,
+                },
+                ...withoutSavings,
+              ]
+            })
+          }
+        })
+        .catch(() => {
+          setCustomerSavingsAccountId(null)
+          setCustomerSavingsBalance(0)
+        })
+    }
     closeCustomerDialog()
   }
 
@@ -1711,20 +1924,55 @@ export default function SellPage() {
     setProcessingSale(true)
 
     try {
-      const amountPaid = paymentAmountReceived
-      const payments =
-        amountPaid > 0
-          ? [
-              {
-                method: toPaymentMethod(paymentOption),
-                amount: amountPaid,
-                mobileMoneyReference:
-                  paymentOption === 'mtn' || paymentOption === 'orange'
-                    ? momoReference.trim()
-                    : undefined,
-              },
-            ]
-          : []
+      const payments = [
+        ...paymentLines
+          .map((line) => ({ ...line, parsedAmount: Math.max(0, parseOptionalNumber(line.amount)) }))
+          .filter((line) => line.parsedAmount > 0)
+          .map((line) => ({
+            method: line.method,
+            amount: line.parsedAmount,
+            mobileMoneyReference:
+              line.method === PaymentMethod.MTN_MOMO || line.method === PaymentMethod.ORANGE_MONEY
+                ? line.momoReference.trim() || undefined
+                : undefined,
+            savingsAccountId:
+              line.method === PaymentMethod.SAVINGS ? (line.savingsAccountId ?? null) : undefined,
+          })),
+      ]
+
+      const momoLines = paymentLines.filter(
+        (l) => l.method === PaymentMethod.MTN_MOMO || l.method === PaymentMethod.ORANGE_MONEY,
+      )
+      const momoPhone = momoLines[0]?.momoNumber?.trim() || ''
+      const saleNotes =
+        momoLines.length > 0
+          ? momoLines
+              .map(
+                (l) =>
+                  `${l.method === PaymentMethod.MTN_MOMO ? copy.mtnMomo : copy.orangeMoney} ${l.momoNumber.trim()}`,
+              )
+              .join(', ')
+          : undefined
+
+      const chargesPayload: SaleChargeLineInput[] = saleChargeLines
+        .filter((c) => c.amount > 0)
+        .map((c) => ({
+          chargeTypeId: c.chargeTypeId,
+          name: c.name,
+          rateType: c.rateType,
+          rateValue: c.rateValue,
+          amount: c.amount,
+        }))
+
+      const discountsPayload: SaleDiscountLineInput[] = saleDiscountLines
+        .filter((d) => d.amount > 0)
+        .map((d) => ({
+          description: d.description,
+          discountType: d.discountType,
+          rate: d.rate,
+          amount: d.amount,
+        }))
+
       const sale = await createSaleLocal(businessId, {
         soldAt: new Date().toISOString(),
         cashierId,
@@ -1734,11 +1982,10 @@ export default function SellPage() {
         customerPhone: selectedCustomer?.phone ?? undefined,
         discountAmount,
         chargesAmount,
-        notes:
-          paymentOption === 'mtn' || paymentOption === 'orange'
-            ? `${translatePayment(copy, paymentOption)} ${momoNumber.trim()}`
-            : undefined,
+        notes: saleNotes,
         payments,
+        charges: chargesPayload,
+        discounts: discountsPayload,
         items: cart.map((item) => ({
           productId: item.productId,
           quantity: item.qty,
@@ -1752,27 +1999,23 @@ export default function SellPage() {
         businessName: receiptBusinessName,
         copy,
         sale,
-        paymentOption,
-        momoNumber,
+        momoNumber: momoPhone,
         paperWidthMm: THERMAL_RECEIPT_PRINTABLE_WIDTH_MM,
       })
 
       setCompletedSale({
         sale,
-        paymentOption,
-        momoNumber,
-        momoReference,
+        momoNumber: momoPhone,
         receiptText,
       })
       setProcessingSale(false)
       setCart([])
-      setDiscount({ type: 'percent', value: 0 })
-      setChargesAmount(0)
+      setSaleDiscountLines([])
+      setSaleChargeLines([])
+      setCustomerSavingsAccountId(null)
+      setCustomerSavingsBalance(0)
       setStage('success')
-      setPaymentOption('cash')
-      setAmountReceived('')
-      setMomoNumber('')
-      setMomoReference('')
+      setPaymentLines([defaultCashLine()])
       setSelectedCustomer(null)
       setDraftId(draftSaleId())
       setReloadKey((current) => current + 1)
@@ -1895,119 +2138,54 @@ export default function SellPage() {
     }
   }
 
-  const renderPaymentHelper = () => {
-    const amountField = (
-      <label className="block space-y-1">
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {copy.amountReceived}
-        </span>
-        <NumberInput
-          value={amountReceived}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setAmountReceived(event.target.value)}
-          min="0"
-          step="0.01"
-          className="h-11 rounded-xl px-3 text-sm"
-          placeholder={formatAmount(totalAmount, copy.localeTag)}
-        />
-      </label>
-    )
-
-    const balanceSummary = (
-      <div className="rounded-2xl border border-border bg-background px-4 py-3">
-        <div className="flex items-center justify-between text-sm text-foreground/80">
-          <span>{copy.amountReceived}</span>
-          <span className="font-semibold text-foreground">
-            {formatAmount(paymentAmountReceived, copy.localeTag)} FCFA
-          </span>
-        </div>
-        {paymentOption === 'cash' ? (
-          <div className="mt-2 flex items-center justify-between text-sm text-foreground/80">
-            <span>{copy.changeDue}</span>
-            <span className="font-semibold text-foreground">
-              {formatAmount(changeDue, copy.localeTag)} FCFA
-            </span>
-          </div>
-        ) : null}
-        <div className="mt-2 flex items-center justify-between text-sm text-foreground/80">
-          <span>{copy.balanceDue}</span>
-          <span className="font-semibold text-foreground">
-            {formatAmount(balanceDue, copy.localeTag)} FCFA
-          </span>
-        </div>
-      </div>
-    )
-
-    const quickAmountButtons = (
-      <div className="flex flex-wrap gap-2">
-        {quickAmounts.map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setAmountReceived(String(value))}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-ring hover:bg-accent"
-          >
-            {formatAmount(value, copy.localeTag)}
-          </button>
-        ))}
-      </div>
-    )
-
-    if (paymentOption === 'card') {
-      return (
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground/80">
-            {copy.cardHint}
-          </div>
-          {amountField}
-          {balanceSummary}
-          {quickAmountButtons}
-        </div>
-      )
-    }
-
-    if (paymentOption === 'mtn' || paymentOption === 'orange') {
-      return (
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-foreground/80">
-            {translatePayment(copy, paymentOption)} . {formatAmount(totalAmount, copy.localeTag)} FCFA
-          </div>
-          {amountField}
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {copy.momoNumber}
-            </span>
-            <PhoneInput
-              value={momoNumber}
-              onChange={(value?: string) => setMomoNumber(value ?? '')}
-              className="rounded-xl"
-              placeholder="+237 6XX XXX XXX"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {copy.referenceId}
-            </span>
-            <input
-              value={momoReference}
-              onChange={(event) => setMomoReference(event.target.value.toUpperCase())}
-              className="block h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground uppercase outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20"
-              placeholder="TXN-240422-1234"
-            />
-          </label>
-          {balanceSummary}
-          {quickAmountButtons}
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-3">
-        {amountField}
-        {balanceSummary}
-        {quickAmountButtons}
-      </div>
-    )
+  const updatePaymentLine = (id: string, patch: Partial<PaymentLine>) => {
+    setPaymentLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
+
+  const removePaymentLine = (id: string) => {
+    setPaymentLines((prev) => {
+      const next = prev.filter((l) => l.id !== id)
+      return next.length === 0 ? [defaultCashLine()] : next
+    })
+  }
+
+  const addPaymentLine = () => {
+    const usedMethods = new Set(paymentLines.map((l) => l.method))
+    const nextMethod = [
+      PaymentMethod.CASH,
+      PaymentMethod.MTN_MOMO,
+      PaymentMethod.ORANGE_MONEY,
+      PaymentMethod.CARD,
+    ].find((m) => !usedMethods.has(m)) ?? PaymentMethod.CASH
+    setPaymentLines((prev) => [
+      ...prev,
+      { id: newLineId(), method: nextMethod, amount: '', momoNumber: '', momoReference: '', savingsAccountId: null },
+    ])
+  }
+
+  const addSavingsPaymentLine = () => {
+    if (!customerSavingsAccountId || customerSavingsBalance <= 0) return
+    const alreadyAdded = paymentLines.some((l) => l.method === PaymentMethod.SAVINGS)
+    if (alreadyAdded) return
+    setPaymentLines((prev) => [
+      ...prev,
+      {
+        id: newLineId(),
+        method: PaymentMethod.SAVINGS,
+        amount: '',
+        momoNumber: '',
+        momoReference: '',
+        savingsAccountId: customerSavingsAccountId,
+      },
+    ])
+  }
+
+  const applyQuickAmount = (value: number) => {
+    const target = paymentLines.find((l) => !parseOptionalNumber(l.amount)) ?? paymentLines[0]
+    if (!target) return
+    updatePaymentLine(target.id, { amount: String(value) })
+  }
+
   if (loading && !loadedOnce) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -2165,7 +2343,7 @@ export default function SellPage() {
                             <div className="text-base font-bold text-primary dark:text-[#B5D4F4]">
                               {formatAmount(product.sellingPrice, copy.localeTag)}
                             </div>
-                            <div className="text-[11px] text-muted-foreground">FCFA</div>
+                            <div className="text-[11px] text-muted-foreground">{copy.currency}</div>
                           </div>
                           <div className="text-right text-[11px] text-muted-foreground">
                             {product.trackInventory &&
@@ -2247,74 +2425,260 @@ export default function SellPage() {
                   </div>
                   <div className="mt-1 text-4xl font-bold text-primary dark:text-[#B5D4F4]">
                     {formatAmount(totalAmount, copy.localeTag)}
-                    <span className="ml-2 text-base font-medium text-muted-foreground">FCFA</span>
+                    <span className="ml-2 text-base font-medium text-muted-foreground">{copy.currency}</span>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-5">
-                  <div className="rounded-2xl border border-border bg-background px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">
-                          {selectedCustomer?.name || copy.walkIn}
+                  <div className="space-y-3">
+                    {/* Customer row */}
+                    <div className="rounded-2xl border border-border bg-background px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">
+                            {selectedCustomer?.name || copy.walkIn}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {selectedCustomer?.phone || copy.noCustomer}
+                          </div>
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {selectedCustomer?.phone || copy.noCustomer}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={openCustomerDialog}
+                          className="inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-primary transition hover:bg-accent"
+                        >
+                          <Icon name="user-plus" className="h-4 w-4" />
+                          {selectedCustomer ? copy.changeCustomer : copy.addCustomer}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={openCustomerDialog}
-                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-primary transition hover:bg-accent"
-                      >
-                        <Icon name="user-plus" className="h-4 w-4" />
-                        {selectedCustomer ? copy.changeCustomer : copy.addCustomer}
-                      </button>
+                      {balanceDue > 0 && !selectedCustomer ? (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                          {copy.customerRequiredForCredit}
+                        </div>
+                      ) : null}
                     </div>
-                    {balanceDue > 0 ? (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        {selectedCustomer
-                          ? `${copy.balanceDue}: ${formatAmount(balanceDue, copy.localeTag)} FCFA`
-                          : copy.customerRequiredForCredit}
-                      </div>
-                    ) : null}
-                  </div>
 
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    {copy.selectPayment}
-                  </div>
+                    {/* Payment lines section */}
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {copy.paymentMethods}
+                    </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    {(
-                      [
-                        ['cash', 'cash'],
-                        ['mtn', 'phone'],
-                        ['orange', 'phone'],
-                        ['card', 'card'],
-                      ] as Array<[PaymentOption, 'cash' | 'phone' | 'card']>
-                    ).map(([option, icon]) => (
+                    {paymentLines.map((line) => {
+                      const isMomo = line.method === PaymentMethod.MTN_MOMO || line.method === PaymentMethod.ORANGE_MONEY
+                      const isSavings = line.method === PaymentMethod.SAVINGS
+                      const savingsOtherPaid = paymentLines
+                        .filter((l) => l.id !== line.id)
+                        .reduce((s, l) => s + Math.max(0, parseOptionalNumber(l.amount)), 0)
+                      const savingsMaxUsable = Math.min(customerSavingsBalance, Math.max(0, totalAmount - savingsOtherPaid))
+
+                      return (
+                        <div
+                          key={line.id}
+                          className={cn(
+                            'rounded-2xl border px-4 py-3 space-y-3',
+                            isSavings
+                              ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-800/40 dark:bg-emerald-950/20'
+                              : savingsCoversFull
+                                ? 'border-border bg-background opacity-40'
+                                : 'border-border bg-background',
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            {isSavings ? (
+                              <div className="flex flex-1 items-center gap-2">
+                                <Icon name="check" className="h-4 w-4 text-emerald-600" />
+                                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                                  {copy.savings}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-1 flex-wrap gap-1">
+                                {([
+                                  [PaymentMethod.CASH, 'cash', copy.cash],
+                                  [PaymentMethod.MTN_MOMO, 'phone', copy.mtnMomo],
+                                  [PaymentMethod.ORANGE_MONEY, 'phone', copy.orangeMoney],
+                                  [PaymentMethod.CARD, 'card', copy.card],
+                                ] as Array<[PaymentMethod, 'cash' | 'phone' | 'card', string]>).map(([method, icon, label]) => (
+                                  <button
+                                    key={method}
+                                    type="button"
+                                    disabled={savingsCoversFull}
+                                    onClick={() => updatePaymentLine(line.id, { method, momoNumber: '', momoReference: '' })}
+                                    className={cn(
+                                      'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition',
+                                      line.method === method
+                                        ? 'border-ring bg-accent text-foreground'
+                                        : 'border-border text-foreground/70 hover:border-ring hover:bg-accent/50',
+                                      savingsCoversFull && 'pointer-events-none',
+                                    )}
+                                  >
+                                    <Icon name={icon} className="h-3.5 w-3.5" />
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {paymentLines.length > 1 && !savingsCoversFull && (
+                              <button
+                                type="button"
+                                onClick={() => removePaymentLine(line.id)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-[#FCEBEB] hover:text-[#A32D2D]"
+                              >
+                                <Icon name="close" className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {isSavings && (
+                            <div className="flex gap-4 text-xs text-emerald-700 dark:text-emerald-400">
+                              <span>
+                                {copy.savingsAvailable}:{' '}
+                                <strong>{formatAmount(customerSavingsBalance, copy.localeTag)} {copy.currency}</strong>
+                              </span>
+                              <span>
+                                {copy.savingsMaxUsable}:{' '}
+                                <strong>{formatAmount(savingsMaxUsable, copy.localeTag)} {copy.currency}</strong>
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <NumberInput
+                              value={line.amount}
+                              disabled={!isSavings && savingsCoversFull}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                                const parsed = parseOptionalNumber(e.target.value)
+                                const capped = isSavings && parsed > savingsMaxUsable
+                                  ? String(savingsMaxUsable)
+                                  : e.target.value
+                                updatePaymentLine(line.id, { amount: capped })
+                              }}
+                              min="0"
+                              max={isSavings ? savingsMaxUsable : undefined}
+                              step="0.01"
+                              className="h-11 flex-1 rounded-xl px-3 text-sm"
+                              placeholder={formatAmount(
+                                isSavings ? savingsMaxUsable : Math.max(0, balanceDue || totalAmount),
+                                copy.localeTag,
+                              )}
+                            />
+                            <span className="shrink-0 text-sm font-medium text-muted-foreground">{copy.currency}</span>
+                          </div>
+
+                          {line.method === PaymentMethod.CARD && (
+                            <div className="rounded-xl border border-border bg-secondary px-3 py-2 text-xs text-foreground/80">
+                              {copy.cardHint}
+                            </div>
+                          )}
+
+                          {isMomo && (
+                            <div className="space-y-2">
+                              <label className="block space-y-1">
+                                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                  {copy.momoNumber}
+                                </span>
+                                <PhoneInput
+                                  value={line.momoNumber}
+                                  onChange={(value?: string) =>
+                                    updatePaymentLine(line.id, { momoNumber: value ?? '' })
+                                  }
+                                  className="rounded-xl"
+                                  placeholder="+237 6XX XXX XXX"
+                                />
+                              </label>
+                              <label className="block space-y-1">
+                                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                  {copy.referenceId}
+                                </span>
+                                <input
+                                  value={line.momoReference}
+                                  onChange={(e) =>
+                                    updatePaymentLine(line.id, { momoReference: e.target.value.toUpperCase() })
+                                  }
+                                  className="block h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground uppercase outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20"
+                                  placeholder="TXN-240422-1234"
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {/* Add another payment method */}
+                    {!savingsCoversFull &&
+                      paymentLines.length < 4 &&
+                      totalPaid < totalAmount &&
+                      paymentLines.every((l) => parseOptionalNumber(l.amount) > 0) && (
                       <button
-                        key={option}
                         type="button"
-                        onClick={() => setPaymentOption(option)}
-                        className={cn(
-                          'rounded-2xl border p-4 text-left transition',
-                          paymentOption === option
-                            ? 'border-ring bg-accent shadow-sm'
-                            : 'border-border hover:border-ring',
-                        )}
+                        onClick={addPaymentLine}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-3 text-sm font-semibold text-foreground/70 transition hover:border-ring hover:text-foreground"
                       >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card text-primary">
-                          <Icon name={icon} className="h-5 w-5" />
-                        </div>
-                        <div className="mt-3 text-sm font-semibold">
-                          {translatePayment(copy, option)}
-                        </div>
+                        <Icon name="plus" className="h-4 w-4" />
+                        {copy.addPaymentMethod}
                       </button>
-                    ))}
-                  </div>
+                    )}
 
-                  <div className="mt-5">{renderPaymentHelper()}</div>
+                    {/* Use Savings button — shown when customer has savings & not already added */}
+                    {customerSavingsAccountId &&
+                      customerSavingsBalance > 0 &&
+                      !paymentLines.some((l) => l.method === PaymentMethod.SAVINGS) &&
+                      totalPaid < totalAmount && (
+                      <button
+                        type="button"
+                        onClick={addSavingsPaymentLine}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/50 py-3 text-sm font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100/50 dark:border-emerald-800/50 dark:bg-emerald-950/20 dark:text-emerald-400"
+                      >
+                        <Icon name="check" className="h-4 w-4" />
+                        {copy.savings} · {formatAmount(customerSavingsBalance, copy.localeTag)} {copy.currency}
+                      </button>
+                    )}
+
+                    {/* Balance summary */}
+                    <div className="rounded-2xl border border-border bg-background px-4 py-3 space-y-2 text-sm">
+                      <div className="flex items-center justify-between text-foreground/80">
+                        <span>{copy.total}</span>
+                        <span className="font-semibold text-foreground">
+                          {formatAmount(totalAmount, copy.localeTag)} {copy.currency}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-foreground/80">
+                        <span>{copy.totalPaid}</span>
+                        <span className="font-semibold text-foreground">
+                          {formatAmount(totalPaid, copy.localeTag)} {copy.currency}
+                        </span>
+                      </div>
+                      {changeDue > 0 && (
+                        <div className="flex items-center justify-between font-semibold text-emerald-700 dark:text-emerald-400">
+                          <span>{copy.changeDue}</span>
+                          <span>{formatAmount(changeDue, copy.localeTag)} {copy.currency}</span>
+                        </div>
+                      )}
+                      {balanceDue > 0 && (
+                        <div className="flex items-center justify-between font-semibold text-amber-700 dark:text-amber-400">
+                          <span>{copy.balanceDue}</span>
+                          <span>{formatAmount(balanceDue, copy.localeTag)} {copy.currency}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quick amounts */}
+                    {quickAmounts.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {quickAmounts.map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => applyQuickAmount(value)}
+                            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-ring hover:bg-accent"
+                          >
+                            {formatAmount(value, copy.localeTag)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="border-t border-border p-5">
@@ -2332,7 +2696,7 @@ export default function SellPage() {
                     ) : (
                       <>
                         <Icon name="check" className="h-4 w-4" />
-                        {copy.confirmPayment} Ã‚Â· {formatAmount(totalAmount, copy.localeTag)} FCFA
+                        {copy.confirmPayment} · {formatAmount(totalAmount, copy.localeTag)} {copy.currency}
                       </>
                     )}
                   </button>
@@ -2350,13 +2714,21 @@ export default function SellPage() {
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold">{copy.paymentReceived}</div>
                           <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {copy.paidWith}: {translatePayment(copy, completedSale.paymentOption)}
+                            {copy.paidWith}: {completedSale.sale.payments.length > 1
+                              ? copy.splitPayment
+                              : completedSale.sale.payments[0]?.method === PaymentMethod.MTN_MOMO
+                                ? copy.mtnMomo
+                                : completedSale.sale.payments[0]?.method === PaymentMethod.ORANGE_MONEY
+                                  ? copy.orangeMoney
+                                  : completedSale.sale.payments[0]?.method === PaymentMethod.CARD
+                                    ? copy.card
+                                    : copy.cash}
                           </div>
                         </div>
                         <div className="shrink-0 text-right text-base font-bold tabular-nums text-primary dark:text-[#B5D4F4]">
                           {formatAmount(completedSale.sale.totalAmount, copy.localeTag)}
                           <span className="ml-1 text-[10px] font-semibold text-muted-foreground">
-                            FCFA
+                            {copy.currency}
                           </span>
                         </div>
                       </div>
@@ -2473,7 +2845,9 @@ export default function SellPage() {
                       {selectedCustomer ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedCustomer(null)}
+                          onClick={() => {
+                            setSelectedCustomer(null)
+                          }}
                           className="inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition hover:bg-accent"
                         >
                           <Icon name="close" className="h-4 w-4" />
@@ -2531,7 +2905,7 @@ export default function SellPage() {
                                 </div>
                                 <div className="mt-3 flex items-center justify-between gap-3">
                                   <div className="text-sm font-bold text-primary dark:text-[#B5D4F4]">
-                                    {formatAmount(item.price, copy.localeTag)} FCFA
+                                    {formatAmount(item.price, copy.localeTag)} {copy.currency}
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <button
@@ -2602,63 +2976,90 @@ export default function SellPage() {
                           </button>
                         </div>
 
-                        <div className="flex items-stretch gap-2 px-5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDiscountDraftType(discount.type)
-                              setDiscountDraftValue(discount.value > 0 ? String(discount.value) : '')
-                              setDiscountOpen(true)
-                            }}
-                            className={cn(
-                              'flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition',
-                              discount.value > 0
-                                ? 'bg-accent text-primary'
-                                : 'text-foreground/80 hover:bg-background',
-                            )}
-                          >
-                            <Icon name="discount" className="h-4 w-4 shrink-0" />
-                            <span className="truncate">
-                              {discount.value > 0
-                                ? `${copy.discount} Ã‚Â· ${discount.type === 'percent' ? `${discount.value}%` : `${formatAmount(discount.value, copy.localeTag)} FCFA`}`
-                                : copy.addDiscount}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setChargesDraftValue(chargesAmount > 0 ? String(chargesAmount) : '')
-                              setChargesOpen(true)
-                            }}
-                            className={cn(
-                              'flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition',
-                              chargesAmount > 0
-                                ? 'bg-accent text-primary'
-                                : 'text-foreground/80 hover:bg-background',
-                            )}
-                          >
-                            <Icon name="cash" className="h-4 w-4 shrink-0" />
-                            <span className="truncate">
-                              {chargesAmount > 0
-                                ? `${copy.charges} Ã‚Â· ${formatAmount(chargesAmount, copy.localeTag)} FCFA`
-                                : copy.addCharges}
-                            </span>
-                          </button>
+                        <div className="flex flex-col gap-1 px-5">
+                          {saleDiscountLines.map((line) => (
+                            <div
+                              key={line.id}
+                              className="flex items-center gap-2 rounded-xl bg-[#EDF5E9] px-3 py-2 text-sm text-[#3B6D11]"
+                            >
+                              <Icon name="discount" className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                {line.description}
+                              </span>
+                              <span className="shrink-0 text-xs font-semibold tabular-nums">
+                                -{formatAmount(line.amount, copy.localeTag)} {copy.currency}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeDiscountLine(line.id)}
+                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#3B6D11]/60 transition hover:bg-background hover:text-[#A32D2D]"
+                              >
+                                <Icon name="close" className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          {saleChargeLines.map((line) => (
+                            <div
+                              key={line.id}
+                              className="flex items-center gap-2 rounded-xl bg-accent px-3 py-2 text-sm text-primary"
+                            >
+                              <Icon name="cash" className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                {line.name}
+                              </span>
+                              <span className="shrink-0 text-xs font-semibold tabular-nums">
+                                +{formatAmount(line.amount, copy.localeTag)} {copy.currency}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeChargeLine(line.id)}
+                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-primary/60 transition hover:bg-background hover:text-[#A32D2D]"
+                              >
+                                <Icon name="close" className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAddDiscountDraftType('PERCENTAGE')
+                                setAddDiscountAmountDraft('')
+                                setAddDiscountDescDraft('')
+                                setAddDiscountOpen(true)
+                              }}
+                              className="flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground/80 transition hover:bg-background"
+                            >
+                              <Icon name="discount" className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{copy.addDiscount}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAddChargeType(null)
+                                setChargeAmountDraft('')
+                                setAddChargeOpen(true)
+                              }}
+                              className="flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground/80 transition hover:bg-background"
+                            >
+                              <Icon name="cash" className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{copy.addCharges}</span>
+                            </button>
+                          </div>
                         </div>
 
                         <div className="mt-4 space-y-2 text-sm text-foreground/80 px-5">
                           <div className="flex items-center justify-between">
                             <span>{copy.subtotal}</span>
                             <span className="font-semibold text-foreground">
-                              {formatAmount(subtotalAmount, copy.localeTag)} FCFA
+                              {formatAmount(subtotalAmount, copy.localeTag)} {copy.currency}
                             </span>
                           </div>
                           {discountAmount > 0 ? (
                             <div className="flex items-center justify-between text-[#3B6D11]">
                               <span>{copy.discount}</span>
                               <span className="font-semibold">
-                                -{formatAmount(discountAmount, copy.localeTag)} FCFA
+                                -{formatAmount(discountAmount, copy.localeTag)} {copy.currency}
                               </span>
                             </div>
                           ) : null}
@@ -2666,7 +3067,7 @@ export default function SellPage() {
                             <div className="flex items-center justify-between text-[#0C447C]">
                               <span>{copy.charges}</span>
                               <span className="font-semibold">
-                                +{formatAmount(chargesAmount, copy.localeTag)} FCFA
+                                +{formatAmount(chargesAmount, copy.localeTag)} {copy.currency}
                               </span>
                             </div>
                           ) : null}
@@ -2678,7 +3079,7 @@ export default function SellPage() {
                               <span className="text-3xl font-bold text-primary dark:text-[#B5D4F4]">
                                 {formatAmount(totalAmount, copy.localeTag)}
                                 <span className="ml-2 text-sm font-medium text-muted-foreground">
-                                  FCFA
+                                  {copy.currency}
                                 </span>
                               </span>
                             </div>
@@ -2739,31 +3140,40 @@ export default function SellPage() {
         </div>
       </div>
 
-      <Dialog open={discountOpen} onOpenChange={setDiscountOpen}>
+      <Dialog
+        open={addDiscountOpen}
+        onOpenChange={(open) => {
+          setAddDiscountOpen(open)
+          if (!open) {
+            setAddDiscountAmountDraft('')
+            setAddDiscountDescDraft('')
+          }
+        }}
+      >
         <DialogContent className="max-w-md" closeLabel={copy.cancel}>
           <DialogHeader>
             <DialogTitle>{copy.discountTitle}</DialogTitle>
             <DialogDescription>{copy.discountBy}</DialogDescription>
           </DialogHeader>
 
-          <form id="discount-form" onSubmit={applyDiscount} className="space-y-4 px-6 py-5">
+          <form id="discount-form" onSubmit={handleAddDiscountConfirm} className="space-y-4 px-6 py-5">
             <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1">
               <button
                 type="button"
-                onClick={() => setDiscountDraftType('percent')}
+                onClick={() => setAddDiscountDraftType('PERCENTAGE')}
                 className={cn(
                   'rounded-xl px-3 py-2 text-sm font-semibold transition',
-                  discountDraftType === 'percent' ? 'bg-[#042C53] text-white' : 'text-foreground/80',
+                  addDiscountDraftType === 'PERCENTAGE' ? 'bg-[#042C53] text-white' : 'text-foreground/80',
                 )}
               >
                 {copy.percent}
               </button>
               <button
                 type="button"
-                onClick={() => setDiscountDraftType('amount')}
+                onClick={() => setAddDiscountDraftType('FIXED_AMOUNT')}
                 className={cn(
                   'rounded-xl px-3 py-2 text-sm font-semibold transition',
-                  discountDraftType === 'amount' ? 'bg-[#042C53] text-white' : 'text-foreground/80',
+                  addDiscountDraftType === 'FIXED_AMOUNT' ? 'bg-[#042C53] text-white' : 'text-foreground/80',
                 )}
               >
                 {copy.amount}
@@ -2771,17 +3181,17 @@ export default function SellPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {(discountDraftType === 'percent' ? [5, 10, 15, 20] : [500, 1000, 2000, 5000]).map(
+              {(addDiscountDraftType === 'PERCENTAGE' ? [5, 10, 15, 20] : [500, 1000, 2000, 5000]).map(
                 (value) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setDiscountDraftValue(String(value))}
+                    onClick={() => setAddDiscountAmountDraft(String(value))}
                     className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-ring hover:bg-accent"
                   >
-                    {discountDraftType === 'percent'
+                    {addDiscountDraftType === 'PERCENTAGE'
                       ? `${value}%`
-                      : `${formatAmount(value, copy.localeTag)} FCFA`}
+                      : `${formatAmount(value, copy.localeTag)} ${copy.currency}`}
                   </button>
                 ),
               )}
@@ -2790,28 +3200,27 @@ export default function SellPage() {
             <label className="block space-y-1">
               <span className="text-sm font-medium text-foreground">{copy.customValue}</span>
               <input
-                value={discountDraftValue}
-                onChange={(event) => setDiscountDraftValue(event.target.value)}
+                value={addDiscountAmountDraft}
+                onChange={(event) => setAddDiscountAmountDraft(event.target.value)}
                 className="block h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20"
-                placeholder={discountDraftType === 'percent' ? '10' : '1000'}
+                placeholder={addDiscountDraftType === 'PERCENTAGE' ? '10' : '1000'}
+                autoFocus
+              />
+            </label>
+
+            <label className="block space-y-1">
+              <span className="text-sm font-medium text-foreground">{copy.discountDescription}</span>
+              <input
+                value={addDiscountDescDraft}
+                onChange={(event) => setAddDiscountDescDraft(event.target.value)}
+                className="block h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20"
+                placeholder={copy.discountDescriptionPlaceholder}
               />
             </label>
           </form>
 
           <DialogFooter>
-            {discount.value > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setDiscount({ type: 'percent', value: 0 })
-                  setDiscountOpen(false)
-                }}
-              >
-                {copy.removeDiscount}
-              </Button>
-            ) : null}
-            <Button type="button" variant="secondary" onClick={() => setDiscountOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setAddDiscountOpen(false)}>
               {copy.cancel}
             </Button>
             <Button type="submit" form="discount-form" variant="primary">
@@ -2821,61 +3230,112 @@ export default function SellPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={chargesOpen} onOpenChange={setChargesOpen}>
-        <DialogContent className="max-w-md" closeLabel={copy.cancel}>
+      <Dialog open={addChargeOpen} onOpenChange={(open) => { setAddChargeOpen(open); if (!open) { setSelectedAddChargeType(null); setChargeAmountDraft('') } }}>
+        <DialogContent className="max-w-md" closeLabel={copy.chargesDone}>
           <DialogHeader>
             <DialogTitle>{copy.chargesTitle}</DialogTitle>
             <DialogDescription>{copy.chargesHint}</DialogDescription>
           </DialogHeader>
 
-          <form id="charges-form" onSubmit={applyCharges} className="space-y-4 px-6 py-5">
-            <div className="flex flex-wrap gap-2">
-              {[100, 250, 500, 1000].map((value) => (
+          <div className="px-6 py-5 space-y-4">
+            {/* Applied charges — visible while dialog is open */}
+            {saleChargeLines.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {copy.chargesApplied}
+                </p>
+                {saleChargeLines.map((line) => (
+                  <div
+                    key={line.id}
+                    className="flex items-center gap-2 rounded-xl bg-accent px-3 py-2 text-sm text-primary"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium">{line.name}</span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums">
+                      +{formatAmount(line.amount, copy.localeTag)} {copy.currency}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeChargeLine(line.id)}
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-primary/60 transition hover:bg-background hover:text-[#A32D2D]"
+                    >
+                      <Icon name="close" className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {availableChargeTypes.map((ct) => (
                 <button
-                  key={value}
+                  key={ct.id}
                   type="button"
-                  onClick={() => setChargesDraftValue(String(value))}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-ring hover:bg-accent"
+                  onClick={() => handleSelectChargeType(ct)}
+                  className={cn(
+                    'flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition',
+                    selectedAddChargeType?.id === ct.id
+                      ? 'border-ring bg-accent text-foreground'
+                      : 'border-border bg-card text-foreground/80 hover:border-ring hover:bg-accent/50',
+                  )}
                 >
-                  {formatAmount(value, copy.localeTag)} FCFA
+                  <span className="text-sm font-semibold">{ct.name}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {ct.rateType === 'PERCENT'
+                      ? `${ct.defaultValue}% ${copy.chargeTypePercent}`
+                      : copy.chargeTypeFixed}
+                  </span>
                 </button>
               ))}
             </div>
 
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground">{copy.amount}</span>
-              <NumberInput
-                value={chargesDraftValue}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setChargesDraftValue(event.target.value)
-                }
-                min="0"
-                step="0.01"
-                className="h-11 rounded-xl px-3 text-sm"
-                placeholder="500"
-              />
-            </label>
-          </form>
+            {selectedAddChargeType && (
+              <form id="add-charge-form" onSubmit={handleAddChargeConfirm} className="space-y-3 rounded-2xl border border-border bg-background px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">{selectedAddChargeType.name}</span>
+                  {selectedAddChargeType.rateType === 'PERCENT' && subtotalAmount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {selectedAddChargeType.defaultValue}% = {formatAmount((subtotalAmount * selectedAddChargeType.defaultValue) / 100, copy.localeTag)} {copy.currency}
+                    </span>
+                  )}
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {copy.amount} ({copy.currency})
+                  </span>
+                  <NumberInput
+                    value={chargeAmountDraft}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => setChargeAmountDraft(event.target.value)}
+                    min="0"
+                    step="0.01"
+                    className="h-11 rounded-xl px-3 text-sm"
+                    placeholder="0"
+                    autoFocus
+                  />
+                </label>
+              </form>
+            )}
+          </div>
 
           <DialogFooter>
-            {chargesAmount > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setChargesAmount(0)
-                  setChargesOpen(false)
-                }}
-              >
-                {copy.removeCharges}
+            {selectedAddChargeType ? (
+              <>
+                <Button type="button" variant="secondary" onClick={() => { setSelectedAddChargeType(null); setChargeAmountDraft('') }}>
+                  {copy.cancel}
+                </Button>
+                <Button
+                  type="submit"
+                  form="add-charge-form"
+                  variant="primary"
+                  disabled={parseOptionalNumber(chargeAmountDraft) <= 0}
+                >
+                  {copy.apply}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" variant="primary" onClick={() => { setAddChargeOpen(false) }}>
+                {copy.chargesDone}
               </Button>
-            ) : null}
-            <Button type="button" variant="secondary" onClick={() => setChargesOpen(false)}>
-              {copy.cancel}
-            </Button>
-            <Button type="submit" form="charges-form" variant="primary">
-              {copy.apply}
-            </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2974,10 +3434,11 @@ export default function SellPage() {
                       (sum, item) => sum + item.price * item.qty,
                       0,
                     )
-                    const holdDiscount =
-                      hold.discount.type === 'percent'
-                        ? holdSubtotal * (hold.discount.value / 100)
-                        : hold.discount.value
+                    const holdDiscount = Array.isArray(hold.saleDiscountLines) && hold.saleDiscountLines.length > 0
+                      ? hold.saleDiscountLines.reduce((sum, d) => sum + d.amount, 0)
+                      : hold.discount?.type === 'percent'
+                        ? holdSubtotal * ((hold.discount.value ?? 0) / 100)
+                        : (hold.discount?.value ?? 0)
                     const holdTotal = Math.max(0, holdSubtotal - holdDiscount + (hold.chargesAmount ?? 0))
 
                     return (
@@ -2991,7 +3452,7 @@ export default function SellPage() {
                               #{hold.id}
                             </div>
                             <div className="mt-1 text-lg font-bold text-primary dark:text-[#B5D4F4]">
-                              {formatAmount(holdTotal, copy.localeTag)} FCFA
+                              {formatAmount(holdTotal, copy.localeTag)} {copy.currency}
                             </div>
                             <div className="mt-1 text-sm text-muted-foreground">
                               {hold.items.length} {hold.items.length === 1 ? copy.item : copy.items}
@@ -3018,6 +3479,7 @@ export default function SellPage() {
           </div>
         </>
       ) : null}
+
     </>
   )
 }

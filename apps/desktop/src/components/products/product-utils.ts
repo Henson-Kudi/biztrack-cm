@@ -13,10 +13,11 @@ export function formatQuantity(value?: number | null) {
 export function formatProductPrice(
   product: Pick<Product, 'sellingPrice' | 'currency'>,
   locale: string,
+  businessCurrency: string,
 ) {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: product.currency || 'XAF',
+    currency: product.currency || businessCurrency,
     maximumFractionDigits: 0,
   }).format(product.sellingPrice)
 }

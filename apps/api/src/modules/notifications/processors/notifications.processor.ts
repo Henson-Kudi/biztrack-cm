@@ -84,8 +84,8 @@ export class NotificationsProcessor extends WorkerHost {
     await this.notificationsService.incrementAttempts(notificationId)
 
     try {
-      const providerMessageId = await this.dispatchToProvider(notification)
-      await this.notificationsService.markSent(notificationId, providerMessageId)
+      const { providerMessageId, provider } = await this.dispatchToProvider(notification)
+      await this.notificationsService.markSent(notificationId, providerMessageId, provider)
 
       this.logger.log('Notification sent', 'NotificationsProcessor', {
         notificationId,
@@ -242,11 +242,12 @@ export class NotificationsProcessor extends WorkerHost {
     await this.notificationsRepo.save(notification)
 
     try {
-      const providerMessageId = await this.dispatchToProvider(notification)
+      const { providerMessageId, provider } = await this.dispatchToProvider(notification)
 
       await this.notificationsRepo.update(notification.id, {
         status: NotificationStatus.SENT,
         providerMessageId: providerMessageId ?? null,
+        provider: provider ?? null,
         sentAt: new Date(),
       })
 
@@ -270,26 +271,22 @@ export class NotificationsProcessor extends WorkerHost {
     }
   }
 
-  private async dispatchToProvider(notification: Notification): Promise<string | undefined> {
+  private async dispatchToProvider(
+    notification: Notification,
+  ): Promise<{ providerMessageId?: string; provider?: string }> {
     switch (notification.channel) {
-      case NotificationChannel.EMAIL: {
-        const result = await this.emailProvider.send(notification)
-        return result.providerMessageId
-      }
-      case NotificationChannel.SMS: {
-        const result = await this.smsProvider.send(notification)
-        return result.providerMessageId
-      }
-      case NotificationChannel.WHATSAPP: {
-        const result = await this.whatsAppProvider.send(notification)
-        return result.providerMessageId
-      }
+      case NotificationChannel.EMAIL:
+        return this.emailProvider.send(notification)
+      case NotificationChannel.SMS:
+        return this.smsProvider.send(notification)
+      case NotificationChannel.WHATSAPP:
+        return this.whatsAppProvider.send(notification)
       default:
         this.logger.warn('Unknown notification channel', 'NotificationsProcessor', {
           notificationId: notification.id,
           channel: notification.channel,
         })
-        return undefined
+        return {}
     }
   }
 }

@@ -39,6 +39,7 @@ export default function ContactsPage() {
   const searchParams = useSearchParams()
   const businessId = useAuthStore((state) => state.businessId)
   const accessToken = useAuthStore((state) => state.accessToken)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const [contacts, setContacts] = useState<ContactListItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -272,7 +273,7 @@ export default function ContactsPage() {
             hint={
               activeDebtors.length > 0
                 ? t('metrics.active_debtors_hint', {
-                    amount: formatCurrency(totalReceivable, locale),
+                    amount: formatCurrency(totalReceivable, locale, businessCurrency),
                   })
                 : t('metrics.no_receivables')
             }
@@ -284,7 +285,7 @@ export default function ContactsPage() {
             hint={
               activeCreditors.length > 0
                 ? t('metrics.active_creditors_hint', {
-                    amount: formatCurrency(totalPayable, locale),
+                    amount: formatCurrency(totalPayable, locale, businessCurrency),
                   })
                 : t('metrics.no_payables')
             }
@@ -434,6 +435,7 @@ export default function ContactsPage() {
                             value={contact.totalReceivable}
                             settledLabel={t('table.settled')}
                             locale={locale}
+                            currency={businessCurrency}
                           />
                         </td>
                         <td className="px-4 py-3">
@@ -442,6 +444,7 @@ export default function ContactsPage() {
                             value={contact.totalPayable}
                             settledLabel={t('table.settled')}
                             locale={locale}
+                            currency={businessCurrency}
                           />
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">
@@ -522,8 +525,8 @@ export default function ContactsPage() {
   )
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${Math.round(value).toLocaleString(localeTag)}`
+function formatCurrency(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${Math.round(value).toLocaleString(localeTag)}`
 }
 
 function formatDateLabel(value: string, localeTag: string) {
@@ -651,11 +654,13 @@ function DebtChip({
   value,
   settledLabel,
   locale,
+  currency,
 }: {
   tone: 'receivable' | 'payable'
   value: number
   settledLabel: string
   locale: string
+  currency: string
 }) {
   if (value <= 0) {
     return (
@@ -672,7 +677,7 @@ function DebtChip({
         tone === 'receivable' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
       )}
     >
-      {formatCurrency(value, locale)}
+      {formatCurrency(value, locale, currency)}
     </span>
   )
 }

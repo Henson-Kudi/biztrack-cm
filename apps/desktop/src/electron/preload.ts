@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   documents: {
     exportPdf: (data: { html?: string; filename?: string }) =>
       ipcRenderer.invoke('document:export-pdf', data),
+    renderPdf: (data: { html?: string }) =>
+      ipcRenderer.invoke('document:render-pdf', data),
     exportFile: (data: {
       content?: string
       filename?: string

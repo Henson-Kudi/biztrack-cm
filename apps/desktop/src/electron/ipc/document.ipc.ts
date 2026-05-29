@@ -23,6 +23,12 @@ type ExportPdfResult = {
   error?: string
 }
 
+type RenderPdfResult = {
+  success: boolean
+  buffer?: number[]
+  error?: string
+}
+
 export function registerDocumentIpc() {
   ipcMain.handle(
     'document:export-pdf',
@@ -58,6 +64,20 @@ export function registerDocumentIpc() {
           success: false,
           error: error instanceof Error ? error.message : String(error),
         }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'document:render-pdf',
+    async (_event, payload: ExportPdfPayload | undefined): Promise<RenderPdfResult> => {
+      try {
+        const printableHtml = payload?.html?.trim()
+        if (!printableHtml) throw new Error('Document HTML is missing.')
+        const pdfBuffer = await renderHtmlToPdfBuffer(printableHtml)
+        return { success: true, buffer: Array.from(pdfBuffer) }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
       }
     },
   )

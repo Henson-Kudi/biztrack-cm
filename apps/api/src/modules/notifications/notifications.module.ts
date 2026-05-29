@@ -10,11 +10,14 @@ import { WhatsAppProvider } from './providers/whatsapp.provider'
 import { NotificationsService } from './services/notifications.service'
 import { NotificationsProcessor } from './processors/notifications.processor'
 import { NotificationsWebhookController } from './controllers/notifications-webhook.controller'
+import { ResendWebhookGuard } from './guards/resend-webhook.guard'
+import { RedisModule } from '@/common/redis/redis.module'
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification, PendingInvite]),
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
+    RedisModule,
   ],
   controllers: [NotificationsWebhookController],
   providers: [
@@ -23,6 +26,7 @@ import { NotificationsWebhookController } from './controllers/notifications-webh
     WhatsAppProvider,
     NotificationsService,
     NotificationsProcessor,
+    ResendWebhookGuard,
   ],
   exports: [NotificationsService],
 })

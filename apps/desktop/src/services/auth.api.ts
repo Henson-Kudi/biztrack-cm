@@ -9,6 +9,7 @@ import type {
   BulkUpdateMemberRoleResponse,
   Business,
   BusinessMembershipSummary,
+  User,
   CancelInviteResponse,
   CancelPlanResponse,
   CreateRoleRequest,
@@ -134,8 +135,12 @@ export async function acceptInvite(token: string): Promise<AuthNextStepResponse>
 
 export async function getBusinesses(): Promise<BusinessMembershipSummary[]> {
   const { data } = await api.get<ApiEnvelope<BusinessMembershipSummary[]>>('/businesses/mine')
-  console.log(data, 'Busineeses')
   return unwrapApiResponse<BusinessMembershipSummary[]>(data)
+}
+
+export async function getCurrentUser(): Promise<User> {
+  const { data } = await api.get<ApiEnvelope<User>>('/users/me')
+  return unwrapApiResponse<User>(data)
 }
 
 export async function setupBusiness(payload: UpdateBusinessRequest): Promise<Business> {

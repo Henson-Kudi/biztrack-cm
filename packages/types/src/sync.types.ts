@@ -7,9 +7,10 @@ import type {
   PaymentMethod,
   SaleStatus,
 } from './sale.types'
-
+import type { SavingsTransactionType, SavingsTransactionDirection } from './savings.types'
 export type SyncEntity =
   | 'contact'
+  | 'opening_balance'
   | 'product'
   | 'product_category'
   | 'expense_category'
@@ -20,6 +21,8 @@ export type SyncEntity =
   | 'debt'
   | 'sale'
   | 'expense'
+  | 'savings'
+  | 'savings_transaction'
 
 /**
  * Canonical push-processing dependency plan for sync entities.
@@ -46,6 +49,7 @@ export type SyncEntity =
  * - `sale`: depends on `product`
  * - `debt`: depends on `contact`, and is typically derived from synced sales/restocks
  * - `expense`: depends on `expense_category`
+ * - `savings`: depends on `contact` (tier 3)
  *
  * Pull-only child records such as sale items, sale payments, inventory levels,
  * inventory movements, and restock items are not part of the push entity plan.
@@ -59,6 +63,7 @@ export type SyncEntity =
  */
 export const SYNC_ENTITY_DEPENDENCY_TIER: Record<SyncEntity, number> = {
   contact: 0,
+  opening_balance: 0,
   unit_of_measure: 0,
   product_category: 0,
   expense_category: 0,
@@ -69,20 +74,25 @@ export const SYNC_ENTITY_DEPENDENCY_TIER: Record<SyncEntity, number> = {
   sale: 2,
   expense: 2,
   debt: 3,
+  savings: 3,
+  savings_transaction: 3,
 }
 
 export const SYNC_ENTITY_STABLE_ORDER: Record<SyncEntity, number> = {
   contact: 0,
-  unit_of_measure: 1,
-  product_category: 2,
-  expense_category: 3,
-  product: 4,
-  inventory_threshold: 5,
-  inventory_restock: 6,
-  inventory_adjustment: 7,
-  sale: 8,
-  expense: 9,
-  debt: 10,
+  opening_balance: 1,
+  unit_of_measure: 2,
+  product_category: 3,
+  expense_category: 4,
+  product: 5,
+  inventory_threshold: 6,
+  inventory_restock: 7,
+  inventory_adjustment: 8,
+  sale: 9,
+  expense: 10,
+  debt: 11,
+  savings: 12,
+  savings_transaction: 13,
 }
 
 export function getSyncEntityDependencyTier(entity: SyncEntity): number {
@@ -175,6 +185,17 @@ export interface ContactSyncRecord extends SyncRecord {
   notes?: string | null
   isActive: boolean
   createdById?: string | null
+  createdAt: string
+}
+
+export interface OpeningBalanceSyncRecord extends SyncRecord {
+  businessId: string
+  contactId: string
+  direction: DebtDirection
+  amount: number
+  asOfDate: string
+  notes?: string | null
+  recordedById?: string | null
   createdAt: string
 }
 
@@ -339,8 +360,48 @@ export interface RoleSyncRecord extends SyncRecord {
   createdAt: string
 }
 
+export interface SavingsAccountSyncRecord extends SyncRecord {
+  businessId: string
+  customerId: string
+  accountNumber: string
+  customerName?: string | null
+  customerPhone?: string | null
+  balance: number
+  totalDeposited: number
+  totalRefunded: number
+  totalUsed: number
+  taggedProducts?: Array<{ productId: string; productName: string }> | null
+  createdAt: string
+}
+
+export interface SavingsTransactionSyncRecord extends SyncRecord {
+  savingsId: string
+  businessId: string
+  type: SavingsTransactionType
+  direction: SavingsTransactionDirection
+  amount: number
+  method?: string | null
+  mobileMoneyReference?: string | null
+  saleId?: string | null
+  notes?: string | null
+  recordedById?: string | null
+  occurredAt: string
+  createdAt: string
+}
+
+export interface OpeningBalanceSyncPayload {
+  contactId: string
+  direction: DebtDirection
+  amount: number
+  asOfDate: string
+  notes?: string | null
+  recordedById?: string | null
+  createdAt: string
+}
+
 export interface ChangeSet {
   contacts?: ContactSyncRecord[]
+  openingBalances?: OpeningBalanceSyncRecord[]
   products?: SyncRecord[]
   productCategories?: SyncRecord[]
   expenseCategories?: ExpenseCategorySyncRecord[]
@@ -356,6 +417,8 @@ export interface ChangeSet {
   expenses?: ExpenseSyncRecord[]
   teamMembers?: TeamMemberSyncRecord[]
   roles?: RoleSyncRecord[]
+  savingsAccounts?: SavingsAccountSyncRecord[]
+  savingsTransactions?: SavingsTransactionSyncRecord[]
 }
 
 export interface InventoryThresholdSyncPayload {
@@ -417,6 +480,24 @@ export interface SaleSyncItemPayload extends CreateSaleItemRequest {
 
 export interface SaleSyncPaymentPayload extends CreateSalePaymentRequest {
   id: string
+  savingsAccountId?: string | null
+}
+
+export interface SaleSyncChargeLinePayload {
+  id: string
+  chargeTypeId?: string | null
+  name: string
+  rateType: 'PERCENT' | 'FIXED'
+  rateValue: number
+  amount: number
+}
+
+export interface SaleSyncDiscountLinePayload {
+  id: string
+  description: string
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+  rate?: number | null
+  amount: number
 }
 
 export interface SaleSyncPayload {
@@ -440,6 +521,8 @@ export interface SaleSyncPayload {
   voidReason?: string
   payments: SaleSyncPaymentPayload[]
   items: SaleSyncItemPayload[]
+  charges?: SaleSyncChargeLinePayload[]
+  discounts?: SaleSyncDiscountLinePayload[]
 }
 
 export interface ExpenseCategorySyncPayload {
@@ -469,9 +552,42 @@ export interface ExpenseSyncPayload {
   createdAt: string
 }
 
+export interface SavingsAccountSyncPayload {
+  savingsId: string
+  businessId: string
+  customerId: string
+  accountNumber: string
+  balance: number
+  totalDeposited: number
+  totalRefunded: number
+  totalUsed: number
+  taggedProducts?: Array<{ productId: string; productName: string }> | null
+  customerName?: string | null
+  customerPhone?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SavingsTransactionSyncPayload {
+  transactionId: string
+  savingsId: string
+  businessId: string
+  type: SavingsTransactionType
+  direction: SavingsTransactionDirection
+  amount: number
+  method?: string | null
+  mobileMoneyReference?: string | null
+  saleId?: string | null
+  notes?: string | null
+  recordedById?: string | null
+  occurredAt: string
+  createdAt: string
+}
+
 export type SyncPushPayload =
   | SyncRecord
   | ContactSyncPayload
+  | OpeningBalanceSyncPayload
   | InventoryThresholdSyncPayload
   | InventoryAdjustmentSyncPayload
   | InventoryRestockSyncPayload
@@ -479,6 +595,8 @@ export type SyncPushPayload =
   | SaleSyncPayload
   | ExpenseCategorySyncPayload
   | ExpenseSyncPayload
+  | SavingsAccountSyncPayload
+  | SavingsTransactionSyncPayload
   | null
 
 export interface SyncPushOperation {

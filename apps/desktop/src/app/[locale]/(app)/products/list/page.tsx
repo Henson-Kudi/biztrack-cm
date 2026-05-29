@@ -56,6 +56,7 @@ export default function ProductsListPage() {
   const locale = useLocale()
   const router = useRouter()
   const businessId = useAuthStore((state) => state.businessId)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const [products, setProducts] = useState<PaginatedResult<Product> | null>(null)
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -517,7 +518,7 @@ export default function ProductsListPage() {
                               </div>
                             </td>
                             <td className="px-4 py-4 text-sm font-medium text-foreground">
-                              {formatProductPrice(product, locale)}
+                              {formatProductPrice(product, locale, businessCurrency)}
                             </td>
                             <td className="px-4 py-4">
                               <p

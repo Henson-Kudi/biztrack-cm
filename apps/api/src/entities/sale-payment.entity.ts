@@ -42,4 +42,7 @@ export class SalePayment extends ImmutableBaseEntity {
 
   @Column({ name: 'mobile_money_reference', nullable: true, type: 'varchar', length: 100 })
   mobileMoneyReference?: string | null
+
+  @Column({ name: 'savings_account_id', nullable: true, type: 'uuid' })
+  savingsAccountId?: string | null
 }

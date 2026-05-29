@@ -59,6 +59,20 @@ export class InventoryLevel extends BaseEntity {
   })
   reorderPoint?: number | null
 
+  @Column({
+    name: 'quantity_reserved',
+    type: 'decimal',
+    precision: 12,
+    scale: 3,
+    default: 0,
+    transformer: decimalTransformer,
+  })
+  quantityReserved!: number
+
   @Column({ name: 'last_restock_at', type: 'timestamptz', nullable: true })
   lastRestockAt?: Date | null
+
+  get quantityAvailable(): number {
+    return Math.max(0, this.quantity - this.quantityReserved)
+  }
 }

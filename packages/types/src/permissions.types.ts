@@ -50,8 +50,8 @@ export enum Resource {
   // lets future modules plug into the same subscription model without a later
   // rename/migration.
   OPENING_BALANCES = 'OPENING_BALANCES',
-  PREORDERS = 'PREORDERS',
   DEPOSITS = 'DEPOSITS',
+  SAVINGS = 'SAVINGS',
   CHARGES_MULTIPLE = 'CHARGES_MULTIPLE',
   REPORTS_FINANCIAL = 'REPORTS_FINANCIAL',
   CUSTOM_ROLES = 'CUSTOM_ROLES',
@@ -120,8 +120,8 @@ export const DEFAULT_PLAN_RESOURCES: Record<SubscriptionPlan, Resource[]> = {
   [SubscriptionPlan.SOLO]: unique([
     ...FREE_PERMISSIONS,
     Resource.OPENING_BALANCES,
-    Resource.PREORDERS,
     Resource.DEPOSITS,
+    Resource.SAVINGS,
     Resource.CHARGES_MULTIPLE,
     Resource.REPORTS_FINANCIAL,
     Resource.REPORTS_WEEKLY,
@@ -136,8 +136,8 @@ export const DEFAULT_PLAN_RESOURCES: Record<SubscriptionPlan, Resource[]> = {
   [SubscriptionPlan.BUSINESS]: unique([
     ...FREE_PERMISSIONS,
     Resource.OPENING_BALANCES,
-    Resource.PREORDERS,
     Resource.DEPOSITS,
+    Resource.SAVINGS,
     Resource.CHARGES_MULTIPLE,
     Resource.REPORTS_FINANCIAL,
     Resource.REPORTS_WEEKLY,
@@ -159,8 +159,8 @@ export const DEFAULT_PLAN_RESOURCES: Record<SubscriptionPlan, Resource[]> = {
   [SubscriptionPlan.PRO]: unique([
     ...FREE_PERMISSIONS,
     Resource.OPENING_BALANCES,
-    Resource.PREORDERS,
     Resource.DEPOSITS,
+    Resource.SAVINGS,
     Resource.CHARGES_MULTIPLE,
     Resource.REPORTS_FINANCIAL,
     Resource.REPORTS_WEEKLY,

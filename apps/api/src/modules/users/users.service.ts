@@ -20,14 +20,15 @@ export class UsersService {
 
   async findById(id: string) {
     this.logger.debug('Find user by id', 'UsersService', { id })
-
+    
     try {
       const user = await this.usersRepo.findOne({
         where: { id },
         select: [
           'id', 'email', 'phone', 'name', 'avatarUrl', 'role',
           'language', 'isEmailVerified', 'isPhoneVerified',
-          'businessId', 'createdAt', 'updatedAt',
+          'businessId', 'createdAt', 'updatedAt', 'status',
+          'onboardingStep', 'preferredPhoneChannel', 'isActive',
         ],
       })
       if (!user) {

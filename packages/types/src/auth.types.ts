@@ -35,6 +35,21 @@ export enum PrefferedPhoneChannel {
   WHATSAPP = 'WHATSAPP',
 }
 
+export enum UserStatus {
+  PENDING = 'PENDING',
+  PHONE_VERIFIED = 'PHONE_VERIFIED',
+  ACTIVE = 'ACTIVE',
+}
+
+export enum OnboardingStep {
+  VERIFY_PHONE = 'VERIFY_PHONE',
+  VERIFY_EMAIL = 'VERIFY_EMAIL',
+  SELECT_PLAN = 'SELECT_PLAN',
+  SETUP_BUSINESS = 'SETUP_BUSINESS',
+  ADD_FIRST_PRODUCT = 'ADD_FIRST_PRODUCT',
+  COMPLETE = 'COMPLETE',
+}
+
 export interface AuthVerification {
   channel: VerificationChannel
   delivery?: PrefferedPhoneChannel
@@ -189,6 +204,8 @@ export interface User {
   isActive: boolean
   preferredPhoneChannel?: PrefferedPhoneChannel | null
   businessId?: string | null
+  status?: UserStatus | null
+  onboardingStep?: OnboardingStep | null
   createdAt: IsoDateString
   updatedAt: IsoDateString
 }

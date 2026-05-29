@@ -291,10 +291,10 @@ function computeRestockTotalFromItems(items: RestockLineState[]) {
   return hasAnySubtotal ? total : null
 }
 
-function formatXafCurrency(value: number, locale: string) {
+function formatXafCurrency(value: number, locale: string, currency = 'XAF') {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'XAF',
+    currency,
     maximumFractionDigits: 0,
   }).format(value)
 }
@@ -603,6 +603,7 @@ export default function InventoryPage() {
   const locale = useLocale()
   const tProducts = useTranslations('app.products')
   const businessId = useAuthStore((state) => state.businessId)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const productsQuotaUsage =
     planState?.quotaUsage.find((entry) => entry.resource === 'products' && !entry.unlimited) ?? null
@@ -2021,7 +2022,7 @@ export default function InventoryPage() {
                           {t('restock.computed_total')}
                         </p>
                         <p className="mt-1 text-sm font-semibold text-foreground">
-                          {restockTotalCost === null ? '-' : formatXafCurrency(restockTotalCost, locale)}
+                          {restockTotalCost === null ? '-' : formatXafCurrency(restockTotalCost, locale, businessCurrency)}
                         </p>
                       </div>
                     </div>
@@ -2066,7 +2067,7 @@ export default function InventoryPage() {
                     value={
                       restockTotalCost === null
                         ? '-'
-                        : formatXafCurrency(restockTotalCost, locale)
+                        : formatXafCurrency(restockTotalCost, locale, businessCurrency)
                     }
                     readOnly
                     disabled
@@ -2098,7 +2099,7 @@ export default function InventoryPage() {
                     <p className="mt-1 text-lg font-semibold text-foreground">
                       {restockEffectiveTotal === null
                         ? '-'
-                        : formatXafCurrency(restockEffectiveTotal, locale)}
+                        : formatXafCurrency(restockEffectiveTotal, locale, businessCurrency)}
                     </p>
                   </div>
 
@@ -2107,7 +2108,7 @@ export default function InventoryPage() {
                       {t('restock.amount_paid')}
                     </p>
                     <p className="mt-1 text-lg font-semibold text-foreground">
-                      {formatXafCurrency(restockAmountPaid, locale)}
+                      {formatXafCurrency(restockAmountPaid, locale, businessCurrency)}
                     </p>
                   </div>
 
@@ -2118,7 +2119,7 @@ export default function InventoryPage() {
                     <p className="mt-1 text-lg font-semibold text-foreground">
                       {restockCreditAmount === null
                         ? '-'
-                        : formatXafCurrency(restockCreditAmount, locale)}
+                        : formatXafCurrency(restockCreditAmount, locale, businessCurrency)}
                     </p>
                   </div>
                 </div>
@@ -2198,7 +2199,7 @@ export default function InventoryPage() {
                   <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                     {restockEffectiveTotal === null
                       ? '-'
-                      : formatXafCurrency(restockEffectiveTotal, locale)}
+                      : formatXafCurrency(restockEffectiveTotal, locale, businessCurrency)}
                   </p>
                 </div>
                 {restockInvoiceFile ? (
@@ -2461,7 +2462,7 @@ export default function InventoryPage() {
                 <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                   {restockPickerTotalCost === null
                     ? '-'
-                    : formatXafCurrency(restockPickerTotalCost, locale)}
+                    : formatXafCurrency(restockPickerTotalCost, locale, businessCurrency)}
                 </p>
               </div>
             </div>

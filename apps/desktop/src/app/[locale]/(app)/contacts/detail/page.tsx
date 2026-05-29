@@ -38,7 +38,9 @@ import { getPermissionAccessFromState } from '@/lib/plan-access'
 import { cn } from '@/lib/utils'
 import { getApiErrorMessage } from '@/services/api-response'
 import {
+  deleteOpeningBalanceLocal,
   getContactDetailLocal,
+  upsertOpeningBalanceLocal,
   type LocalContactDebtRecord,
   type LocalContactDetailRecord,
   type LocalContactDirectionSummary,
@@ -87,6 +89,7 @@ function ContactDetailPageContent() {
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const accessToken = useAuthStore((state) => state.accessToken)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const [detail, setDetail] = useState<LocalContactDetailRecord | null>(null)
   const [loading, setLoading] = useState(true)
@@ -106,9 +109,12 @@ function ContactDetailPageContent() {
   const [exportingCsvTone, setExportingCsvTone] = useState<DirectionTone | null>(null)
   const [exportingPdfTone, setExportingPdfTone] = useState<DirectionTone | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [obDraft, setObDraft] = useState<{ direction: DebtDirection; amount: string; asOfDate: string; notes: string } | null>(null)
+  const [obSubmitting, setObSubmitting] = useState(false)
+  const [obDeleting, setObDeleting] = useState<DebtDirection | null>(null)
 
   const contactId = searchParams.get('contactId')?.trim() ?? ''
-  
+
   const actorPayload = accessToken ? decodeJwtPayload<JwtPayload>(accessToken) : null
 
   useEffect(() => {
@@ -189,12 +195,17 @@ function ContactDetailPageContent() {
     () => (planState ? getPermissionAccessFromState(planState, Resource.REPORTS_EXPORT_PDF) : null),
     [planState],
   )
+  const openingBalanceAccess = useMemo(
+    () => (planState ? getPermissionAccessFromState(planState, Resource.OPENING_BALANCES) : null),
+    [planState],
+  )
   // Contact statements are another report surface. They must obey the same
   // report/export plan matrix as the dedicated reports page so users cannot
   // bypass plan restrictions by exporting from a contact detail screen.
   const canViewStatementReports = statementReportAccess?.allowed ?? true
   const canExportStatementCsv = csvExportAccess?.allowed ?? true
   const canExportStatementPdf = pdfExportAccess?.allowed ?? true
+  const canManageOpeningBalances = openingBalanceAccess?.allowed ?? false
 
   useEffect(() => {
     setReceivableDraft((current) => ({
@@ -264,6 +275,55 @@ function ContactDetailPageContent() {
     const nextDetail = await getContactDetailLocal(businessId, contactId)
     if (nextDetail) {
       setDetail(nextDetail)
+    }
+  }
+
+  const handleSaveOpeningBalance = async () => {
+    if (!businessId || !contactId || !obDraft || !actorPayload?.sub) {
+      return
+    }
+
+    const amount = Number(obDraft.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error(t('opening_balance.amount_invalid'))
+      return
+    }
+
+    if (!obDraft.asOfDate) {
+      toast.error(t('opening_balance.date_required'))
+      return
+    }
+
+    setObSubmitting(true)
+    try {
+      await upsertOpeningBalanceLocal(businessId, contactId, actorPayload.sub, {
+        direction: obDraft.direction,
+        amount,
+        asOfDate: obDraft.asOfDate,
+        notes: obDraft.notes.trim() || undefined,
+      })
+      setObDraft(null)
+      await refreshDetail()
+      toast.success(t('opening_balance.saved'))
+    } catch {
+      toast.error(t('opening_balance.save_error'))
+    } finally {
+      setObSubmitting(false)
+    }
+  }
+
+  const handleDeleteOpeningBalance = async (direction: DebtDirection) => {
+    if (!businessId || !contactId) return
+
+    setObDeleting(direction)
+    try {
+      await deleteOpeningBalanceLocal(businessId, contactId, direction)
+      await refreshDetail()
+      toast.success(t('opening_balance.deleted'))
+    } catch {
+      toast.error(t('opening_balance.delete_error'))
+    } finally {
+      setObDeleting(null)
     }
   }
 
@@ -462,7 +522,7 @@ function ContactDetailPageContent() {
         : { summary: detail.payableSummary, entries: detail.payableStatement }
     const generatedAt = new Date()
     const title = getStatementTitle(detail.type, tone, t)
-    const rows = buildStatementExportRows(statementSnapshot.entries, localeTag, t)
+    const rows = buildStatementExportRows(statementSnapshot.entries, localeTag, businessCurrency, t)
     const csv = buildContactStatementCsv({
       title,
       description: getStatementCardDescription(tone, t),
@@ -563,7 +623,7 @@ function ContactDetailPageContent() {
         : { summary: detail.payableSummary, entries: detail.payableStatement }
     const generatedAt = new Date()
     const title = getStatementTitle(detail.type, tone, t)
-    const rows = buildStatementExportRows(statementSnapshot.entries, localeTag, t)
+    const rows = buildStatementExportRows(statementSnapshot.entries, localeTag, businessCurrency, t)
     const html = buildContactStatementPdfHtml({
       title,
       description: getStatementCardDescription(tone, t),
@@ -577,6 +637,7 @@ function ContactDetailPageContent() {
       summary: statementSnapshot.summary,
       rows,
       localeTag,
+      currency: businessCurrency,
       labels: {
         contact: t('fields.name'),
         phone: t('fields.primary_phone'),
@@ -729,13 +790,13 @@ function ContactDetailPageContent() {
                     <span className="font-medium text-muted-foreground">{t('hero.net_position')}</span>
                     <span className="font-mono font-semibold text-emerald-700">
                       {t('hero.they_owe_you_value', {
-                        amount: formatCurrency(detail.totalReceivable, localeTag),
+                        amount: formatCurrency(detail.totalReceivable, localeTag, businessCurrency),
                       })}
                     </span>
                     <span className="text-muted-foreground">{t('hero.separator')}</span>
                     <span className="font-mono font-semibold text-danger-400">
                       {t('hero.you_owe_them_value', {
-                        amount: formatCurrency(detail.totalPayable, localeTag),
+                        amount: formatCurrency(detail.totalPayable, localeTag, businessCurrency),
                       })}
                     </span>
                     <span className="text-muted-foreground">{t('hero.separator')}</span>
@@ -749,7 +810,7 @@ function ContactDetailPageContent() {
                             : 'text-foreground',
                       )}
                     >
-                      {getNetPositionLabel(detail.netBalance, localeTag, t)}
+                      {getNetPositionLabel(detail.netBalance, localeTag, businessCurrency, t)}
                     </span>
                   </div>
                 </div>
@@ -768,7 +829,7 @@ function ContactDetailPageContent() {
                   detail.type === ContactType.SUPPLIER ? 'text-danger-400' : 'text-danger-400',
                 )}
               >
-                {formatCurrency(currentBalanceAmount, localeTag)}
+                {formatCurrency(currentBalanceAmount, localeTag, businessCurrency)}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {detail.type === ContactType.SUPPLIER
@@ -795,6 +856,7 @@ function ContactDetailPageContent() {
             summary={detail.receivableSummary}
             tone="customer"
             localeTag={localeTag}
+            currency={businessCurrency}
             t={t}
           />
           <DirectionSummaryPanel
@@ -803,6 +865,7 @@ function ContactDetailPageContent() {
             summary={detail.payableSummary}
             tone="supplier"
             localeTag={localeTag}
+            currency={businessCurrency}
             t={t}
           />
         </div>
@@ -810,14 +873,14 @@ function ContactDetailPageContent() {
         <div className="grid gap-4 md:grid-cols-4">
           <MetricCard
             label={t('metrics.total_credit_given')}
-            value={formatCurrency(detail.receivableSummary.totalOriginalAmount, localeTag)}
+            value={formatCurrency(detail.receivableSummary.totalOriginalAmount, localeTag, businessCurrency)}
             hint={t('metrics.total_credit_given_hint', {
               count: detail.receivableSummary.totalDebtCount,
             })}
           />
           <MetricCard
             label={t('metrics.total_collected')}
-            value={formatCurrency(detail.receivableSummary.totalPaidAmount, localeTag)}
+            value={formatCurrency(detail.receivableSummary.totalPaidAmount, localeTag, businessCurrency)}
             hint={t('metrics.total_collected_hint', {
               value: detail.receivableSummary.settlementRate,
             })}
@@ -825,7 +888,7 @@ function ContactDetailPageContent() {
           />
           <MetricCard
             label={t('metrics.outstanding')}
-            value={formatCurrency(detail.receivableSummary.outstandingAmount, localeTag)}
+            value={formatCurrency(detail.receivableSummary.outstandingAmount, localeTag, businessCurrency)}
             hint={t('metrics.outstanding_hint', {
               count: detail.receivableSummary.openDebtCount,
             })}
@@ -834,7 +897,7 @@ function ContactDetailPageContent() {
           <MetricCard
             label={t('metrics.last_payment')}
             value={formatLastPaymentValue(detail.receivableSummary, localeTag, t)}
-            hint={formatLastPaymentHint(detail.receivableSummary, localeTag, t)}
+            hint={formatLastPaymentHint(detail.receivableSummary, localeTag, businessCurrency, t)}
             tone="warning"
           />
         </div>
@@ -842,14 +905,14 @@ function ContactDetailPageContent() {
         <div className="grid gap-4 md:grid-cols-4">
           <MetricCard
             label={t('metrics.total_restocked')}
-            value={formatCurrency(detail.payableSummary.totalOriginalAmount, localeTag)}
+            value={formatCurrency(detail.payableSummary.totalOriginalAmount, localeTag, businessCurrency)}
             hint={t('metrics.total_restocked_hint', {
               count: detail.payableSummary.totalDebtCount,
             })}
           />
           <MetricCard
             label={t('metrics.total_paid')}
-            value={formatCurrency(detail.payableSummary.totalPaidAmount, localeTag)}
+            value={formatCurrency(detail.payableSummary.totalPaidAmount, localeTag, businessCurrency)}
             hint={t('metrics.total_paid_hint', {
               value: detail.payableSummary.settlementRate,
             })}
@@ -857,7 +920,7 @@ function ContactDetailPageContent() {
           />
           <MetricCard
             label={t('metrics.outstanding')}
-            value={formatCurrency(detail.payableSummary.outstandingAmount, localeTag)}
+            value={formatCurrency(detail.payableSummary.outstandingAmount, localeTag, businessCurrency)}
             hint={t('metrics.outstanding_hint', {
               count: detail.payableSummary.openDebtCount,
             })}
@@ -866,7 +929,7 @@ function ContactDetailPageContent() {
           <MetricCard
             label={t('metrics.last_payment')}
             value={formatLastPaymentValue(detail.payableSummary, localeTag, t)}
-            hint={formatLastPaymentHint(detail.payableSummary, localeTag, t)}
+            hint={formatLastPaymentHint(detail.payableSummary, localeTag, businessCurrency, t)}
             tone="warning"
           />
         </div>
@@ -916,9 +979,35 @@ function ContactDetailPageContent() {
           tone={paymentTone}
           paymentType={detail.type === ContactType.BOTH ? paymentTone : undefined}
           onPaymentTypeChange={detail.type === ContactType.BOTH ? setBothPaymentTone : undefined}
+          currency={businessCurrency}
           t={t}
         />
       </div>
+
+      <OpeningBalanceSection
+        detail={detail}
+        canManage={canManageOpeningBalances}
+        obDraft={obDraft}
+        obSubmitting={obSubmitting}
+        obDeleting={obDeleting}
+        onStartEdit={(direction, existing) =>
+          setObDraft({
+            direction,
+            amount: existing?.openingBalance ? String(existing.openingBalance) : '',
+            asOfDate: getTodayDate(),
+            notes: '',
+          })
+        }
+        onCancel={() => setObDraft(null)}
+        onSave={() => void handleSaveOpeningBalance()}
+        onDelete={(direction) => void handleDeleteOpeningBalance(direction)}
+        onDraftChange={setObDraft}
+        localeTag={localeTag}
+        locale={locale}
+        planGateT={planGateT}
+        currency={businessCurrency}
+        t={t}
+      />
 
       {!canViewStatementReports || !canExportStatementCsv || !canExportStatementPdf ? (
         <p className="text-sm text-muted-foreground">
@@ -953,6 +1042,7 @@ function ContactDetailPageContent() {
               csvLocked={!canExportStatementCsv}
               pdfLocked={!canExportStatementPdf}
               upgradeLabel={planGateT('upgrade_action')}
+              currency={businessCurrency}
               t={t}
             />
           ) : null}
@@ -973,6 +1063,7 @@ function ContactDetailPageContent() {
               csvLocked={!canExportStatementCsv}
               pdfLocked={!canExportStatementPdf}
               upgradeLabel={planGateT('upgrade_action')}
+              currency={businessCurrency}
               t={t}
             />
           ) : null}
@@ -997,6 +1088,7 @@ function DirectionSummaryPanel({
   summary,
   tone,
   localeTag,
+  currency,
   t,
 }: {
   title: string
@@ -1004,8 +1096,11 @@ function DirectionSummaryPanel({
   summary: LocalContactDirectionSummary
   tone: DirectionTone
   localeTag: string
+  currency: string
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>
 }) {
+  const businessCurrency = currency;
+
   const panelClassName =
     tone === 'customer'
       ? 'border-emerald-200/70 bg-card dark:border-emerald-900/60'
@@ -1027,29 +1122,29 @@ function DirectionSummaryPanel({
           <p className="mt-1 text-sm text-muted-foreground">{badge}</p>
         </div>
         <span className={cn('rounded-full px-3 py-1 text-xs font-medium', badgeClassName)}>
-          {formatCurrency(summary.outstandingAmount, localeTag)}
+          {formatCurrency(summary.outstandingAmount, localeTag, businessCurrency)}
         </span>
       </div>
       <div className="grid gap-3 p-5 sm:grid-cols-2">
         <MiniMetric
           label={t('metrics.total_amount')}
-          value={formatCurrency(summary.totalOriginalAmount, localeTag)}
+          value={formatCurrency(summary.totalOriginalAmount, localeTag, businessCurrency)}
           hint={t('metrics.records_count', { count: summary.totalDebtCount })}
         />
         <MiniMetric
           label={tone === 'customer' ? t('metrics.collected') : t('metrics.paid')}
-          value={formatCurrency(summary.totalPaidAmount, localeTag)}
+          value={formatCurrency(summary.totalPaidAmount, localeTag, businessCurrency)}
           hint={t('metrics.rate_hint', { value: summary.settlementRate })}
         />
         <MiniMetric
           label={t('metrics.outstanding')}
-          value={formatCurrency(summary.outstandingAmount, localeTag)}
+          value={formatCurrency(summary.outstandingAmount, localeTag, businessCurrency)}
           hint={t('metrics.outstanding_hint', { count: summary.openDebtCount })}
         />
         <MiniMetric
           label={t('metrics.last_payment')}
           value={formatLastPaymentValue(summary, localeTag, t)}
-          hint={formatLastPaymentHint(summary, localeTag, t)}
+          hint={formatLastPaymentHint(summary, localeTag, businessCurrency, t)}
         />
       </div>
     </section>
@@ -1076,6 +1171,199 @@ function MiniMetric({
   )
 }
 
+type ObDraft = { direction: DebtDirection; amount: string; asOfDate: string; notes: string }
+
+function OpeningBalanceSection({
+  detail,
+  canManage,
+  obDraft,
+  obSubmitting,
+  obDeleting,
+  onStartEdit,
+  onCancel,
+  onSave,
+  onDelete,
+  onDraftChange,
+  localeTag,
+  locale,
+  planGateT,
+  currency,
+  t,
+}: {
+  detail: LocalContactDetailRecord
+  canManage: boolean
+  obDraft: ObDraft | null
+  obSubmitting: boolean
+  obDeleting: DebtDirection | null
+  onStartEdit: (direction: DebtDirection, existing: LocalContactDirectionSummary) => void
+  onCancel: () => void
+  onSave: () => void
+  onDelete: (direction: DebtDirection) => void
+  onDraftChange: (draft: ObDraft | null) => void
+  localeTag: string
+  locale: string
+  currency: string
+  planGateT: ReturnType<typeof useTranslations<'app.plan_gate'>>
+  t: ReturnType<typeof useTranslations<'app.contactDetail'>>
+}) {
+  const businessCurrency = currency;
+
+  const directions: { direction: DebtDirection; summary: LocalContactDirectionSummary; show: boolean }[] = [
+    {
+      direction: DebtDirection.RECEIVABLE,
+      summary: detail.receivableSummary,
+      show: detail.type !== ContactType.SUPPLIER,
+    },
+    {
+      direction: DebtDirection.PAYABLE,
+      summary: detail.payableSummary,
+      show: detail.type !== ContactType.CUSTOMER,
+    },
+  ].filter((d) => d.show)
+
+  return (
+    <SurfaceCard
+      title={t('opening_balance.title')}
+      description={t('opening_balance.description')}
+    >
+      {!canManage ? (
+        <p className="text-sm text-muted-foreground">
+          {planGateT.rich('upgrade_hint', {
+            link: (chunks) => (
+              <a
+                href={`/${locale}/subscription`}
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {directions.map(({ direction, summary }) => {
+            const isEditingThis = obDraft?.direction === direction
+            const hasOb = summary.openingBalance > 0
+            const directionLabel =
+              direction === DebtDirection.RECEIVABLE
+                ? t('opening_balance.receivable_label')
+                : t('opening_balance.payable_label')
+
+            return (
+              <div
+                key={direction}
+                className="rounded-2xl border border-border bg-muted/20 p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{directionLabel}</p>
+                    {hasOb ? (
+                      <p className="text-base font-semibold text-foreground mt-1">
+                        {formatCurrency(summary.openingBalance, localeTag, businessCurrency)}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {t('opening_balance.not_set')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {!isEditingThis ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onStartEdit(direction, summary)}
+                          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                        >
+                          {hasOb ? t('opening_balance.edit') : t('opening_balance.set')}
+                        </button>
+                        {hasOb ? (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(direction)}
+                            disabled={obDeleting === direction}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-danger-500 transition-colors hover:bg-danger-50 disabled:opacity-50"
+                          >
+                            {obDeleting === direction
+                              ? t('opening_balance.deleting')
+                              : t('opening_balance.delete')}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onCancel}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+                      >
+                        {t('opening_balance.cancel')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {isEditingThis && obDraft ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {t('opening_balance.amount_label')}
+                        </span>
+                        <NumberInput
+                          value={obDraft.amount}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                            onDraftChange({ ...obDraft, amount: e.target.value })
+                          }
+                          placeholder="0"
+                          min="0.01"
+                          step="1"
+                        />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {t('opening_balance.date_label')}
+                        </span>
+                        <Input
+                          type="date"
+                          value={obDraft.asOfDate}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                            onDraftChange({ ...obDraft, asOfDate: e.target.value })
+                          }
+                        />
+                      </label>
+                    </div>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {t('opening_balance.notes_label')}
+                      </span>
+                      <Input
+                        value={obDraft.notes}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          onDraftChange({ ...obDraft, notes: e.target.value })
+                        }
+                        placeholder={t('opening_balance.notes_placeholder')}
+                      />
+                    </label>
+                    <Button
+                      onClick={onSave}
+                      disabled={obSubmitting}
+                      className="w-full sm:w-auto"
+                    >
+                      {obSubmitting
+                        ? t('opening_balance.saving')
+                        : t('opening_balance.save')}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </SurfaceCard>
+  )
+}
+
 function PaymentCaptureCard({
   title,
   description,
@@ -1091,11 +1379,13 @@ function PaymentCaptureCard({
   tone,
   paymentType,
   onPaymentTypeChange,
+  currency,
   t,
 }: {
   title: string
   description: string
   buttonLabel: string
+  currency: string
   openDebts: LocalContactDebtRecord[]
   draft: PaymentDraftState
   setDraft: Dispatch<SetStateAction<PaymentDraftState>>
@@ -1109,6 +1399,8 @@ function PaymentCaptureCard({
   onPaymentTypeChange?: (value: DirectionTone) => void
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>
 }) {
+  const businessCurrency = currency;
+
   const selectedDebt = openDebts.find((debt) => debt.id === draft.selectedDebtId) ?? openDebts[0] ?? null
   const buttonClassName =
     tone === 'customer'
@@ -1155,7 +1447,7 @@ function PaymentCaptureCard({
                 <SelectContent>
                   {openDebts.map((debt) => (
                     <SelectItem key={debt.id} value={debt.id}>
-                      {`${debt.reference} - ${formatCurrency(debt.outstandingAmount, localeTag)}`}
+                      {`${debt.reference} - ${formatCurrency(debt.outstandingAmount, localeTag, businessCurrency)}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1262,7 +1554,7 @@ function PaymentCaptureCard({
                     <p className="text-sm font-semibold text-foreground">{t('forms.write_off_title')}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {t('forms.write_off_description', {
-                        amount: formatCurrency(selectedDebt.outstandingAmount, localeTag),
+                        amount: formatCurrency(selectedDebt.outstandingAmount, localeTag, businessCurrency),
                       })}
                     </p>
                   </div>
@@ -1310,6 +1602,7 @@ function StatementCard({
   csvLocked,
   pdfLocked,
   upgradeLabel,
+  currency,
   t,
 }: {
   title: string
@@ -1326,8 +1619,11 @@ function StatementCard({
   csvLocked: boolean
   pdfLocked: boolean
   upgradeLabel: string
+  currency: string
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>
 }) {
+  const businessCurrency = currency;
+
   const panelClassName =
     tone === 'customer'
       ? 'border-emerald-200/70 bg-card dark:border-emerald-900/60'
@@ -1358,7 +1654,7 @@ function StatementCard({
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
         <span className={cn('rounded-xl px-3 py-1 text-sm font-semibold', balanceClassName)}>
-          {`${balanceLabel} ${formatCurrency(summary.outstandingAmount, localeTag)}`}
+          {`${balanceLabel} ${formatCurrency(summary.outstandingAmount, localeTag, businessCurrency)}`}
         </span>
       </div>
 
@@ -1419,13 +1715,13 @@ function StatementCard({
                     {getStatementDescription(entry, t)}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-danger-400">
-                    {entry.debit > 0 ? formatCurrency(entry.debit, localeTag) : t('statement.amount_dash')}
+                    {entry.debit > 0 ? formatCurrency(entry.debit, localeTag, businessCurrency) : t('statement.amount_dash')}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-emerald-700">
-                    {entry.credit > 0 ? formatCurrency(entry.credit, localeTag) : t('statement.amount_dash')}
+                    {entry.credit > 0 ? formatCurrency(entry.credit, localeTag, businessCurrency) : t('statement.amount_dash')}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-foreground">
-                    {formatCurrency(entry.balance, localeTag)}
+                    {formatCurrency(entry.balance, localeTag, businessCurrency)}
                   </td>
                 </tr>
               ))
@@ -1438,7 +1734,7 @@ function StatementCard({
         <div className="space-y-1">
           <span className="block">{t('statement.footer', { count: entries.length })}</span>
           <span className="block font-medium text-foreground">
-            {`${t('statement.closing_balance')} ${formatCurrency(summary.outstandingAmount, localeTag)}`}
+            {`${t('statement.closing_balance')} ${formatCurrency(summary.outstandingAmount, localeTag, businessCurrency)}`}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -1603,7 +1899,9 @@ function StatementTypeBadge({
       ? 'bg-amber-100 text-amber-800'
       : type === ContactStatementEntryType.PAYMENT
         ? 'bg-emerald-100 text-emerald-700'
-        : 'bg-slate-100 text-slate-700'
+        : type === ContactStatementEntryType.OPENING_BALANCE
+          ? 'bg-violet-100 text-violet-700'
+          : 'bg-slate-100 text-slate-700'
 
   return (
     <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-medium', className)}>
@@ -1726,6 +2024,10 @@ function getStatementDescription(
   entry: LocalContactStatementRecord,
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>,
 ) {
+  if (entry.type === ContactStatementEntryType.OPENING_BALANCE) {
+    return t('statement.descriptions.opening_balance')
+  }
+
   if (entry.type === ContactStatementEntryType.DEBT_CREATED) {
     return entry.direction === DebtDirection.RECEIVABLE
       ? t('statement.descriptions.sale_credit')
@@ -1755,6 +2057,10 @@ function getStatementTypeLabel(
   type: ContactStatementEntryType,
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>,
 ) {
+  if (type === ContactStatementEntryType.OPENING_BALANCE) {
+    return t('statement.types.opening_balance')
+  }
+
   if (type === ContactStatementEntryType.DEBT_CREATED) {
     return t('statement.types.debt')
   }
@@ -1807,17 +2113,18 @@ function getDebtStatusLabel(
 function getNetPositionLabel(
   netBalance: number,
   localeTag: string,
+  currency: string,
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>,
 ) {
   if (netBalance > 0) {
     return t('hero.net_they_owe_you', {
-      amount: formatCurrency(netBalance, localeTag),
+      amount: formatCurrency(netBalance, localeTag, currency),
     })
   }
 
   if (netBalance < 0) {
     return t('hero.net_you_owe_them', {
-      amount: formatCurrency(Math.abs(netBalance), localeTag),
+      amount: formatCurrency(Math.abs(netBalance), localeTag, currency),
     })
   }
 
@@ -1856,15 +2163,16 @@ function formatLastPaymentValue(
 function formatLastPaymentHint(
   summary: LocalContactDirectionSummary,
   localeTag: string,
+  currency: string,
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>,
 ) {
   return summary.lastPaymentAmount && summary.lastPaymentAmount > 0
-    ? formatCurrency(summary.lastPaymentAmount, localeTag)
+    ? formatCurrency(summary.lastPaymentAmount, localeTag, currency)
     : t('metrics.no_payment_hint')
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${Math.round(value).toLocaleString(localeTag)}`
+function formatCurrency(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${Math.round(value).toLocaleString(localeTag)}`
 }
 
 function formatDateLabel(value: string, localeTag: string) {
@@ -1927,8 +2235,11 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
 function buildStatementExportRows(
   entries: LocalContactStatementRecord[],
   localeTag: string,
+  currency: string,
   t: ReturnType<typeof useTranslations<'app.contactDetail'>>,
 ) {
+  const businessCurrency = currency;
+
   return entries.map((entry) => ({
     id: entry.id,
     type: entry.type,
@@ -1940,9 +2251,9 @@ function buildStatementExportRows(
     debit: entry.debit,
     credit: entry.credit,
     balance: entry.balance,
-    debitLabel: entry.debit > 0 ? formatCurrency(entry.debit, localeTag) : t('statement.amount_dash'),
-    creditLabel: entry.credit > 0 ? formatCurrency(entry.credit, localeTag) : t('statement.amount_dash'),
-    balanceLabel: formatCurrency(entry.balance, localeTag),
+    debitLabel: entry.debit > 0 ? formatCurrency(entry.debit, localeTag, businessCurrency) : t('statement.amount_dash'),
+    creditLabel: entry.credit > 0 ? formatCurrency(entry.credit, localeTag, businessCurrency) : t('statement.amount_dash'),
+    balanceLabel: formatCurrency(entry.balance, localeTag, businessCurrency),
   }))
 }
 
@@ -2052,6 +2363,7 @@ function buildContactStatementPdfHtml(input: {
     balanceLabel: string
   }>
   localeTag: string
+  currency: string
   labels: {
     contact: string
     phone: string
@@ -2095,7 +2407,7 @@ function buildContactStatementPdfHtml(input: {
 
   const lastPaymentValue =
     input.summary.lastPaymentDate && input.summary.lastPaymentAmount !== null
-      ? `${formatDateLabel(input.summary.lastPaymentDate, input.localeTag)} - ${formatCurrency(input.summary.lastPaymentAmount, input.localeTag)}`
+      ? `${formatDateLabel(input.summary.lastPaymentDate, input.localeTag)} - ${formatCurrency(input.summary.lastPaymentAmount, input.localeTag, input.currency)}`
       : input.labels.noPayment
 
   const rowsHtml = input.rows
@@ -2296,7 +2608,7 @@ function buildContactStatementPdfHtml(input: {
             <h1 class="title">${escapeHtml(input.title)}</h1>
             <p class="subtitle">${escapeHtml(input.description)}</p>
           </div>
-          <div class="balance-pill">${escapeHtml(`${input.balanceLabel} ${formatCurrency(input.summary.outstandingAmount, input.localeTag)}`)}</div>
+          <div class="balance-pill">${escapeHtml(`${input.balanceLabel} ${formatCurrency(input.summary.outstandingAmount, input.localeTag, input.currency)}`)}</div>
         </div>
         <div class="meta">
           <div class="meta-card">
@@ -2326,15 +2638,15 @@ function buildContactStatementPdfHtml(input: {
     <section class="summary">
       <div class="summary-card">
         <p class="summary-label">${escapeHtml(input.labels.totalAmount)}</p>
-        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.totalOriginalAmount, input.localeTag))}</p>
+        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.totalOriginalAmount, input.localeTag, input.currency))}</p>
       </div>
       <div class="summary-card">
         <p class="summary-label">${escapeHtml(input.labels.totalPaid)}</p>
-        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.totalPaidAmount, input.localeTag))}</p>
+        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.totalPaidAmount, input.localeTag, input.currency))}</p>
       </div>
       <div class="summary-card">
         <p class="summary-label">${escapeHtml(input.labels.outstanding)}</p>
-        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.outstandingAmount, input.localeTag))}</p>
+        <p class="summary-value">${escapeHtml(formatCurrency(input.summary.outstandingAmount, input.localeTag, input.currency))}</p>
       </div>
       <div class="summary-card">
         <p class="summary-label">${escapeHtml(input.labels.lastPayment)}</p>
@@ -2372,7 +2684,7 @@ function buildContactStatementPdfHtml(input: {
 
     <div class="footer">
       <span>${escapeHtml(input.labels.footer)}</span>
-      <strong>${escapeHtml(`${input.labels.closingBalance} ${formatCurrency(input.summary.outstandingAmount, input.localeTag)}`)}</strong>
+      <strong>${escapeHtml(`${input.labels.closingBalance} ${formatCurrency(input.summary.outstandingAmount, input.localeTag, input.currency)}`)}</strong>
     </div>
   </div>
 </body>

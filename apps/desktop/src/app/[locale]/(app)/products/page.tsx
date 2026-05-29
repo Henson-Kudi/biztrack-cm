@@ -36,6 +36,7 @@ export default function ProductsPage() {
   const planGateT = useTranslations('app.plan_gate')
   const locale = useLocale()
   const businessId = useAuthStore((state) => state.businessId)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const [recentProducts, setRecentProducts] = useState<PaginatedResult<Product> | null>(null)
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -348,7 +349,7 @@ export default function ProductsPage() {
                               {t('list.price')}
                             </p>
                             <p className="text-base font-semibold text-foreground">
-                              {formatProductPrice(product, locale)}
+                              {formatProductPrice(product, locale, businessCurrency)}
                             </p>
                           </div>
                           <div>

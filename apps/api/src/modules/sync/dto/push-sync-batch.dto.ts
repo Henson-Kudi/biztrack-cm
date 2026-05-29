@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 enum SyncEntityDto {
   CONTACT = 'contact',
+  OPENING_BALANCE = 'opening_balance',
   PRODUCT = 'product',
   PRODUCT_CATEGORY = 'product_category',
   EXPENSE_CATEGORY = 'expense_category',
@@ -22,6 +23,8 @@ enum SyncEntityDto {
   DEBT = 'debt',
   SALE = 'sale',
   EXPENSE = 'expense',
+  SAVINGS = 'savings',
+  SAVINGS_TRANSACTION = 'savings_transaction',
 }
 
 enum SyncActionDto {

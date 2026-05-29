@@ -99,6 +99,20 @@ export interface BusinessMembershipBusinessSummary {
   type?: BusinessType | null
   plan?: SubscriptionPlan | null
   businessStatus?: BusinessStatus | null
+  description?:string | null
+  phone?: string | null
+  email?: string | null
+  address?: string | null
+  currency?: Currency | string
+  logoUrl?: string | null
+  ownerId?: string | null
+  owner?: string | null
+  subscriptionStatus?: SubscriptionStatus | null
+  trialStartedAt?: IsoDateString | null
+  trialEndsAt?: IsoDateString | null
+  currentPeriodStart?: IsoDateString | null
+  currentPeriodEnd?: IsoDateString | null
+  cancelAtPeriodEnd?: boolean | null
 }
 
 export interface BusinessMembershipSummary {

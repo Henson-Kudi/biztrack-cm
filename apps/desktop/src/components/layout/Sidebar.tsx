@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { Resource, type JwtPayload } from '@biztrack/types'
+import { BusinessMemberRole, Resource, type JwtPayload } from '@biztrack/types'
 import {
   BarChart3,
   Bell,
@@ -17,6 +17,7 @@ import {
   LogOut,
   Lock,
   Package,
+  PiggyBank,
   Receipt,
   Ruler,
   Search,
@@ -29,7 +30,6 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
-import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { logout } from '@/services/auth.api'
@@ -39,6 +39,7 @@ import { getPermissionAccessFromState } from '@/lib/plan-access'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePlanStore } from '@/stores/plan.store'
+import { Link } from '@/i18n/navigation'
 
 const SIDEBAR_COLLAPSED_KEY = 'biztrack.sidebar.collapsed'
 
@@ -53,6 +54,7 @@ type NavLeafItem = {
   icon: LucideIcon
   badge?: string
   requiredResource?: Resource
+  roles?: BusinessMemberRole[]
   activeSearchParam?: NavMatch
   inactiveChildRoutes?: string[]
 }
@@ -61,6 +63,7 @@ type NavGroupItem = {
   label: string
   icon: LucideIcon
   children: NavLeafItem[]
+  roles?: BusinessMemberRole[]
 }
 
 type NavItem = NavLeafItem | NavGroupItem
@@ -102,19 +105,18 @@ function resolveProfileName(payload: JwtPayload | null, fallback: string) {
   return fallback
 }
 
-function resolveLocalizedPath(locale: string, to: string) {
-  return to === '/' ? `/${locale}` : `/${locale}${to}`
+function resolveLocalizedPath(to: string) {
+  return `/${to}`
 }
 
 function isItemActive(
-  locale: string,
   pathname: string,
   searchParams: ReadonlyURLSearchParams,
   item: NavLeafItem,
 ) {
-  const currentPath = resolveLocalizedPath(locale, item.to.split('?')[0] || '/')
+  const currentPath = resolveLocalizedPath(item.to.split('?')[0] || '/')
   const inactiveChildPaths =
-    item.inactiveChildRoutes?.map((route) => resolveLocalizedPath(locale, route)) ?? []
+    item.inactiveChildRoutes?.map((route) => resolveLocalizedPath(route)) ?? []
 
   if (item.activeSearchParam) {
     return (
@@ -133,7 +135,7 @@ function isItemActive(
 
   return (
     pathname === currentPath ||
-    (currentPath !== `/${locale}` && pathname.startsWith(`${currentPath}/`))
+    (currentPath !== `/` && pathname.startsWith(`${currentPath}/`))
   )
 }
 
@@ -154,6 +156,45 @@ function getLeafPermissionState(
         ? `${item.label} requires the ${permission.requiredPlan} plan.`
         : item.label,
   }
+}
+
+function isVisibleForRole(
+  roles: BusinessMemberRole[] | undefined,
+  requiredResource: Resource | undefined,
+  role: BusinessMemberRole | null,
+  effectivePermissions: Resource[],
+): boolean {
+  if (!roles || roles.length === 0) return true
+  if (!role) return true
+  if (role === BusinessMemberRole.OWNER) return true
+  if (roles.includes(role)) return true
+  // STAFF = custom role: server-issued effectivePermissions are the source of truth
+  if (role === BusinessMemberRole.STAFF && requiredResource) {
+    return effectivePermissions.includes(requiredResource)
+  }
+  return false
+}
+
+function filterNavForRole(
+  items: NavItem[],
+  role: BusinessMemberRole | null,
+  effectivePermissions: Resource[],
+): NavItem[] {
+  const result: NavItem[] = []
+  for (const item of items) {
+    if (hasChildren(item)) {
+      if (!isVisibleForRole(item.roles, undefined, role, effectivePermissions)) continue
+      const visibleChildren = item.children.filter((child) =>
+        isVisibleForRole(child.roles, child.requiredResource, role, effectivePermissions),
+      )
+      if (visibleChildren.length === 0) continue
+      result.push({ ...item, children: visibleChildren })
+    } else {
+      if (!isVisibleForRole(item.roles, item.requiredResource, role, effectivePermissions)) continue
+      result.push(item)
+    }
+  }
+  return result
 }
 
 function BrandMark({
@@ -297,7 +338,7 @@ function NavLeaf({
 
   return (
     <Link
-      href={resolveLocalizedPath(locale, item.to)}
+      href={resolveLocalizedPath(item.to)}
       title={collapsed ? item.label : undefined}
       className={className}
     >
@@ -327,7 +368,7 @@ function NavGroup({
   onExpand: () => void
 }) {
   const containsActive = item.children.some((child) =>
-    isItemActive(locale, pathname, searchParams, child),
+    isItemActive(pathname, searchParams, child),
   )
   const [open, setOpen] = useState(containsActive)
   const Icon = item.icon
@@ -410,7 +451,7 @@ function NavGroup({
                   key={child.to}
                   item={child}
                   depth={1}
-                  active={isItemActive(locale, pathname, searchParams, child)}
+                  active={isItemActive(pathname, searchParams, child)}
                   disabled={permissionState.disabled}
                   disabledBadge={permissionState.disabledBadge}
                   disabledTitle={permissionState.disabledTitle}
@@ -499,6 +540,8 @@ function UserPopover({
   notificationsLabel,
   changePinLabel,
   logoutLabel,
+  showTeamLink,
+  showRolesLink,
   onLogout,
 }: {
   collapsed: boolean
@@ -516,6 +559,8 @@ function UserPopover({
   notificationsLabel: string
   changePinLabel: string
   logoutLabel: string
+  showTeamLink: boolean
+  showRolesLink: boolean
   onLogout: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -594,27 +639,31 @@ function UserPopover({
               icon={Settings}
               label={settingsLabel}
               hint="Ctrl+,"
-              href={resolveLocalizedPath(locale, '/settings')}
+              href={resolveLocalizedPath('settings/general')}
               onSelect={() => setOpen(false)}
             />
             <UserMenuItem
               icon={CreditCard}
               label={subscriptionLabel}
-              href={resolveLocalizedPath(locale, '/subscription')}
+              href={resolveLocalizedPath('subscription')}
               onSelect={() => setOpen(false)}
             />
-            <UserMenuItem
-              icon={Users}
-              label={teamLabel}
-              href={resolveLocalizedPath(locale, '/settings/team')}
-              onSelect={() => setOpen(false)}
-            />
-            <UserMenuItem
-              icon={ShieldCheck}
-              label={rolesLabel}
-              href={resolveLocalizedPath(locale, '/settings/roles')}
-              onSelect={() => setOpen(false)}
-            />
+            {showTeamLink ? (
+              <UserMenuItem
+                icon={Users}
+                label={teamLabel}
+                href={resolveLocalizedPath('settings/team')}
+                onSelect={() => setOpen(false)}
+              />
+            ) : null}
+            {showRolesLink ? (
+              <UserMenuItem
+                icon={ShieldCheck}
+                label={rolesLabel}
+                href={resolveLocalizedPath('settings/roles')}
+                onSelect={() => setOpen(false)}
+              />
+            ) : null}
             <UserMenuItem icon={Bell} label={notificationsLabel} disabled />
             <UserMenuItem icon={KeyRound} label={changePinLabel} disabled />
           </div>
@@ -637,10 +686,10 @@ function UserPopover({
 }
 
 export function Sidebar() {
-  const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
   const locale = useLocale()
+  const pathname = usePathname().replace(`/${locale}`, '') || '/'
   const t = useTranslations('nav')
   const accessToken = useAuthStore((state) => state.accessToken)
   const refreshToken = useAuthStore((state) => state.refreshToken)
@@ -671,83 +720,123 @@ export function Sidebar() {
     () => [
       { to: '/', label: t('home'), icon: Home },
       {
-        to: '/sell',
+        to: 'sell',
         label: t('sell'),
         icon: ShoppingCart,
         badge: t('active_badge'),
         requiredResource: Resource.SALES_CREATE,
+        roles: [BusinessMemberRole.OWNER, BusinessMemberRole.MANAGER, BusinessMemberRole.CASHIER, BusinessMemberRole.STAFF],
       },
       {
         label: t('products'),
         icon: Package,
         children: [
           {
-            to: '/products',
+            to: 'products',
             label: t('all_products'),
             icon: Package,
             requiredResource: Resource.PRODUCTS_VIEW,
-            inactiveChildRoutes: ['/products/categories', '/products/units'],
+            inactiveChildRoutes: ['products/categories', 'products/units'],
           },
           {
-            to: '/products/categories',
+            to: 'products/categories',
             label: t('categories'),
             icon: Tag,
             requiredResource: Resource.PRODUCTS_VIEW,
           },
           {
-            to: '/products/units',
+            to: 'products/units',
             label: t('units_of_measure'),
             icon: Ruler,
             requiredResource: Resource.PRODUCTS_VIEW,
           },
         ],
       },
-      { to: '/inventory', label: t('inventory'), icon: Boxes, requiredResource: Resource.INVENTORY_VIEW },
-      { to: '/sales', label: t('sales'), icon: Receipt, requiredResource: Resource.SALES_VIEW },
+      { to: 'inventory', label: t('inventory'), icon: Boxes, requiredResource: Resource.INVENTORY_VIEW },
+      { to: 'sales', label: t('sales'), icon: Receipt, requiredResource: Resource.SALES_VIEW },
       {
         label: t('contacts'),
         icon: Users,
         children: [
           {
-            to: '/contacts',
+            to: 'contacts',
             label: t('all_contacts'),
             icon: Users,
             requiredResource: Resource.CONTACTS_VIEW,
-            inactiveChildRoutes: ['/contacts/debtors', '/contacts/creditors'],
+            inactiveChildRoutes: ['contacts/debtors', 'contacts/creditors'],
           },
           {
-            to: '/contacts/debtors',
+            to: 'contacts/debtors',
             label: t('debtors'),
             icon: HandCoins,
             requiredResource: Resource.DEBTS_VIEW,
           },
           {
-            to: '/contacts/creditors',
+            to: 'contacts/creditors',
             label: t('creditors'),
             icon: CreditCard,
             requiredResource: Resource.DEBTS_VIEW,
           },
         ],
       },
-      { to: '/expenses', label: t('expenses'), icon: Wallet, requiredResource: Resource.EXPENSES_VIEW },
-      { to: '/reports', label: t('reports'), icon: BarChart3, requiredResource: Resource.REPORTS_DAILY },
+      { to: 'expenses', label: t('expenses'), icon: Wallet, requiredResource: Resource.EXPENSES_VIEW },
+      { to: 'savings', label: t('savings'), icon: PiggyBank, requiredResource: Resource.SAVINGS },
+      {
+        to: 'reports',
+        label: t('reports'),
+        icon: BarChart3,
+        requiredResource: Resource.REPORTS_DAILY,
+        roles: [BusinessMemberRole.OWNER, BusinessMemberRole.MANAGER, BusinessMemberRole.ACCOUNTANT, BusinessMemberRole.STAFF],
+      },
       {
         label: t('settings'),
         icon: Settings,
         children: [
           {
-            to: '/settings',
+            to: 'settings/general',
             label: t('settings_general'),
             icon: Settings,
-            inactiveChildRoutes: ['/settings/team', '/settings/roles'],
+            inactiveChildRoutes: ['settings/team', 'settings/roles'],
           },
-          { to: '/settings/team', label: t('team'), icon: Users },
-          { to: '/settings/roles', label: t('roles'), icon: ShieldCheck },
+          {
+            to: 'settings/team',
+            label: t('team'),
+            icon: Users,
+            roles: [BusinessMemberRole.OWNER, BusinessMemberRole.MANAGER, BusinessMemberRole.STAFF],
+            requiredResource: Resource.STAFF_MANAGE,
+          },
+          {
+            to: 'settings/roles',
+            label: t('roles'),
+            icon: ShieldCheck,
+            roles: [BusinessMemberRole.OWNER, BusinessMemberRole.MANAGER, BusinessMemberRole.STAFF],
+            requiredResource: Resource.CUSTOM_ROLES,
+          },
         ],
       },
     ],
     [t],
   )
+
+  const effectivePermissions = planState?.authPermissions?.effectivePermissions ?? []
+
+  const visibleNavItems = useMemo(
+    () => filterNavForRole(navItems, role, effectivePermissions),
+    // effectivePermissions is a new array reference on every render when planState updates,
+    // so spread it into the dep array via a stable string key instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navItems, role, planState],
+  )
+
+  const canManageTeam =
+    role === BusinessMemberRole.OWNER ||
+    role === BusinessMemberRole.MANAGER ||
+    (role === BusinessMemberRole.STAFF && effectivePermissions.includes(Resource.STAFF_MANAGE))
+
+  const canManageRoles =
+    role === BusinessMemberRole.OWNER ||
+    role === BusinessMemberRole.MANAGER ||
+    (role === BusinessMemberRole.STAFF && effectivePermissions.includes(Resource.CUSTOM_ROLES))
 
   const profileName = resolveProfileName(payload, 'BizTrack')
   const profileSecondary = payload?.email ?? payload?.phone ?? t('profile_hint')
@@ -763,7 +852,7 @@ export function Sidebar() {
     }
 
     await clearSession()
-    router.replace(resolveLocalizedPath(locale, '/login'))
+    router.replace(resolveLocalizedPath('login'))
   }
 
   return (
@@ -808,7 +897,7 @@ export function Sidebar() {
           collapsed && 'px-2',
         )}
       >
-        {navItems.map((item) =>
+        {visibleNavItems.map((item) =>
           hasChildren(item) ? (
             <NavGroup
               key={item.label}
@@ -826,7 +915,7 @@ export function Sidebar() {
                 <NavLeaf
                   key={item.to}
                   item={item}
-                  active={isItemActive(locale, pathname, searchParams, item)}
+                  active={isItemActive(pathname, searchParams, item)}
                   disabled={permissionState.disabled}
                   disabledBadge={permissionState.disabledBadge}
                   disabledTitle={permissionState.disabledTitle}
@@ -854,6 +943,8 @@ export function Sidebar() {
         notificationsLabel={t('notifications')}
         changePinLabel={t('change_pin')}
         logoutLabel={t('logout')}
+        showTeamLink={canManageTeam}
+        showRolesLink={canManageRoles}
         onLogout={() => {
           void handleLogout()
         }}

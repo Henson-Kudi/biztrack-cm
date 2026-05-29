@@ -202,6 +202,7 @@ export default function DebtorsPage() {
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const accessToken = useAuthStore((state) => state.accessToken)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -631,7 +632,7 @@ export default function DebtorsPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DebtorMetricCard
           label={t('metrics.total_outstanding')}
-          value={formatCurrency(totalOutstanding, localeTag)}
+          value={formatCurrency(totalOutstanding, localeTag, businessCurrency)}
           hint={
             totalOutstanding > 0
               ? t('metrics.total_outstanding_hint', { count: totalDebtors })
@@ -642,7 +643,7 @@ export default function DebtorsPage() {
         />
         <DebtorMetricCard
           label={t('metrics.overdue')}
-          value={formatCurrency(overdueAmount, localeTag)}
+          value={formatCurrency(overdueAmount, localeTag, businessCurrency)}
           hint={
             overdueAmount > 0
               ? t('metrics.overdue_hint', { count: overdueRows.length })
@@ -653,7 +654,7 @@ export default function DebtorsPage() {
         />
         <DebtorMetricCard
           label={t('metrics.collected_this_month')}
-          value={formatCurrency(collectedThisMonth, localeTag)}
+          value={formatCurrency(collectedThisMonth, localeTag, businessCurrency)}
           hint={
             collectedThisMonth > 0
               ? t('metrics.collected_this_month_hint', { count: collectionSnapshot.currentCount })
@@ -664,7 +665,7 @@ export default function DebtorsPage() {
         />
         <DebtorMetricCard
           label={t('metrics.written_off')}
-          value={formatCurrency(writtenOffThisMonth, localeTag)}
+          value={formatCurrency(writtenOffThisMonth, localeTag, businessCurrency)}
           hint={
             writtenOffThisMonth > 0
               ? t('metrics.written_off_hint', { count: writtenOffThisMonthRows.length })
@@ -703,7 +704,7 @@ export default function DebtorsPage() {
                   />
                 </div>
                 <div className="w-28 shrink-0 text-right text-xs font-medium text-foreground">
-                  {bucket.amount > 0 ? formatCurrency(bucket.amount, localeTag) : t('aging.empty_value')}
+                  {bucket.amount > 0 ? formatCurrency(bucket.amount, localeTag, businessCurrency) : t('aging.empty_value')}
                 </div>
               </div>
             ))}
@@ -732,6 +733,7 @@ export default function DebtorsPage() {
                   )}
                   tone="success"
                   locale={localeTag}
+                  currency={businessCurrency}
                   t={t}
                 />
                 <CollectionBar
@@ -744,6 +746,7 @@ export default function DebtorsPage() {
                   )}
                   tone="default"
                   locale={localeTag}
+                  currency={businessCurrency}
                   t={t}
                 />
               </>
@@ -870,11 +873,11 @@ export default function DebtorsPage() {
                                 : 'text-emerald-700',
                           )}
                         >
-                          {formatCurrency(row.outstandingAmount, localeTag)}
+                          {formatCurrency(row.outstandingAmount, localeTag, businessCurrency)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {t('table.of_original', {
-                            amount: formatCurrency(row.originalAmount, localeTag),
+                            amount: formatCurrency(row.originalAmount, localeTag, businessCurrency),
                           })}
                         </div>
                       </td>
@@ -1052,19 +1055,19 @@ export default function DebtorsPage() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.original_balance')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.originalAmount, localeTag)}
+                          {formatCurrency(detailDebt.originalAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.collected_amount')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.paidAmount, localeTag)}
+                          {formatCurrency(detailDebt.paidAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.outstanding_balance')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.outstandingAmount, localeTag)}
+                          {formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
@@ -1107,7 +1110,7 @@ export default function DebtorsPage() {
                                 {getPaymentMethodLabel(payment.method, t)}
                               </span>
                               <span className="font-medium text-foreground">
-                                {formatCurrency(payment.amount, localeTag)}
+                                {formatCurrency(payment.amount, localeTag, businessCurrency)}
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -1137,12 +1140,12 @@ export default function DebtorsPage() {
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {t('detail.record_payment_description', {
-                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag),
+                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency),
                           })}
                         </p>
                       </div>
                       <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300">
-                        {formatCurrency(detailDebt.outstandingAmount, localeTag)}
+                        {formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency)}
                       </span>
                     </div>
 
@@ -1262,7 +1265,7 @@ export default function DebtorsPage() {
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {t('detail.write_off_description', {
-                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag),
+                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency),
                           })}
                         </p>
                       </div>
@@ -1447,8 +1450,8 @@ function getRatio(value: number, max: number) {
   return Math.max(6, Math.min(100, Math.round((value / max) * 100)))
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${Math.round(value).toLocaleString(localeTag)}`
+function formatCurrency(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${Math.round(value).toLocaleString(localeTag)}`
 }
 
 function formatDateLabel(value: string, localeTag: string) {
@@ -1562,6 +1565,7 @@ function CollectionBar({
   ratio,
   tone,
   locale,
+  currency,
   t,
 }: {
   label: string
@@ -1570,13 +1574,14 @@ function CollectionBar({
   ratio: number
   tone: 'default' | 'success'
   locale: string
+  currency: string
   t: TranslateFn
 }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-muted-foreground">{label}</span>
-        <span className="text-sm font-medium text-foreground">{formatCurrency(amount, locale)}</span>
+        <span className="text-sm font-medium text-foreground">{formatCurrency(amount, locale, currency)}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-muted/80">
         <div

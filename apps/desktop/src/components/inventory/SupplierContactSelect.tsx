@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Spinner } from '@biztrack/ui'
 import { useTranslations } from 'next-intl'
+import { DebtDirection } from '@biztrack/types'
 import { ContactPickerDialog } from '@/components/contacts/ContactPickerDialog'
 import {
   createSupplierContactLocal,
@@ -46,6 +47,7 @@ export function SupplierContactSelect({
   onSelect,
 }: SupplierContactSelectProps) {
   const t = useTranslations('app.inventory')
+  const tContacts = useTranslations('app.contacts')
   const [open, setOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -221,6 +223,7 @@ export function SupplierContactSelect({
         initialView="create"
         allowSelectView={false}
         initialFormState={createPrefill}
+        openingBalanceDirection={DebtDirection.PAYABLE}
         copy={{
           title: t('restock.add_new'),
           description: t('restock.supplier_dialog_description'),
@@ -244,6 +247,12 @@ export function SupplierContactSelect({
           phoneInvalid: t('restock.phone_invalid'),
           nameRequired: t('restock.name_required'),
           contactExists: t('restock.contact_exists'),
+          obTitle: tContacts('dialog.ob_title'),
+          obHint: tContacts('dialog.ob_hint'),
+          obAmountLabel: tContacts('dialog.ob_payable_label'),
+          obAmountPlaceholder: tContacts('dialog.ob_amount_placeholder'),
+          obDateLabel: tContacts('dialog.ob_date_label'),
+          obSaveError: tContacts('dialog.ob_save_error'),
         }}
       />
     </>

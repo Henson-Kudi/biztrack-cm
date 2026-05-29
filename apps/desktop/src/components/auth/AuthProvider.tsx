@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       lastSyncedAt = snapshot.lastSyncedAt
       const auth = useAuthStore.getState()
-      void usePlanStore.getState().refreshQuotaUsage({
+      void usePlanStore.getState().refreshPlanState({
         businessId: auth.businessId,
         accessToken: auth.isOffline ? null : auth.accessToken,
       })

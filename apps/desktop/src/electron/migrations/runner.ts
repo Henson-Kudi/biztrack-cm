@@ -19,7 +19,7 @@ export function ensureColumn(
 ): void {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: string }>
   if (columns.some((c) => c.name === column)) return
-  db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
 /**

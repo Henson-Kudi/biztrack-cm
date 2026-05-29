@@ -3,8 +3,11 @@ import type { Logger } from '@biztrack/logger'
 import { LOGGER } from '@/logger/logger.module'
 import type { Notification } from '@/entities/notification.entity'
 
+export const META_PROVIDER = 'meta'
+
 export interface WhatsAppSendResult {
   providerMessageId?: string
+  provider: string
 }
 
 @Injectable()
@@ -30,6 +33,6 @@ export class WhatsAppProvider {
       },
     )
 
-    return { providerMessageId: `stub-wa-${notification.id}` }
+    return { providerMessageId: `stub-wa-${notification.id}`, provider: META_PROVIDER }
   }
 }

@@ -3,8 +3,11 @@ import type { Logger } from '@biztrack/logger'
 import { LOGGER } from '@/logger/logger.module'
 import type { Notification } from '@/entities/notification.entity'
 
+export const AFRICAS_TALKING_PROVIDER = 'africas_talking'
+
 export interface SmsSendResult {
   providerMessageId?: string
+  provider: string
 }
 
 @Injectable()
@@ -26,6 +29,6 @@ export class SmsProvider {
       recipient: notification.recipient,
     })
 
-    return { providerMessageId: `stub-sms-${notification.id}` }
+    return { providerMessageId: `stub-sms-${notification.id}`, provider: AFRICAS_TALKING_PROVIDER }
   }
 }

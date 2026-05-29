@@ -9,17 +9,20 @@ import {
   Resource,
   type Contact,
   type ContactListResult,
+  type ContactOpeningBalance,
   type Debt,
   type ContactSyncPayload,
   type ContactsQuery,
   type CreateContactRequest,
+  type OpeningBalanceSyncPayload,
   type UpdateContactRequest,
+  type UpsertOpeningBalanceRequest,
 } from '@biztrack/types'
 import { assertLocalPermissionAccess, getLocalQuotaGate } from '@/lib/plan-access'
 import { usePlanStore } from '@/stores/plan.store'
 import { listDebtsForContactsLocal } from './debts.local'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
-import { buildOutboxEventOperation, requestBackgroundSync } from './sync.local'
+import { buildOutboxDeleteOperation, buildOutboxEventOperation, requestBackgroundSync } from './sync.local'
 
 type ContactRow = {
   id: string
@@ -32,6 +35,19 @@ type ContactRow = {
   notes: string | null
   is_active: number | null
   created_by_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+type OpeningBalanceRow = {
+  id: string
+  business_id: string
+  contact_id: string
+  direction: string
+  amount: number
+  as_of_date: string
+  notes: string | null
+  recorded_by_id: string | null
   created_at: string
   updated_at: string
 }
@@ -60,6 +76,7 @@ type DirectionAggregate = {
   totalOriginalAmount: number
   totalPaidAmount: number
   outstandingAmount: number
+  openingBalance: number
   openDebtCount: number
   totalDebtCount: number
   lastPaymentDate: string | null
@@ -67,6 +84,11 @@ type DirectionAggregate = {
   lastTransactionDate: string | null
   debts: LocalContactDebtRecord[]
   statementDrafts: StatementDraft[]
+}
+
+type OpeningBalanceInput = {
+  amount: number
+  asOfDate?: string | null
 }
 
 export type LocalContactStatementRecord = {
@@ -97,6 +119,7 @@ export type LocalContactDirectionSummary = {
   totalOriginalAmount: number
   totalPaidAmount: number
   outstandingAmount: number
+  openingBalance: number
   openDebtCount: number
   totalDebtCount: number
   settlementRate: number
@@ -370,10 +393,11 @@ export async function getContactDetailLocal(
     return null
   }
 
-  const debts = await listDebtsForContactsLocal(normalizedBusinessId, [normalizedContactId], {
-    includePayments: true,
-  })
-  return buildContactDetailFromDebts(row, debts)
+  const [debts, obRows] = await Promise.all([
+    listDebtsForContactsLocal(normalizedBusinessId, [normalizedContactId], { includePayments: true }),
+    queryOpeningBalancesForContacts(normalizedBusinessId, [normalizedContactId]),
+  ])
+  return buildContactDetailFromDebts(row, debts, obRows)
 }
 
 export async function createCustomerContactLocal(
@@ -744,19 +768,37 @@ async function buildContactSummaryMapLocal(businessId: string, contactIds: strin
     return result
   }
 
-  const debts = await listDebtsForContactsLocal(businessId, contactIds)
+  const [debts, obRows] = await Promise.all([
+    listDebtsForContactsLocal(businessId, contactIds),
+    queryOpeningBalancesForContacts(businessId, contactIds),
+  ])
+
+  const obByContact = new Map<string, { receivable: number; payable: number }>()
+  for (const ob of obRows) {
+    const entry = obByContact.get(ob.contact_id) ?? { receivable: 0, payable: 0 }
+    if (ob.direction === DebtDirection.RECEIVABLE) {
+      entry.receivable = ob.amount
+    } else {
+      entry.payable = ob.amount
+    }
+    obByContact.set(ob.contact_id, entry)
+  }
+
   const debtsByContactId = groupBy(debts, (debt) => debt.contactId)
 
   for (const contactId of contactIds) {
+    const ob = obByContact.get(contactId)
     const contactDebts = debtsByContactId.get(contactId) ?? []
     const receivableAggregate = finalizeDirectionAggregate(
       buildReceivableAggregate(
         contactDebts.filter((debt) => debt.direction === DebtDirection.RECEIVABLE),
+        ob?.receivable ? { amount: ob.receivable } : null,
       ),
     )
     const payableAggregate = finalizeDirectionAggregate(
       buildPayableAggregate(
         contactDebts.filter((debt) => debt.direction === DebtDirection.PAYABLE),
+        ob?.payable ? { amount: ob.payable } : null,
       ),
     )
 
@@ -775,17 +817,154 @@ async function buildContactSummaryMapLocal(businessId: string, contactIds: strin
   return result
 }
 
-function buildContactDetailFromDebts(row: ContactRow, debts: Debt[]): LocalContactDetailRecord {
+async function queryOpeningBalancesForContacts(
+  businessId: string,
+  contactIds: string[],
+): Promise<OpeningBalanceRow[]> {
+  if (contactIds.length === 0) return []
+  const placeholders = contactIds.map(() => '?').join(', ')
+  return dbQuery<OpeningBalanceRow>(
+    `
+      SELECT id, business_id, contact_id, direction, amount, as_of_date, notes, recorded_by_id, created_at, updated_at
+      FROM contact_opening_balances
+      WHERE business_id = ?
+        AND contact_id IN (${placeholders})
+    `,
+    [businessId, ...contactIds],
+  )
+}
+
+export async function listOpeningBalancesForContactLocal(
+  businessId: string,
+  contactId: string,
+): Promise<ContactOpeningBalance[]> {
+  const rows = await queryOpeningBalancesForContacts(businessId, [contactId])
+  return rows.map((row) => ({
+    id: row.id,
+    businessId: row.business_id,
+    contactId: row.contact_id,
+    direction: row.direction as DebtDirection,
+    amount: row.amount,
+    asOfDate: row.as_of_date,
+    notes: row.notes ?? null,
+    recordedById: row.recorded_by_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export async function upsertOpeningBalanceLocal(
+  businessId: string,
+  contactId: string,
+  userId: string,
+  dto: UpsertOpeningBalanceRequest,
+): Promise<ContactOpeningBalance> {
+  const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.OPENING_BALANCES)
+
+  const existing = (
+    await dbQuery<OpeningBalanceRow>(
+      `SELECT id, created_at FROM contact_opening_balances WHERE business_id = ? AND contact_id = ? AND direction = ? LIMIT 1`,
+      [normalizedBusinessId, contactId, dto.direction],
+    )
+  )[0]
+
+  const now = new Date().toISOString()
+  const id = existing?.id ?? crypto.randomUUID()
+  const createdAt = existing?.created_at ?? now
+  const payload: OpeningBalanceSyncPayload = {
+    contactId,
+    direction: dto.direction,
+    amount: dto.amount,
+    asOfDate: dto.asOfDate,
+    notes: dto.notes ?? null,
+    recordedById: userId,
+    createdAt,
+  }
+
+  await dbBatch([
+    {
+      sql: `
+        INSERT INTO contact_opening_balances (
+          id, business_id, contact_id, direction, amount, as_of_date, notes, recorded_by_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          amount = excluded.amount,
+          as_of_date = excluded.as_of_date,
+          notes = excluded.notes,
+          recorded_by_id = excluded.recorded_by_id,
+          updated_at = excluded.updated_at
+      `,
+      params: [id, normalizedBusinessId, contactId, dto.direction, dto.amount, dto.asOfDate, dto.notes ?? null, userId, createdAt, now],
+    },
+    buildOutboxEventOperation('openingBalances', id, payload),
+  ])
+
+  requestBackgroundSync()
+
+  return {
+    id,
+    businessId: normalizedBusinessId,
+    contactId,
+    direction: dto.direction,
+    amount: dto.amount,
+    asOfDate: dto.asOfDate,
+    notes: dto.notes ?? null,
+    recordedById: userId,
+    createdAt,
+    updatedAt: now,
+  }
+}
+
+export async function deleteOpeningBalanceLocal(
+  businessId: string,
+  contactId: string,
+  direction: DebtDirection,
+): Promise<void> {
+  const normalizedBusinessId = assertBusinessId(businessId)
+  await assertLocalPermissionAccess(normalizedBusinessId, Resource.CONTACTS_MANAGE)
+
+  const existing = (
+    await dbQuery<OpeningBalanceRow>(
+      `SELECT id FROM contact_opening_balances WHERE business_id = ? AND contact_id = ? AND direction = ? LIMIT 1`,
+      [normalizedBusinessId, contactId, direction],
+    )
+  )[0]
+
+  if (!existing) return
+
+  await dbBatch([
+    {
+      sql: `DELETE FROM contact_opening_balances WHERE id = ?`,
+      params: [existing.id],
+    },
+    buildOutboxDeleteOperation('openingBalances', existing.id),
+  ])
+
+  requestBackgroundSync()
+}
+
+function buildContactDetailFromDebts(
+  row: ContactRow,
+  debts: Debt[],
+  obRows: OpeningBalanceRow[] = [],
+): LocalContactDetailRecord {
+  const obByDirection = new Map(obRows.map((ob) => [ob.direction as DebtDirection, ob]))
+  const receivableOb = obByDirection.get(DebtDirection.RECEIVABLE)
+  const payableOb = obByDirection.get(DebtDirection.PAYABLE)
+
   const receivableAggregate = finalizeDirectionAggregate(
     buildReceivableAggregate(
       debts.filter(
         (debt) => debt.contactId === row.id && debt.direction === DebtDirection.RECEIVABLE,
       ),
+      receivableOb ? { amount: receivableOb.amount, asOfDate: receivableOb.as_of_date } : null,
     ),
   )
   const payableAggregate = finalizeDirectionAggregate(
     buildPayableAggregate(
       debts.filter((debt) => debt.contactId === row.id && debt.direction === DebtDirection.PAYABLE),
+      payableOb ? { amount: payableOb.amount, asOfDate: payableOb.as_of_date } : null,
     ),
   )
   const summary = {
@@ -813,16 +992,38 @@ function buildContactDetailFromDebts(row: ContactRow, debts: Debt[]): LocalConta
   }
 }
 
-function buildReceivableAggregate(debts: Debt[]) {
-  return buildDirectionAggregateFromDebts(debts, DebtDirection.RECEIVABLE)
+function buildReceivableAggregate(debts: Debt[], openingBalance?: OpeningBalanceInput | null) {
+  return buildDirectionAggregateFromDebts(debts, DebtDirection.RECEIVABLE, openingBalance)
 }
 
-function buildPayableAggregate(debts: Debt[]) {
-  return buildDirectionAggregateFromDebts(debts, DebtDirection.PAYABLE)
+function buildPayableAggregate(debts: Debt[], openingBalance?: OpeningBalanceInput | null) {
+  return buildDirectionAggregateFromDebts(debts, DebtDirection.PAYABLE, openingBalance)
 }
 
-function buildDirectionAggregateFromDebts(debts: Debt[], direction: DebtDirection) {
+function buildDirectionAggregateFromDebts(
+  debts: Debt[],
+  direction: DebtDirection,
+  openingBalance?: OpeningBalanceInput | null,
+) {
   const aggregate = createDirectionAggregate(direction)
+
+  if (openingBalance) {
+    aggregate.openingBalance = roundMoney(openingBalance.amount)
+    aggregate.outstandingAmount = roundMoney(openingBalance.amount)
+    if (openingBalance.asOfDate) {
+      aggregate.statementDrafts.push({
+        id: `ob:${direction}`,
+        sortAt: Date.parse(`${openingBalance.asOfDate}T00:00:00.000Z`) - 1,
+        date: openingBalance.asOfDate,
+        direction,
+        type: ContactStatementEntryType.OPENING_BALANCE,
+        reference: '',
+        debit: openingBalance.amount,
+        credit: 0,
+        method: null,
+      })
+    }
+  }
 
   for (const debt of debts) {
     const reference = debt.sourceReference || debt.id
@@ -917,6 +1118,7 @@ function finalizeDirectionAggregate(aggregate: DirectionAggregate) {
       totalOriginalAmount: roundMoney(aggregate.totalOriginalAmount),
       totalPaidAmount: roundMoney(aggregate.totalPaidAmount),
       outstandingAmount: roundMoney(aggregate.outstandingAmount),
+      openingBalance: aggregate.openingBalance,
       openDebtCount: aggregate.openDebtCount,
       totalDebtCount: aggregate.totalDebtCount,
       settlementRate:
@@ -1003,6 +1205,7 @@ function createDirectionAggregate(direction: DebtDirection): DirectionAggregate 
     totalOriginalAmount: 0,
     totalPaidAmount: 0,
     outstandingAmount: 0,
+    openingBalance: 0,
     openDebtCount: 0,
     totalDebtCount: 0,
     lastPaymentDate: null,
@@ -1029,6 +1232,10 @@ function updateLastPayment(
 }
 
 function getStatementTypeSortOrder(type: ContactStatementEntryType) {
+  if (type === ContactStatementEntryType.OPENING_BALANCE) {
+    return -1
+  }
+
   if (type === ContactStatementEntryType.DEBT_CREATED) {
     return 0
   }

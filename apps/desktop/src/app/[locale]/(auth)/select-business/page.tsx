@@ -6,8 +6,10 @@ import { useLocale, useTranslations } from 'next-intl'
 import type { BusinessMembershipSummary } from '@biztrack/types'
 import { Button } from '@biztrack/ui'
 import { AuthCard } from '@/components/auth/AuthCard'
-import { getBusinesses, getAuthTokens, selectBusiness } from '@/services/auth.api'
+import { getCurrentUser, getBusinesses, getAuthTokens, selectBusiness } from '@/services/auth.api'
 import { getApiErrorMessage } from '@/services/api-response'
+import { upsertLocalBusinesses } from '@/services/local-businesses.local'
+import { upsertLocalUserProfile } from '@/services/local-user-profiles.local'
 import { useAuthStore } from '@/stores/auth.store'
 import { routeForNextStep } from '@/lib/auth-routing'
 
@@ -20,6 +22,7 @@ export default function SelectBusinessPage() {
   const [error, setError] = useState<string | null>(null)
 
   const setTokens = useAuthStore((s) => s.setTokens)
+  const applyUser = useAuthStore((s) => s.applyUser)
   const clearSession = useAuthStore((s) => s.clearSession)
 
   const goTo = (path: string) => router.push(`/${locale}${path}`)
@@ -27,13 +30,12 @@ export default function SelectBusinessPage() {
   useEffect(() => {
     let mounted = true
 
-    // The auth layout should keep unauthenticated users away from this page, but
-    // we still guard async state updates here because auth can disappear while the
-    // request is in flight, for example after a failed token refresh.
     getBusinesses()
       .then((items) => {
         if (!mounted) return
         setBusinesses(items)
+        // Always override local businesses with fresh API data
+        void upsertLocalBusinesses(items)
       })
       .catch((fetchError) => {
         if (!mounted) return
@@ -54,11 +56,28 @@ export default function SelectBusinessPage() {
       const response = await selectBusiness({ businessId })
       const tokens = getAuthTokens(response)
       if (tokens) {
+        // Saves tokens, loads business meta from local SQLite into store
         await setTokens(tokens)
+
+        // Fetch full user profile from API and persist locally for offline use
+        try {
+          const user = await getCurrentUser()
+          await upsertLocalUserProfile(user)
+          applyUser({
+            id: user.id,
+            name: user.name ?? null,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: user.avatarUrl ?? null,
+            language: user.language ?? null,
+          })
+        } catch {
+          // Non-fatal — user meta will be loaded from cache on next login if available
+        }
       }
       return goTo(routeForNextStep(response.nextStep))
-    } catch (error) {
-      setError(getApiErrorMessage(error, t('select_business.select_error')))
+    } catch (selectError) {
+      setError(getApiErrorMessage(selectError, t('select_business.select_error')))
     }
   }
 

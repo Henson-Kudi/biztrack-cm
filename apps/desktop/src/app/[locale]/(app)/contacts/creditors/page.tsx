@@ -160,6 +160,7 @@ export default function CreditorsPage() {
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const accessToken = useAuthStore((state) => state.accessToken)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const [payables, setPayables] = useState<LocalSupplierPayable[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -592,7 +593,7 @@ export default function CreditorsPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <CreditorMetricCard
           label={t('metrics.total_payable')}
-          value={formatCurrency(totalPayable, localeTag)}
+          value={formatCurrency(totalPayable, localeTag, businessCurrency)}
           hint={
             totalPayable > 0
               ? t('metrics.total_payable_hint', { count: openSuppliers })
@@ -603,7 +604,7 @@ export default function CreditorsPage() {
         />
         <CreditorMetricCard
           label={t('metrics.partially_paid')}
-          value={formatCurrency(partiallyPaidAmount, localeTag)}
+          value={formatCurrency(partiallyPaidAmount, localeTag, businessCurrency)}
           hint={
             partiallyPaidAmount > 0
               ? t('metrics.partially_paid_hint', { count: partiallyPaidRows.length })
@@ -614,7 +615,7 @@ export default function CreditorsPage() {
         />
         <CreditorMetricCard
           label={t('metrics.paid_this_month')}
-          value={formatCurrency(paidThisMonth, localeTag)}
+          value={formatCurrency(paidThisMonth, localeTag, businessCurrency)}
           hint={
             paidThisMonth > 0
               ? t('metrics.paid_this_month_hint', { count: paidThisMonthRows.length })
@@ -625,7 +626,7 @@ export default function CreditorsPage() {
         />
         <CreditorMetricCard
           label={t('metrics.aged_thirty_days')}
-          value={formatCurrency(agedAmount, localeTag)}
+          value={formatCurrency(agedAmount, localeTag, businessCurrency)}
           hint={
             agedAmount > 0
               ? t('metrics.aged_thirty_days_hint', { count: agedRows.length })
@@ -662,7 +663,7 @@ export default function CreditorsPage() {
                       </p>
                     </div>
                     <div className="text-right text-sm font-medium text-foreground">
-                      {formatCurrency(supplier.amount, localeTag)}
+                      {formatCurrency(supplier.amount, localeTag, businessCurrency)}
                     </div>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted/80">
@@ -704,7 +705,7 @@ export default function CreditorsPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-medium text-danger-400">
-                      {formatCurrency(row.outstandingAmount, localeTag)}
+                      {formatCurrency(row.outstandingAmount, localeTag, businessCurrency)}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {t('oldest.open_for_days', { count: row.ageDays })}
@@ -827,11 +828,11 @@ export default function CreditorsPage() {
                                 : 'text-emerald-700',
                           )}
                         >
-                          {formatCurrency(row.outstandingAmount, localeTag)}
+                          {formatCurrency(row.outstandingAmount, localeTag, businessCurrency)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {t('table.of_original', {
-                            amount: formatCurrency(row.originalAmount, localeTag),
+                            amount: formatCurrency(row.originalAmount, localeTag, businessCurrency),
                           })}
                         </div>
                       </td>
@@ -999,19 +1000,19 @@ export default function CreditorsPage() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.original_balance')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.originalAmount, localeTag)}
+                          {formatCurrency(detailDebt.originalAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.paid_amount')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.paidAmount, localeTag)}
+                          {formatCurrency(detailDebt.paidAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('detail.outstanding_balance')}</span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(detailDebt.outstandingAmount, localeTag)}
+                          {formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
@@ -1048,7 +1049,7 @@ export default function CreditorsPage() {
                                 {getPaymentMethodLabel(payment.method, t)}
                               </span>
                               <span className="font-medium text-foreground">
-                                {formatCurrency(payment.amount, localeTag)}
+                                {formatCurrency(payment.amount, localeTag, businessCurrency)}
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -1078,12 +1079,12 @@ export default function CreditorsPage() {
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {t('detail.record_payment_description', {
-                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag),
+                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency),
                           })}
                         </p>
                       </div>
                       <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-700 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300">
-                        {formatCurrency(detailDebt.outstandingAmount, localeTag)}
+                        {formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency)}
                       </span>
                     </div>
 
@@ -1203,7 +1204,7 @@ export default function CreditorsPage() {
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {t('detail.write_off_description', {
-                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag),
+                            amount: formatCurrency(detailDebt.outstandingAmount, localeTag, businessCurrency),
                           })}
                         </p>
                       </div>
@@ -1394,8 +1395,8 @@ function getRatio(value: number, max: number) {
   return Math.max(6, Math.min(100, Math.round((value / max) * 100)))
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${Math.round(value).toLocaleString(localeTag)}`
+function formatCurrency(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${Math.round(value).toLocaleString(localeTag)}`
 }
 
 function getPaymentMethodLabel(method: PaymentMethod, t: TranslateFn) {

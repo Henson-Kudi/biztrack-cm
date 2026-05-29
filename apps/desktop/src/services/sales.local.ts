@@ -16,13 +16,16 @@ import {
   type SalePayment,
   type SaleReceipt,
   type SalesQuery,
+  type SaleSyncChargeLinePayload,
+  type SaleSyncDiscountLinePayload,
   type SaleSyncPayload,
 } from '@biztrack/types'
 import { assertLocalPermissionAccess } from '@/lib/plan-access'
 import { compareValues, dbBatch, dbQuery, normalizeSortOrder, paginateResult } from './local-db'
 import { getContactByIdLocal } from './contacts.local'
-import { assertBusinessId, fetchProductRowsForBusiness, type ProductRow } from './products.local'
+import { assertBusinessId, fetchProductRowsByIds, type ProductRow } from './products.local'
 import { buildOutboxEventOperation, requestBackgroundSync } from './sync.local'
+import { recordSavingsUsageLocal, recordVoidedSaleTransactionLocal } from './savings.local'
 
 type InventoryLevelRow = {
   id: string
@@ -91,6 +94,7 @@ type SalePaymentRow = {
   method: string
   amount: number
   mobile_money_reference: string | null
+  savings_account_id: string | null
   created_at: string
 }
 
@@ -99,13 +103,55 @@ type SaleCountRow = {
   item_count: number
 }
 
+type SaleChargeRow = {
+  id: string
+  charge_type_id: string | null
+  name: string
+  rate_type: string
+  rate_value: number
+  amount: number
+}
+
+type SaleDiscountRow = {
+  id: string
+  description: string
+  discount_type: string
+  rate: number | null
+  amount: number
+}
+
 export type CreateLocalSaleItemInput = CreateSaleItemRequest
 
-export type CreateLocalSaleInput = Omit<CreateSaleRequest, 'clientId' | 'soldAt'> & {
+export type SaleChargeLineInput = {
+  chargeTypeId?: string | null
+  name: string
+  rateType: 'PERCENT' | 'FIXED'
+  rateValue: number
+  amount: number
+}
+
+export type SaleDiscountLineInput = {
+  description: string
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+  rate: number | null
+  amount: number
+}
+
+export type CreateLocalSalePaymentInput = {
+  method: PaymentMethod
+  amount: number
+  mobileMoneyReference?: string
+  savingsAccountId?: string | null
+}
+
+export type CreateLocalSaleInput = Omit<CreateSaleRequest, 'clientId' | 'soldAt' | 'payments'> & {
   clientId?: string
   soldAt?: string
   cashierId?: string | null
   cashierName?: string | null
+  charges?: SaleChargeLineInput[]
+  discounts?: SaleDiscountLineInput[]
+  payments: CreateLocalSalePaymentInput[]
 }
 
 export type LocalSaleRecord = Sale & {
@@ -114,6 +160,8 @@ export type LocalSaleRecord = Sale & {
   receiptNumber: string
   netAmount: number
   momoReference: string | null
+  chargeLines: Array<{ id: string; name: string; rateType: string; rateValue: number; amount: number }>
+  discountLines: Array<{ id: string; description: string; discountType: string; rate: number | null; amount: number }>
 }
 
 export class SaleLocalError extends Error {
@@ -170,7 +218,8 @@ export async function createSaleLocal(
   const cashierName = payload.cashierName?.trim() || null
   const requestedCustomerId = payload.customerId?.trim() || null
   const saleNotes = payload.notes?.trim() || null
-  const rows = await fetchProductRowsForBusiness(normalizedBusinessId)
+  const itemProductIds = payload.items.map((item) => item.productId)
+  const rows = await fetchProductRowsByIds(normalizedBusinessId, itemProductIds)
   const productMap = new Map(rows.map((row) => [row.id, row]))
   const saleId = crypto.randomUUID()
   const saleNumber = await buildSaleNumber(normalizedBusinessId, saleDate)
@@ -350,6 +399,7 @@ export async function createSaleLocal(
       method: payment.method,
       amount: roundMoney(payment.amount),
       mobileMoneyReference: payment.mobileMoneyReference?.trim() || null,
+      savingsAccountId: (payment as CreateLocalSalePaymentInput).savingsAccountId ?? null,
       createdAt,
     })
 
@@ -362,8 +412,9 @@ export async function createSaleLocal(
           method,
           amount,
           mobile_money_reference,
+          savings_account_id,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       params: [
         paymentId,
@@ -372,6 +423,7 @@ export async function createSaleLocal(
         payment.method,
         roundMoney(payment.amount),
         payment.mobileMoneyReference?.trim() || null,
+        (payment as CreateLocalSalePaymentInput).savingsAccountId ?? null,
         createdAt,
       ],
     })
@@ -408,6 +460,14 @@ export async function createSaleLocal(
   const changeGiven = roundMoney(amountPaid - totalAmount)
   const paymentMethod = derivePaymentMethod(salePayments)
   const momoReference = salePayments.find((payment) => payment.mobileMoneyReference)?.mobileMoneyReference ?? null
+
+  // Pre-generate IDs so the same IDs appear in both the outbox payload and the SQLite inserts
+  const chargeEntries = (payload.charges ?? [])
+    .filter((c) => roundMoney(c.amount) > 0)
+    .map((c) => ({ ...c, id: crypto.randomUUID(), amount: roundMoney(c.amount) }))
+  const discountEntries = (payload.discounts ?? [])
+    .filter((d) => roundMoney(d.amount) > 0)
+    .map((d) => ({ ...d, id: crypto.randomUUID(), amount: roundMoney(d.amount) }))
 
   operations.unshift(
     {
@@ -503,6 +563,7 @@ export async function createSaleLocal(
         method: payment.method,
         amount: payment.amount,
         mobileMoneyReference: payment.mobileMoneyReference ?? undefined,
+        savingsAccountId: payment.savingsAccountId ?? undefined,
       })),
       items: saleItems.map((item, index) => ({
         id: item.id,
@@ -513,10 +574,75 @@ export async function createSaleLocal(
         costPrice: item.costPrice ?? undefined,
         movementId: itemMovementIds[index] ?? undefined,
       })),
+      charges: chargeEntries.length > 0 ? chargeEntries.map((c) => ({
+        id: c.id,
+        chargeTypeId: c.chargeTypeId ?? null,
+        name: c.name,
+        rateType: c.rateType,
+        rateValue: roundMoney(c.rateValue),
+        amount: c.amount,
+      })) : undefined,
+      discounts: discountEntries.length > 0 ? discountEntries.map((d) => ({
+        id: d.id,
+        description: d.description,
+        discountType: d.discountType,
+        rate: d.rate ?? null,
+        amount: d.amount,
+      })) : undefined,
     } satisfies SaleSyncPayload),
   )
 
+  for (const charge of chargeEntries) {
+    operations.push({
+      sql: `
+        INSERT INTO sale_charges (id, sale_id, business_id, charge_type_id, name, rate_type, rate_value, amount, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      params: [
+        charge.id,
+        saleId,
+        normalizedBusinessId,
+        charge.chargeTypeId ?? null,
+        charge.name,
+        charge.rateType,
+        roundMoney(charge.rateValue),
+        charge.amount,
+        createdAt,
+      ],
+    })
+  }
+
+  for (const disc of discountEntries) {
+    operations.push({
+      sql: `
+        INSERT INTO sale_discounts (id, sale_id, sale_item_id, business_id, description, discount_type, rate, amount, created_at)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)
+      `,
+      params: [
+        disc.id,
+        saleId,
+        normalizedBusinessId,
+        disc.description,
+        disc.discountType,
+        disc.rate ?? null,
+        disc.amount,
+        createdAt,
+      ],
+    })
+  }
+
   await dbBatch(operations)
+
+  // Deduct from savings accounts for any SAVINGS payment lines
+  for (const payment of salePayments) {
+    if (payment.method === PaymentMethod.SAVINGS && payment.savingsAccountId) {
+      await recordSavingsUsageLocal(normalizedBusinessId, payment.savingsAccountId, saleId, payment.amount, {
+        recordedById: isUuid(cashierId) ? cashierId : null,
+        notes: `Sale ${saleNumber}`,
+      })
+    }
+  }
+
   requestBackgroundSync()
 
   return {
@@ -557,6 +683,20 @@ export async function createSaleLocal(
     items: saleItems,
     netAmount: totalAmount,
     momoReference,
+    chargeLines: chargeEntries.map((c) => ({
+      id: c.id,
+      name: c.name,
+      rateType: c.rateType,
+      rateValue: c.rateValue,
+      amount: c.amount,
+    })),
+    discountLines: discountEntries.map((d) => ({
+      id: d.id,
+      description: d.description,
+      discountType: d.discountType,
+      rate: d.rate ?? null,
+      amount: d.amount,
+    })),
   }
 }
 
@@ -796,12 +936,13 @@ export async function voidSaleLocal(
     throw new SaleLocalError('SALE_ALREADY_VOIDED')
   }
 
-  const [itemRows, paymentRows, productRows] = await Promise.all([
+  const [itemRows, paymentRows] = await Promise.all([
     querySaleItemsBySaleIds([saleId]),
     querySalePaymentsBySaleIds([saleId]),
-    fetchProductRowsForBusiness(normalizedBusinessId),
   ])
 
+  const voidProductIds = itemRows.map((r) => r.product_id)
+  const productRows = await fetchProductRowsByIds(normalizedBusinessId, voidProductIds)
   const productsById = new Map(productRows.map((product) => [product.id, product]))
   const nowIso = new Date().toISOString()
   const actorId = options?.actorId?.trim() || 'local-user'
@@ -903,20 +1044,29 @@ export async function voidSaleLocal(
     )
   }
 
-  operations.push(
-    buildOutboxEventOperation(
-      'sales',
-      saleId,
-      buildSaleSyncPayload(row, itemRows, paymentRows, {
-        status: SaleStatus.VOIDED,
-        voidedAt: nowIso,
-        voidedById: isUuid(actorId) ? actorId : null,
-        voidReason: trimmedReason,
-      }),
-    ),
-  )
+  const voidSyncPayload = await buildSaleSyncPayload(row, itemRows, paymentRows, {
+    status: SaleStatus.VOIDED,
+    voidedAt: nowIso,
+    voidedById: isUuid(actorId) ? actorId : null,
+    voidReason: trimmedReason,
+  })
+  operations.push(buildOutboxEventOperation('sales', saleId, voidSyncPayload))
 
   await dbBatch(operations)
+
+  // Credit savings back for any SAVINGS payment on this sale
+  for (const payment of paymentRows) {
+    if (payment.method === PaymentMethod.SAVINGS && payment.savings_account_id) {
+      await recordVoidedSaleTransactionLocal(
+        normalizedBusinessId,
+        payment.savings_account_id,
+        saleId,
+        payment.amount,
+        { recordedById: isUuid(actorId) ? actorId : null },
+      )
+    }
+  }
+
   requestBackgroundSync()
 
   return getSaleLocal(normalizedBusinessId, saleId)
@@ -1165,6 +1315,12 @@ export async function buildSaleReceiptLocal(
     subtotal: sale.subtotal,
     discountAmount: sale.discountAmount,
     chargesAmount: sale.chargesAmount,
+    chargeLines: sale.chargeLines.length > 0
+      ? sale.chargeLines.map((c) => ({ name: c.name, amount: c.amount }))
+      : undefined,
+    discountLines: sale.discountLines.length > 0
+      ? sale.discountLines.map((d) => ({ description: d.description, amount: d.amount }))
+      : undefined,
     totalAmount: sale.totalAmount,
     amountPaid: sale.amountPaid,
     creditAmount: sale.creditAmount,
@@ -1227,15 +1383,51 @@ async function getSaleByClientIdLocal(businessId: string, clientId: string) {
   return row ? hydrateSaleRecord(row) : null
 }
 
-function buildSaleSyncPayload(
+async function querySaleChargeRows(saleId: string): Promise<SaleChargeRow[]> {
+  return dbQuery<SaleChargeRow>(
+    `SELECT id, charge_type_id, name, rate_type, rate_value, amount FROM sale_charges WHERE sale_id = ?`,
+    [saleId],
+  )
+}
+
+async function querySaleDiscountRows(saleId: string): Promise<SaleDiscountRow[]> {
+  return dbQuery<SaleDiscountRow>(
+    `SELECT id, description, discount_type, rate, amount FROM sale_discounts WHERE sale_id = ? AND sale_item_id IS NULL`,
+    [saleId],
+  )
+}
+
+async function buildSaleSyncPayload(
   row: SaleRow,
   items: SaleItemRow[],
   payments: SalePaymentRow[],
   overrides?: Partial<
     Pick<SaleSyncPayload, 'status' | 'voidedAt' | 'voidedById' | 'voidReason'>
   >,
-): SaleSyncPayload {
+): Promise<SaleSyncPayload> {
   const saleNumber = row.sale_number?.trim() || row.receipt_number?.trim() || row.id
+
+  const [chargeRows, discountRows] = await Promise.all([
+    querySaleChargeRows(row.id),
+    querySaleDiscountRows(row.id),
+  ])
+
+  const charges: SaleSyncChargeLinePayload[] = chargeRows.map((c) => ({
+    id: c.id,
+    chargeTypeId: c.charge_type_id ?? null,
+    name: c.name,
+    rateType: c.rate_type as 'PERCENT' | 'FIXED',
+    rateValue: roundMoney(c.rate_value),
+    amount: roundMoney(c.amount),
+  }))
+
+  const discounts: SaleSyncDiscountLinePayload[] = discountRows.map((d) => ({
+    id: d.id,
+    description: d.description,
+    discountType: d.discount_type as 'PERCENTAGE' | 'FIXED_AMOUNT',
+    rate: d.rate ?? null,
+    amount: roundMoney(d.amount),
+  }))
 
   return {
     saleId: row.id,
@@ -1267,6 +1459,7 @@ function buildSaleSyncPayload(
       method: normalizePaymentMethod(payment.method) ?? PaymentMethod.CASH,
       amount: roundMoney(payment.amount),
       mobileMoneyReference: payment.mobile_money_reference ?? undefined,
+      savingsAccountId: payment.savings_account_id ?? undefined,
     })),
     items: items.map((item) => ({
       id: item.id,
@@ -1276,11 +1469,13 @@ function buildSaleSyncPayload(
       discountAmount: roundMoney(item.discount_amount ?? 0),
       costPrice: item.cost_price ?? undefined,
     })),
+    charges: charges.length > 0 ? charges : undefined,
+    discounts: discounts.length > 0 ? discounts : undefined,
   }
 }
 
 async function hydrateSaleRecord(row: SaleRow): Promise<LocalSaleRecord> {
-  const [itemRows, paymentRows] = await Promise.all([
+  const [itemRows, paymentRows, chargeRows, discountRows] = await Promise.all([
     dbQuery<SaleItemRow>(
       `
         SELECT
@@ -1316,6 +1511,7 @@ async function hydrateSaleRecord(row: SaleRow): Promise<LocalSaleRecord> {
           method,
           amount,
           mobile_money_reference,
+          savings_account_id,
           created_at
         FROM sale_payments
         WHERE sale_id = ?
@@ -1323,6 +1519,8 @@ async function hydrateSaleRecord(row: SaleRow): Promise<LocalSaleRecord> {
       `,
       [row.id],
     ),
+    querySaleChargeRows(row.id),
+    querySaleDiscountRows(row.id),
   ])
 
   const items = itemRows.map(mapSaleItemRow)
@@ -1377,6 +1575,20 @@ async function hydrateSaleRecord(row: SaleRow): Promise<LocalSaleRecord> {
     items,
     netAmount: totalAmount,
     momoReference,
+    chargeLines: chargeRows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      rateType: c.rate_type,
+      rateValue: c.rate_value,
+      amount: c.amount,
+    })),
+    discountLines: discountRows.map((d) => ({
+      id: d.id,
+      description: d.description,
+      discountType: d.discount_type,
+      rate: d.rate ?? null,
+      amount: d.amount,
+    })),
   }
 }
 
@@ -1482,6 +1694,7 @@ function mapSalePaymentRow(row: SalePaymentRow): SalePayment {
     method: normalizePaymentMethod(row.method) ?? PaymentMethod.CASH,
     amount: roundMoney(row.amount),
     mobileMoneyReference: row.mobile_money_reference ?? null,
+    savingsAccountId: row.savings_account_id ?? null,
     createdAt: row.created_at,
   }
 }
@@ -1534,6 +1747,7 @@ async function querySalePaymentsBySaleIds(saleIds: string[]) {
         method,
         amount,
         mobile_money_reference,
+        savings_account_id,
         created_at
       FROM sale_payments
       WHERE sale_id IN (${placeholders})
@@ -1704,7 +1918,8 @@ function isSupportedSalePaymentMethod(method: PaymentMethod) {
     method === PaymentMethod.CASH ||
     method === PaymentMethod.MTN_MOMO ||
     method === PaymentMethod.ORANGE_MONEY ||
-    method === PaymentMethod.CARD
+    method === PaymentMethod.CARD ||
+    method === PaymentMethod.SAVINGS
   )
 }
 

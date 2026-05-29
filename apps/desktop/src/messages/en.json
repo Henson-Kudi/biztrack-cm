@@ -31,7 +31,8 @@
     "subscription": "Subscription",
     "team": "Team",
     "roles": "Roles",
-    "settings_general": "General"
+    "settings_general": "General",
+    "savings": "Savings"
   },
   "topbar": {
     "last_sync": "Last sync: {time}",
@@ -70,6 +71,8 @@
     "theme_to_dark": "Switch to dark mode",
     "language_label": "Language",
     "user_fallback": "Local user",
+    "business_fallback": "My business",
+    "switch_business_title": "Your businesses",
     "languages": {
       "en": "English",
       "fr": "Francais"
@@ -226,7 +229,25 @@
       "walk_in": "Walk-in",
       "online_sync": "Synced",
       "offline_sync": "Pending sync",
-      "no_recent_sales": "No sales in this period yet."
+      "no_recent_sales": "No sales in this period yet.",
+      "cashier_subtitle": "Here's your sales activity for today.",
+      "accountant_subtitle": "Financial overview for the selected period.",
+      "collected_revenue": "Collected",
+      "paid_in_full": "{count} paid in full",
+      "cashier_header_active": "Active",
+      "cashier_shift_sales": "Shift sales",
+      "cashier_transactions": "Transactions",
+      "cashier_avg_order": "Avg. order value",
+      "cashier_voids": "Voids",
+      "cashier_void_of_shift": "{count} voided this shift",
+      "cashier_voided_total": "–{amount} total",
+      "cashier_hourly_title": "Hourly transactions",
+      "cashier_activity_title": "Recent activity",
+      "cashier_top_items_title": "Top items this shift",
+      "cashier_payment_split_title": "Payment split",
+      "cashier_no_activity": "No transactions yet today.",
+      "cashier_no_top_items": "No items sold yet today.",
+      "cashier_no_payment_split": "No payments recorded yet."
     },
     "sell": {
       "all_categories": "All",
@@ -262,10 +283,14 @@
       "clear": "Clear all",
       "hold": "Hold sale",
       "charge": "Charge",
-      "discount_title": "Apply a discount",
-      "discount_by": "Type",
+      "discount_title": "Add a discount",
+      "discount_by": "Select type and enter the discount value.",
+      "discount_description": "Description (optional)",
+      "discount_description_placeholder": "e.g. Loyalty discount",
       "charges_title": "Add charges",
-      "charges_hint": "Use this to capture extra fees paid along with the sale.",
+      "charges_hint": "Select a charge type and enter the amount. You can add multiple charges.",
+      "charges_done": "Done",
+      "charges_applied": "Applied charges",
       "percent": "Percent",
       "amount": "Amount",
       "custom_value": "Custom value",
@@ -370,6 +395,18 @@
       "payment_back": "Back to cart",
       "business_required": "Select a business on this device before opening the sell screen.",
       "load_error": "Unable to load the sell workspace.",
+      "payment_methods": "Payment methods",
+      "add_payment_method": "Add payment method",
+      "total_paid": "Amount paid",
+      "split_payment": "Split payment",
+      "savings": "Savings",
+      "savings_available": "Available",
+      "savings_max_usable": "Max usable",
+      "add_charge": "Add charge",
+      "add_custom_charge": "Custom charge",
+      "charge_type_percent": "of subtotal",
+      "charge_type_fixed": "Fixed amount",
+      "charge_auto_calc": "Auto-calculated",
       "errors": {
         "SALE_EMPTY": "Add at least one item before confirming the sale.",
         "SALE_QUANTITY_INVALID": "Each cart line needs a valid quantity.",
@@ -476,6 +513,7 @@
         "title": "Add a product",
         "description": "Start with the essentials. You can refine pricing, media, and stock rules later.",
         "update_title": "Update product",
+        "product": "Product",
         "update_description": "Adjust the catalog details for this product without leaving the workspace.",
         "close": "Close dialog",
         "cancel": "Cancel",
@@ -1238,7 +1276,25 @@
         "void_error": "Unable to void this sale.",
         "void_reason_invalid": "Enter a reason with at least 10 characters.",
         "void_forbidden": "Only owners and managers can void sales.",
-        "void_already_voided": "This sale has already been voided."
+        "void_already_voided": "This sale has already been voided.",
+        "back": "Back",
+        "go_to_sales": "Go to sales",
+        "not_found": "Sale not found.",
+        "financial_summary": "Financial summary",
+        "sale_subtotal": "Subtotal",
+        "sale_discount": "Discount",
+        "sale_charges": "Charges",
+        "sale_paid": "Amount paid",
+        "sale_change": "Change given",
+        "payment_receipt_title": "PAYMENT RECEIPT",
+        "print_payment_receipt": "Print receipt",
+        "share_payment_receipt": "Share receipt",
+        "payment_receipt_client": "Client",
+        "payment_receipt_paid": "Amount Paid",
+        "payment_receipt_method": "Method",
+        "payment_receipt_remaining": "Remaining Balance",
+        "receipt_number_label": "Receipt no.",
+        "credit_label": "On Credit"
       }
     },
     "contacts": {
@@ -1335,7 +1391,14 @@
         "contact_exists": "A contact with this phone number already exists.",
         "type_conflict": "This contact's saved debt history requires a different contact type.",
         "contacts_quota_reached": "This business has reached its contact limit for the current plan. Connect to the internet and upgrade or archive a contact before adding another one.",
-        "load_error": "Could not save the contact right now."
+        "load_error": "Could not save the contact right now.",
+        "ob_title": "Opening balance (optional)",
+        "ob_hint": "Record the balance this contact already had before you started tracking in BizTrack.",
+        "ob_receivable_label": "They owe you (XAF)",
+        "ob_payable_label": "You owe them (XAF)",
+        "ob_amount_placeholder": "0",
+        "ob_date_label": "As of date",
+        "ob_save_error": "Contact saved, but the opening balance could not be set. Open the contact detail page to add it."
       }
     },
     "contactDetail": {
@@ -1517,12 +1580,14 @@
           "payment_received_method": "{method} payment received",
           "payment_made": "Payment made",
           "payment_made_method": "{method} payment made",
-          "write_off": "Written off"
+          "write_off": "Written off",
+          "opening_balance": "Opening balance"
         },
         "types": {
           "debt": "Debt",
           "payment": "Payment",
-          "write_off": "Write-off"
+          "write_off": "Write-off",
+          "opening_balance": "Opening balance"
         }
       },
       "statuses": {
@@ -1530,6 +1595,30 @@
         "partially_paid": "Partially paid",
         "settled": "Settled",
         "written_off": "Written off"
+      },
+      "opening_balance": {
+        "title": "Opening Balances",
+        "description": "Set a starting balance for this contact to account for debts that predate your records in BizTrack.",
+        "receivable_label": "Customer opening balance (they owe you)",
+        "payable_label": "Supplier opening balance (you owe them)",
+        "not_set": "Not set",
+        "set": "Set",
+        "edit": "Edit",
+        "delete": "Remove",
+        "deleting": "Removing...",
+        "cancel": "Cancel",
+        "save": "Save balance",
+        "saving": "Saving...",
+        "amount_label": "Amount (XAF)",
+        "date_label": "As of date",
+        "notes_label": "Notes (optional)",
+        "notes_placeholder": "e.g. Balance brought forward from paper records",
+        "amount_invalid": "Enter a valid amount greater than 0.",
+        "date_required": "Select a date for this opening balance.",
+        "saved": "Opening balance saved.",
+        "save_error": "Unable to save the opening balance.",
+        "deleted": "Opening balance removed.",
+        "delete_error": "Unable to remove the opening balance."
       }
     },
     "debtors": {
@@ -2127,7 +2216,32 @@
     },
     "settings": {
       "title": "Settings",
-      "subtitle": "Settings - coming soon."
+      "subtitle": "Settings - coming soon.",
+      "general": {
+        "title": "General",
+        "subtitle": "Update your business information.",
+        "offline_warning": "You need to be online to update business settings.",
+        "loading": "Loading business information...",
+        "form_title": "Business Information",
+        "field_name": "Business name",
+        "field_name_placeholder": "e.g. Epicerie du coin",
+        "field_description": "Description",
+        "field_description_placeholder": "Brief description of your business",
+        "field_phone": "Phone number",
+        "field_email": "Email address",
+        "field_email_placeholder": "contact@business.com",
+        "field_address": "Address",
+        "field_address_placeholder": "Street address",
+        "field_city": "City",
+        "field_city_placeholder": "e.g. Yaounde",
+        "field_country": "Country",
+        "field_country_placeholder": "e.g. Cameroon",
+        "field_currency": "Currency",
+        "save_action": "Save changes",
+        "saving": "Saving...",
+        "save_success": "Business information updated successfully.",
+        "save_error": "Failed to update business information."
+      }
     },
     "team": {
       "title": "Team",
@@ -2325,6 +2439,101 @@
       "cancel_error": "Unable to cancel subscription.",
       "cancelled_notice": "Your subscription will cancel on {date}.",
       "subscription_label": "Subscription"
+    },
+    "savings": {
+      "title": "Savings",
+      "subtitle": "Manage customer savings accounts",
+      "loading": "Loading savings accounts...",
+      "load_error": "Failed to load savings accounts",
+      "business_required": "No active business session",
+      "new_deposit": "New deposit",
+      "table": {
+        "number": "Account #",
+        "customer": "Customer",
+        "balance": "Balance",
+        "total_deposited": "Total deposited",
+        "last_activity": "Last activity",
+        "no_customer": "Unknown customer",
+        "actions": "Actions"
+      },
+      "actions": {
+        "more": "More",
+        "view_statement": "View statement",
+        "add_deposit": "Add deposit",
+        "refund": "Refund"
+      },
+      "empty": {
+        "title": "No savings accounts yet",
+        "subtitle": "Create a new deposit to open a savings account for a customer."
+      },
+      "pagination": {
+        "showing": "Showing {from}–{to} of {total}",
+        "none": "No results"
+      },
+      "deposit": {
+        "title": "New deposit",
+        "description": "Record a customer deposit. If the customer already has an account, the deposit will be added to their balance.",
+        "customer_label": "Customer",
+        "pick_customer": "Select customer",
+        "amount": "Amount (XAF)",
+        "method": "Payment method",
+        "reference": "Mobile money reference",
+        "reference_placeholder": "e.g. CM-12345678",
+        "notes": "Notes",
+        "notes_placeholder": "Optional notes",
+        "submit": "Record deposit",
+        "submitting": "Recording...",
+        "success": "Deposit recorded successfully",
+        "cancel": "Cancel",
+        "existing_balance": "Existing balance: XAF {balance}"
+      },
+      "refund": {
+        "title": "Refund",
+        "description": "Issue a refund from the savings account balance.",
+        "available_balance": "Available balance: XAF {balance}",
+        "amount": "Refund amount (XAF)",
+        "method": "Payment method",
+        "reference": "Mobile money reference",
+        "reference_placeholder": "e.g. CM-12345678",
+        "notes": "Notes",
+        "notes_placeholder": "Optional notes",
+        "submit": "Record refund",
+        "submitting": "Processing...",
+        "success": "Refund recorded successfully",
+        "cancel": "Cancel"
+      },
+      "detail": {
+        "back": "Back to savings",
+        "account_number": "Account number",
+        "customer": "Customer",
+        "balance": "Current balance",
+        "total_deposited": "Total deposited",
+        "total_refunded": "Total refunded",
+        "transaction_type_deposit": "Deposit",
+        "transaction_type_refund": "Refund",
+        "transaction_type_sale": "Sale",
+        "transaction_type_voided_sale": "Voided sale",
+        "date": "Date",
+        "method": "Method",
+        "notes": "Notes",
+        "amount": "Amount",
+        "running_balance": "Running balance",
+        "no_transactions": "No transactions yet",
+        "tagged_products": "Tagged products",
+        "tagged_products_none": "No tagged products",
+        "add_deposit": "Add deposit",
+        "refund_balance": "Refund",
+        "share_statement": "Share statement",
+        "share_generating": "Generating PDF…",
+        "share_error": "Failed to generate statement PDF"
+      },
+      "errors": {
+        "SAVINGS_CUSTOMER_REQUIRED": "A customer is required",
+        "SAVINGS_AMOUNT_INVALID": "Amount must be greater than zero",
+        "SAVINGS_INSUFFICIENT_BALANCE": "Insufficient balance for this refund",
+        "SAVINGS_NOT_FOUND": "Savings account not found",
+        "SAVINGS_METHOD_INVALID": "Invalid payment method"
+      }
     }
   },
   "auth": {

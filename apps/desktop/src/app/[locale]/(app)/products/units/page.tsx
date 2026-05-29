@@ -13,12 +13,11 @@ import { ViewModeToggle } from '@/components/products/ViewModeToggle'
 import { getUnitErrorMessage } from '@/components/products/resource-error-messages'
 import { formatDateLabel } from '@/components/products/product-utils'
 import {
+  countProductsByUnitLocal,
   deleteUnitOfMeasureLocal,
-  fetchProductRowsForBusiness,
   listUnitOfMeasuresLocal,
   restoreUnitOfMeasureLocal,
   setUnitOfMeasureActiveStateLocal,
-  type ProductRow,
 } from '@/services/products.local'
 import { useAuthStore } from '@/stores/auth.store'
 
@@ -67,7 +66,7 @@ export default function ProductUnitsPage() {
       setError(null)
 
       try {
-        const [unitsResult, productRows] = await Promise.all([
+        const [unitsResult, countByUnit] = await Promise.all([
           listUnitOfMeasuresLocal(currentBusinessId, {
             page,
             limit: PAGE_SIZE,
@@ -76,24 +75,11 @@ export default function ProductUnitsPage() {
             search: deferredSearch.trim() || undefined,
             includeInactive: true,
           }),
-          fetchProductRowsForBusiness(currentBusinessId),
+          countProductsByUnitLocal(currentBusinessId),
         ])
 
         if (!active) {
           return
-        }
-
-        const countByUnit = new Map<string, number>()
-
-        for (const row of productRows as ProductRow[]) {
-          if (!row.unit_of_measure_id) {
-            continue
-          }
-
-          countByUnit.set(
-            row.unit_of_measure_id,
-            (countByUnit.get(row.unit_of_measure_id) ?? 0) + 1,
-          )
         }
 
         setUnits(unitsResult)

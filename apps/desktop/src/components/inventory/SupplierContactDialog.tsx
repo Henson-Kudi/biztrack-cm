@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { DebtDirection } from '@biztrack/types'
 import { ContactPickerDialog } from '@/components/contacts/ContactPickerDialog'
 import {
   createSupplierContactLocal,
@@ -13,6 +14,7 @@ type SupplierContactDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   selectedSupplierId?: string | null
+  createdById?: string | null
   onSelect: (supplier: LocalContactRecord) => void
 }
 
@@ -21,9 +23,11 @@ export function SupplierContactDialog({
   open,
   onOpenChange,
   selectedSupplierId,
+  createdById,
   onSelect,
 }: SupplierContactDialogProps) {
   const t = useTranslations('app.inventory')
+  const tContacts = useTranslations('app.contacts')
 
   return (
     <ContactPickerDialog
@@ -31,9 +35,11 @@ export function SupplierContactDialog({
       open={open}
       onOpenChange={onOpenChange}
       selectedContactId={selectedSupplierId}
+      createdById={createdById}
       onSelect={onSelect}
       listContacts={listSupplierContactsLocal}
       createContact={createSupplierContactLocal}
+      openingBalanceDirection={DebtDirection.PAYABLE}
       copy={{
         title: t('restock.supplier_dialog_title'),
         description: t('restock.supplier_dialog_description'),
@@ -57,6 +63,12 @@ export function SupplierContactDialog({
         phoneInvalid: t('restock.phone_invalid'),
         nameRequired: t('restock.name_required'),
         contactExists: t('restock.contact_exists'),
+        obTitle: tContacts('dialog.ob_title'),
+        obHint: tContacts('dialog.ob_hint'),
+        obAmountLabel: tContacts('dialog.ob_payable_label'),
+        obAmountPlaceholder: tContacts('dialog.ob_amount_placeholder'),
+        obDateLabel: tContacts('dialog.ob_date_label'),
+        obSaveError: tContacts('dialog.ob_save_error'),
       }}
     />
   )

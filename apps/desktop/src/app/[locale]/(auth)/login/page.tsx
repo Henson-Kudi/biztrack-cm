@@ -16,7 +16,7 @@ import { getApiErrorDetails, getApiErrorMessage } from '@/services/api-response'
 import { useAuthStore } from '@/stores/auth.store'
 import { normalizeAuthNextStep, routeForNextStep } from '@/lib/auth-routing'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
-import { getLastBusinessContext } from '@/stores/auth.store'
+import { getLastSessionContext } from '@/stores/auth.store'
 import type { AuthNextStep } from '@biztrack/types'
 import bcrypt from 'bcryptjs'
 
@@ -83,8 +83,8 @@ export default function LoginPage() {
         setError(t('login.offline_incorrect'))
         return
       }
-      const { businessId, role } = await getLastBusinessContext()
-      setOfflineSession(businessId ?? null, role)
+      const { businessId, role } = await getLastSessionContext()
+      await setOfflineSession(businessId ?? null, role)
       goTo('/')
     } catch {
       setError(t('login.offline_failed'))

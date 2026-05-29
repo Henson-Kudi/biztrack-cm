@@ -1,4 +1,6 @@
 import type {
+  CashierActivityItem,
+  CashierShiftSummary,
   DailySalesSummary,
   PaymentMethod,
   Sale,
@@ -314,6 +316,62 @@ export class DailySalesSummaryDto implements DailySalesSummary {
     dto.creditSales = entity.creditSales
     dto.voidedSales = entity.voidedSales
     dto.voidedAmount = entity.voidedAmount
+    return dto
+  }
+}
+
+export class CashierActivityItemDto implements CashierActivityItem {
+  id!: string
+  saleNumber!: string
+  type!: 'sale' | 'void'
+  totalAmount!: number
+  soldAt!: string
+  voidedAt!: string | null
+  voidReason!: string | null
+  itemSummary!: string
+  customerName!: string | null
+}
+
+export class CashierShiftSummaryDto implements CashierShiftSummary {
+  cashierId!: string
+  cashierName!: string | null
+  date!: string
+  shiftRevenue!: number
+  transactionCount!: number
+  avgOrderValue!: number
+  voidCount!: number
+  voidAmount!: number
+  hourlyCounts!: Array<{ hour: number; count: number }>
+  topItems!: Array<{ productId: string; productName: string; quantity: number }>
+  paymentSplit!: Array<{ method: string; amount: number }>
+  recentActivity!: CashierActivityItemDto[]
+
+  static fromData(data: CashierShiftSummary): CashierShiftSummaryDto {
+    const dto = new CashierShiftSummaryDto()
+    dto.cashierId = data.cashierId
+    dto.cashierName = data.cashierName
+    dto.date = data.date
+    dto.shiftRevenue = data.shiftRevenue
+    dto.transactionCount = data.transactionCount
+    dto.avgOrderValue = data.avgOrderValue
+    dto.voidCount = data.voidCount
+    dto.voidAmount = data.voidAmount
+    dto.hourlyCounts = data.hourlyCounts
+    dto.topItems = data.topItems
+    dto.paymentSplit = data.paymentSplit
+    dto.recentActivity = data.recentActivity.map((item) => {
+      const actDto = new CashierActivityItemDto()
+      actDto.id = item.id
+      actDto.saleNumber = item.saleNumber
+      actDto.type = item.type
+      actDto.totalAmount = item.totalAmount
+      actDto.soldAt = item.soldAt
+      actDto.voidedAt = item.voidedAt
+      actDto.voidReason = item.voidReason
+      actDto.itemSummary = item.itemSummary
+      actDto.customerName = item.customerName
+      return actDto
+    })
     return dto
   }
 }

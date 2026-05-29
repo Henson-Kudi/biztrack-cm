@@ -13,6 +13,8 @@ import type {
   InventoryMovementSyncRecord,
   InventoryRestockSyncPayload,
   InventoryThresholdSyncPayload,
+  OpeningBalanceSyncPayload,
+  OpeningBalanceSyncRecord,
   RoleSyncRecord,
   SaleItemSyncRecord,
   SalePaymentSyncRecord,
@@ -27,6 +29,10 @@ import type {
   NetworkSnapshot,
   RestockItemSyncRecord,
   RestockRecordSyncRecord,
+  SavingsAccountSyncPayload,
+  SavingsAccountSyncRecord,
+  SavingsTransactionSyncPayload,
+  SavingsTransactionSyncRecord,
   SyncBatchStatusResponse,
   SyncEntity,
   SyncOperationFailureDetails,
@@ -59,6 +65,7 @@ type OutboxRow = {
   id: string
   entity:
     | 'contacts'
+    | 'openingBalances'
     | 'products'
     | 'productCategories'
     | 'expenseCategories'
@@ -69,6 +76,9 @@ type OutboxRow = {
     | 'debts'
     | 'sales'
     | 'expenses'
+    | 'savings'
+    | 'savingsTransactions'
+  operation: string
   record_id: string
   payload: string | null
   status: 'pending' | 'failed'
@@ -250,6 +260,7 @@ const QUALITY_RANK: Record<NetworkQuality, number> = {
 // dependents when a device comes back online with a large backlog.
 const OUTBOX_ENTITY_TO_SYNC_ENTITY: Record<OutboxRow['entity'], SyncEntity> = {
   contacts: 'contact',
+  openingBalances: 'opening_balance',
   unitOfMeasures: 'unit_of_measure',
   productCategories: 'product_category',
   expenseCategories: 'expense_category',
@@ -260,6 +271,8 @@ const OUTBOX_ENTITY_TO_SYNC_ENTITY: Record<OutboxRow['entity'], SyncEntity> = {
   debts: 'debt',
   sales: 'sale',
   expenses: 'expense',
+  savings: 'savings',
+  savingsTransactions: 'savings_transaction',
 }
 
 const DEFAULT_UNIT_SYNC_ALIASES = {
@@ -704,6 +717,33 @@ export class SyncService extends EventEmitter {
         })
       }
 
+      if (row.entity === 'openingBalances') {
+        const isDelete = row.operation === 'DELETE' || !row.payload
+        if (isDelete) {
+          operations.push({
+            operationId: row.id,
+            entity: 'opening_balance',
+            action: 'DELETE',
+            recordId: row.record_id,
+            updatedAt: row.updated_at,
+            payload: null,
+          })
+        } else {
+          const payload = this.parseOutboxPayload<OpeningBalanceSyncPayload>(row.payload)
+          if (!payload) {
+            continue
+          }
+          operations.push({
+            operationId: row.id,
+            entity: 'opening_balance',
+            action: 'UPSERT',
+            recordId: row.record_id,
+            updatedAt: payload.createdAt ?? row.updated_at,
+            payload,
+          })
+        }
+      }
+
       if (row.entity === 'inventoryThresholds') {
         const payload = this.parseOutboxPayload<InventoryThresholdSyncPayload>(row.payload)
         operations.push({
@@ -783,6 +823,37 @@ export class SyncService extends EventEmitter {
           payload: expense,
         })
       }
+
+      if (row.entity === 'savings') {
+        const payload = this.parseOutboxPayload<SavingsAccountSyncPayload>(row.payload)
+        if (!payload) {
+          continue
+        }
+        operations.push({
+          operationId: row.id,
+          entity: 'savings',
+          action: 'UPSERT',
+          recordId: row.record_id,
+          updatedAt: payload.updatedAt ?? row.updated_at,
+          payload,
+        })
+      }
+
+      if (row.entity === 'savingsTransactions') {
+        const payload = this.parseOutboxPayload<SavingsTransactionSyncPayload>(row.payload)
+        if (!payload) {
+          continue
+        }
+        operations.push({
+          operationId: row.id,
+          entity: 'savings_transaction',
+          action: 'UPSERT',
+          recordId: row.record_id,
+          updatedAt: payload.createdAt ?? row.updated_at,
+          payload,
+        })
+      }
+
     }
 
     operations.sort((left, right) => {
@@ -1234,6 +1305,7 @@ export class SyncService extends EventEmitter {
   private async applyPulledChanges(response: SyncPullResponse) {
     const operations: Array<{ sql: string; params?: unknown[] }> = []
     const serverContacts = response.changes.contacts ?? []
+    const serverOpeningBalances = (response.changes.openingBalances ?? []) as OpeningBalanceSyncRecord[]
     const serverUnits = response.changes.unitOfMeasures ?? []
     const serverProductCategories = response.changes.productCategories ?? []
     const serverExpenseCategories = response.changes.expenseCategories ?? []
@@ -1249,6 +1321,8 @@ export class SyncService extends EventEmitter {
     const serverExpenses = response.changes.expenses ?? []
     const serverTeamMembers = response.changes.teamMembers ?? []
     const serverRoles = response.changes.roles ?? []
+    const serverSavingsAccounts = (response.changes.savingsAccounts ?? []) as SavingsAccountSyncRecord[]
+    const serverSavingsTransactions = (response.changes.savingsTransactions ?? []) as SavingsTransactionSyncRecord[]
 
     if (serverUnits.length > 0) {
       this.applyUnitOfMeasureChanges(serverUnits)
@@ -1256,6 +1330,10 @@ export class SyncService extends EventEmitter {
 
     for (const record of serverContacts) {
       operations.push(this.buildContactUpsertOperation(record))
+    }
+
+    for (const record of serverOpeningBalances) {
+      operations.push(this.buildOpeningBalanceUpsertOperation(record))
     }
 
     for (const record of serverProductCategories) {
@@ -1320,6 +1398,14 @@ export class SyncService extends EventEmitter {
 
     for (const record of serverRoles) {
       operations.push(this.buildRoleUpsertOperation(record))
+    }
+
+    for (const record of serverSavingsAccounts) {
+      operations.push(this.buildSavingsAccountUpsertOperation(record))
+    }
+
+    for (const record of serverSavingsTransactions) {
+      operations.push(this.buildSavingsTransactionUpsertOperation(record))
     }
 
     if (operations.length > 0) {
@@ -1690,6 +1776,47 @@ export class SyncService extends EventEmitter {
         record.notes ?? null,
         record.isActive ? 1 : 0,
         record.createdById ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    }
+  }
+
+  private buildOpeningBalanceUpsertOperation(record: OpeningBalanceSyncRecord) {
+    return {
+      sql: `
+        INSERT INTO contact_opening_balances (
+          id,
+          business_id,
+          contact_id,
+          direction,
+          amount,
+          as_of_date,
+          notes,
+          recorded_by_id,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          business_id = excluded.business_id,
+          contact_id = excluded.contact_id,
+          direction = excluded.direction,
+          amount = excluded.amount,
+          as_of_date = excluded.as_of_date,
+          notes = excluded.notes,
+          recorded_by_id = excluded.recorded_by_id,
+          updated_at = excluded.updated_at
+        WHERE excluded.updated_at >= contact_opening_balances.updated_at
+      `,
+      params: [
+        record.id,
+        record.businessId,
+        record.contactId,
+        record.direction,
+        record.amount,
+        record.asOfDate,
+        record.notes ?? null,
+        record.recordedById ?? null,
         record.createdAt,
         record.updatedAt,
       ],
@@ -2486,6 +2613,99 @@ export class SyncService extends EventEmitter {
     }
   }
 
+  private buildSavingsAccountUpsertOperation(record: SavingsAccountSyncRecord) {
+    const now = new Date().toISOString()
+    const taggedProductsJson = record.taggedProducts ? JSON.stringify(record.taggedProducts) : null
+
+    return {
+      sql: `
+        INSERT INTO savings_accounts (
+          id,
+          business_id,
+          customer_id,
+          customer_name,
+          customer_phone,
+          account_number,
+          balance,
+          total_deposited,
+          total_refunded,
+          total_used,
+          tagged_products,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          customer_name = excluded.customer_name,
+          customer_phone = excluded.customer_phone,
+          account_number = excluded.account_number,
+          balance = excluded.balance,
+          total_deposited = excluded.total_deposited,
+          total_refunded = excluded.total_refunded,
+          total_used = excluded.total_used,
+          tagged_products = excluded.tagged_products,
+          is_deleted = excluded.is_deleted,
+          updated_at = excluded.updated_at
+      `,
+      params: [
+        record.id,
+        record.businessId,
+        record.customerId,
+        record.customerName ?? null,
+        record.customerPhone ?? null,
+        record.accountNumber,
+        record.balance ?? 0,
+        record.totalDeposited ?? 0,
+        record.totalRefunded ?? 0,
+        record.totalUsed ?? 0,
+        taggedProductsJson,
+        record.isDeleted ? 1 : 0,
+        record.createdAt ?? now,
+        record.updatedAt ?? now,
+      ],
+    }
+  }
+
+  private buildSavingsTransactionUpsertOperation(record: SavingsTransactionSyncRecord) {
+    const now = new Date().toISOString()
+
+    return {
+      sql: `
+        INSERT INTO savings_transactions (
+          id, savings_id, business_id, type, direction, amount, method,
+          mobile_money_reference, sale_id, notes, recorded_by_id, occurred_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          savings_id = excluded.savings_id,
+          business_id = excluded.business_id,
+          type = excluded.type,
+          direction = excluded.direction,
+          amount = excluded.amount,
+          method = excluded.method,
+          mobile_money_reference = excluded.mobile_money_reference,
+          sale_id = excluded.sale_id,
+          notes = excluded.notes,
+          recorded_by_id = excluded.recorded_by_id,
+          occurred_at = excluded.occurred_at
+      `,
+      params: [
+        record.id,
+        record.savingsId,
+        record.businessId,
+        record.type,
+        record.direction,
+        record.amount,
+        record.method ?? null,
+        record.mobileMoneyReference ?? null,
+        record.saleId ?? null,
+        record.notes ?? null,
+        record.recordedById ?? null,
+        record.occurredAt,
+        record.createdAt ?? now,
+      ],
+    }
+  }
+
   private async refreshRealtimeConnection(forceReconnect = false) {
     const settings = await this.readSettings()
     const authTokens = this.getStoredTokens()
@@ -3009,6 +3229,7 @@ export class SyncService extends EventEmitter {
         SELECT
           id,
           entity,
+          operation,
           record_id,
           payload,
           status,

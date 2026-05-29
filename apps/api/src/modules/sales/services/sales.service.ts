@@ -7,6 +7,7 @@ import {
   DebtSource,
   PaymentMethod,
   SaleStatus,
+  type CashierShiftSummary,
   type DailySalesSummary,
   type JwtPayload,
   type SaleSyncPayload,
@@ -24,12 +25,15 @@ import {
 import { Business } from '@/entities/business.entity'
 import { Product } from '@/entities/product.entity'
 import { Sale } from '@/entities/sale.entity'
+import { SaleCharge } from '@/entities/sale-charge.entity'
+import { SaleDiscount } from '@/entities/sale-discount.entity'
 import { SaleItem } from '@/entities/sale-item.entity'
 import { SalePayment } from '@/entities/sale-payment.entity'
 import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
 import { DebtsService } from '@/modules/debts/services/debts.service'
 import { InventoryService } from '@/modules/inventory/services/inventory.service'
+import { SavingsService } from '@/modules/savings/services/savings.service'
 import type { CreateSaleDto } from '../dto/create-sale.dto'
 import type { VoidSaleDto } from '../dto/void-sale.dto'
 import { DailySalesSummaryService } from './daily-sales-summary.service'
@@ -66,6 +70,7 @@ export class SalesService {
     private readonly salesRepo: Repository<Sale>,
     private readonly debtsService: DebtsService,
     private readonly inventoryService: InventoryService,
+    private readonly savingsService: SavingsService,
     private readonly saleNumberService: SaleNumberService,
     private readonly dailySummaryService: DailySalesSummaryService,
     private readonly i18n: I18nService<I18nTranslations>,
@@ -372,9 +377,51 @@ export class SalesService {
               method: payment.method,
               amount: this.roundMoney(payment.amount),
               mobileMoneyReference: payment.mobileMoneyReference?.trim() || null,
+              savingsAccountId: payment.savingsAccountId ?? null,
             }),
           ),
         )
+
+        if (payload.charges && payload.charges.length > 0) {
+          const chargeRepo = manager.getRepository(SaleCharge)
+          for (const c of payload.charges) {
+            const existing = await chargeRepo.findOne({ where: { id: c.id } })
+            if (!existing) {
+              await chargeRepo.save(
+                chargeRepo.create({
+                  id: c.id,
+                  saleId: sale.id,
+                  businessId,
+                  chargeTypeId: c.chargeTypeId ?? null,
+                  name: c.name,
+                  rateType: c.rateType,
+                  rateValue: c.rateValue,
+                  amount: this.roundMoney(c.amount),
+                }),
+              )
+            }
+          }
+        }
+
+        if (payload.discounts && payload.discounts.length > 0) {
+          const discountRepo = manager.getRepository(SaleDiscount)
+          for (const d of payload.discounts) {
+            const existing = await discountRepo.findOne({ where: { id: d.id } })
+            if (!existing) {
+              await discountRepo.save(
+                discountRepo.create({
+                  id: d.id,
+                  saleId: sale.id,
+                  businessId,
+                  description: d.description,
+                  discountType: d.discountType,
+                  rate: d.rate ?? null,
+                  amount: this.roundMoney(d.amount),
+                }),
+              )
+            }
+          }
+        }
 
         await this.inventoryService.deductForSale(
           businessId,
@@ -684,6 +731,141 @@ export class SalesService {
     }
   }
 
+  async getCashierShiftSummary(
+    businessId: string,
+    cashierId: string,
+    date: string,
+  ): Promise<CashierShiftSummary> {
+    try {
+      const sales = await this.salesRepo
+        .createQueryBuilder('sale')
+        .leftJoinAndSelect('sale.items', 'items')
+        .leftJoinAndSelect('sale.payments', 'payments')
+        .leftJoinAndSelect('sale.cashier', 'cashier')
+        .where('sale.business_id = :businessId', { businessId })
+        .andWhere('sale.cashier_id = :cashierId', { cashierId })
+        .andWhere('sale.sale_date = :date', { date })
+        .orderBy('sale.sold_at', 'DESC')
+        .getMany()
+
+      if (sales.length === 0) {
+        return {
+          cashierId,
+          cashierName: null,
+          date,
+          shiftRevenue: 0,
+          transactionCount: 0,
+          avgOrderValue: 0,
+          voidCount: 0,
+          voidAmount: 0,
+          hourlyCounts: [],
+          topItems: [],
+          paymentSplit: [],
+          recentActivity: [],
+        }
+      }
+
+      const cashierName = sales[0]?.cashier?.name ?? null
+      let shiftRevenue = 0
+      let transactionCount = 0
+      let voidCount = 0
+      let voidAmount = 0
+      const hourlyMap = new Map<number, number>()
+      const productMap = new Map<string, { productName: string; quantity: number }>()
+      const paymentMap = new Map<string, number>()
+      const recentActivity: CashierShiftSummary['recentActivity'] = []
+
+      for (const sale of sales) {
+        const saleTotal = sale.totalAmount
+        const isVoid = sale.status === SaleStatus.VOIDED
+        const isCompleted = sale.status === SaleStatus.COMPLETED
+
+        if (isVoid) {
+          voidCount += 1
+          voidAmount = this.roundMoney(voidAmount + saleTotal)
+        } else if (isCompleted) {
+          transactionCount += 1
+          shiftRevenue = this.roundMoney(shiftRevenue + saleTotal)
+
+          const hour = new Date(sale.soldAt).getHours()
+          hourlyMap.set(hour, (hourlyMap.get(hour) ?? 0) + 1)
+
+          for (const item of sale.items ?? []) {
+            const existing = productMap.get(item.productId)
+            if (existing) {
+              existing.quantity += item.quantity
+            } else {
+              productMap.set(item.productId, {
+                productName: item.productName,
+                quantity: item.quantity,
+              })
+            }
+          }
+
+          for (const payment of sale.payments ?? []) {
+            paymentMap.set(
+              payment.method,
+              this.roundMoney((paymentMap.get(payment.method) ?? 0) + payment.amount),
+            )
+          }
+        }
+
+        if (recentActivity.length < 15) {
+          const items = sale.items ?? []
+          const parts = items.slice(0, 3).map((item) => {
+            const qty = Number.isInteger(item.quantity)
+              ? item.quantity
+              : parseFloat(item.quantity.toFixed(2))
+            return `${item.productName} × ${qty}`
+          })
+          if (items.length > 3) parts.push(`+${items.length - 3}`)
+
+          recentActivity.push({
+            id: sale.id,
+            saleNumber: sale.saleNumber,
+            type: isVoid ? 'void' : 'sale',
+            totalAmount: this.roundMoney(saleTotal),
+            soldAt: sale.soldAt.toISOString(),
+            voidedAt: sale.voidedAt?.toISOString() ?? null,
+            voidReason: sale.voidReason ?? null,
+            itemSummary: parts.join(', '),
+            customerName: sale.customerName ?? null,
+          })
+        }
+      }
+
+      const hourlyCounts = Array.from(hourlyMap.entries())
+        .map(([hour, count]) => ({ hour, count }))
+        .sort((a, b) => a.hour - b.hour)
+
+      const topItems = Array.from(productMap.entries())
+        .map(([productId, { productName, quantity }]) => ({ productId, productName, quantity }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5)
+
+      const paymentSplit = Array.from(paymentMap.entries())
+        .map(([method, amount]) => ({ method, amount }))
+        .sort((a, b) => b.amount - a.amount)
+
+      return {
+        cashierId,
+        cashierName,
+        date,
+        shiftRevenue,
+        transactionCount,
+        avgOrderValue: transactionCount > 0 ? this.roundMoney(shiftRevenue / transactionCount) : 0,
+        voidCount,
+        voidAmount,
+        hourlyCounts,
+        topItems,
+        paymentSplit,
+        recentActivity,
+      }
+    } catch (error) {
+      return this.handleServiceError('getCashierShiftSummary', error, { businessId, cashierId, date })
+    }
+  }
+
   async getReceipt(id: string, businessId: string) {
     try {
       const [sale, business] = await Promise.all([
@@ -881,6 +1063,18 @@ export class SalesService {
       writtenOffAt: voidedAt,
       writtenOffById: voidedById,
     })
+
+    for (const payment of sale.payments ?? []) {
+      if (payment.method === PaymentMethod.SAVINGS && payment.savingsAccountId) {
+        await this.savingsService.createVoidedSaleTransaction(
+          businessId,
+          payment.savingsAccountId,
+          sale.id,
+          payment.amount,
+          voidedAt,
+        )
+      }
+    }
   }
 
   private resolveSortField(sortBy?: string) {

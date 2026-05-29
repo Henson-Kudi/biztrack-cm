@@ -13,12 +13,11 @@ import { ViewModeToggle } from '@/components/products/ViewModeToggle'
 import { getCategoryErrorMessage } from '@/components/products/resource-error-messages'
 import { formatDateLabel } from '@/components/products/product-utils'
 import {
+  countProductsByCategoryLocal,
   deleteCategoryLocal,
-  fetchProductRowsForBusiness,
   listCategoriesLocal,
   restoreCategoryLocal,
   setCategoryActiveStateLocal,
-  type ProductRow,
 } from '@/services/products.local'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePlanStore } from '@/stores/plan.store'
@@ -71,7 +70,7 @@ export default function ProductCategoriesPage() {
       setError(null)
 
       try {
-        const [categoriesResult, productRows] = await Promise.all([
+        const [categoriesResult, countByCategory] = await Promise.all([
           listCategoriesLocal(currentBusinessId, {
             page,
             limit: PAGE_SIZE,
@@ -80,28 +79,16 @@ export default function ProductCategoriesPage() {
             search: deferredSearch.trim() || undefined,
             includeInactive: true,
           }),
-          fetchProductRowsForBusiness(currentBusinessId),
+          countProductsByCategoryLocal(currentBusinessId),
         ])
 
         if (!active) {
           return
         }
 
-        const countByCategory = new Map<string, number>()
-        let nextUncategorizedCount = 0
-
-        for (const row of productRows as ProductRow[]) {
-          if (!row.category_id) {
-            nextUncategorizedCount += 1
-            continue
-          }
-
-          countByCategory.set(row.category_id, (countByCategory.get(row.category_id) ?? 0) + 1)
-        }
-
         setCategories(categoriesResult)
         setProductCounts(Object.fromEntries(countByCategory.entries()))
-        setUncategorizedCount(nextUncategorizedCount)
+        setUncategorizedCount(0)
       } catch (loadError) {
         if (!active) {
           return

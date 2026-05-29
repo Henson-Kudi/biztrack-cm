@@ -26,6 +26,7 @@ export enum DebtStatus {
 }
 
 export enum ContactStatementEntryType {
+  OPENING_BALANCE = 'OPENING_BALANCE',
   DEBT_CREATED = 'DEBT_CREATED',
   PAYMENT = 'PAYMENT',
   WRITE_OFF = 'WRITE_OFF',
@@ -141,6 +142,62 @@ export interface ContactStatement {
   openingBalance: number
   entries: ContactStatementEntry[]
   closingBalance: number
+}
+
+export interface ContactOpeningBalance {
+  id: string
+  contactId: string
+  businessId: string
+  direction: DebtDirection
+  amount: number
+  asOfDate: string
+  notes?: string | null
+  recordedById?: string | null
+  createdAt: IsoDateString
+  updatedAt: IsoDateString
+}
+
+export interface UpsertOpeningBalanceRequest {
+  direction: DebtDirection
+  amount: number
+  asOfDate: string
+  notes?: string
+}
+
+export interface ContactNetPosition {
+  contact: { id: string; name: string; phone?: string | null }
+  receivable: {
+    openingBalance: number
+    totalDebts: number
+    totalPaid: number
+    netBalance: number
+  }
+  payable: {
+    openingBalance: number
+    totalDebts: number
+    totalPaid: number
+    netBalance: number
+  }
+  net: number
+}
+
+export interface AgeingEntry {
+  contactId: string
+  contactName: string
+  contactPhone?: string | null
+  openingBalance: number
+  current: number
+  moderate: number
+  aged: number
+  overdue: number
+  totalOutstanding: number
+}
+
+export interface AgeingReport {
+  direction: DebtDirection
+  asOf: string
+  entries: AgeingEntry[]
+  totals: Omit<AgeingEntry, 'contactId' | 'contactName' | 'contactPhone'>
 }
 
 export interface ContactsQuery extends ListQuery {

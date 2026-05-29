@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import {
   DebtDirection,
   Resource,
+  type AgeingReport,
   type Debt,
   type DebtDirectionSummary,
   type DebtListResult,
@@ -26,13 +27,27 @@ import { ListDebtsQueryDto } from '../dto/list-debts-query.dto'
 import { RecordDebtPaymentDto } from '../dto/record-debt-payment.dto'
 import { WriteOffDebtDto } from '../dto/write-off-debt.dto'
 import { DebtsService } from '../services/debts.service'
+import { OpeningBalancesService } from '../services/opening-balances.service'
 
 @ApiTags('Creditors')
 @ApiBearerAuth()
 @UseGuards(Phase2Guard, ResourceGuard)
 @Controller('creditors')
 export class CreditorsController {
-  constructor(private readonly debtsService: DebtsService) {}
+  constructor(
+    private readonly debtsService: DebtsService,
+    private readonly openingBalancesService: OpeningBalancesService,
+  ) {}
+
+  @Get('ageing')
+  @RequireResource(Resource.DEBTS_VIEW)
+  @ApiOperation({ summary: 'Get payable ageing report' })
+  getAgeingReport(@CurrentUser() user: JwtPayload): Promise<AgeingReport> {
+    return this.openingBalancesService.getAgeingReport(
+      user.businessId as string,
+      DebtDirection.PAYABLE,
+    )
+  }
 
   @Get()
   @RequireResource(Resource.DEBTS_VIEW)

@@ -7,6 +7,7 @@ export enum PaymentMethod {
   MTN_MOMO = 'MTN_MOMO',
   ORANGE_MONEY = 'ORANGE_MONEY',
   CARD = 'CARD',
+  SAVINGS = 'SAVINGS',
   MIXED = 'MIXED',
 }
 
@@ -27,6 +28,7 @@ export interface SalePayment {
   method: PaymentMethod
   amount: number
   mobileMoneyReference?: string | null
+  savingsAccountId?: string | null
   createdAt: IsoDateString
 }
 
@@ -167,6 +169,43 @@ export interface SaleReceiptPayment {
   mobileMoneyReference?: string | null
 }
 
+export interface SaleReceiptChargeLine {
+  name: string
+  amount: number
+}
+
+export interface SaleReceiptDiscountLine {
+  description: string
+  amount: number
+}
+
+export interface CashierActivityItem {
+  id: string
+  saleNumber: string
+  type: 'sale' | 'void'
+  totalAmount: number
+  soldAt: IsoDateString
+  voidedAt: IsoDateString | null
+  voidReason: string | null
+  itemSummary: string
+  customerName: string | null
+}
+
+export interface CashierShiftSummary {
+  cashierId: string
+  cashierName: string | null
+  date: string
+  shiftRevenue: number
+  transactionCount: number
+  avgOrderValue: number
+  voidCount: number
+  voidAmount: number
+  hourlyCounts: Array<{ hour: number; count: number }>
+  topItems: Array<{ productId: string; productName: string; quantity: number }>
+  paymentSplit: Array<{ method: PaymentMethod | string; amount: number }>
+  recentActivity: CashierActivityItem[]
+}
+
 export interface SaleReceipt {
   businessName: string
   businessPhone?: string | null
@@ -180,6 +219,8 @@ export interface SaleReceipt {
   subtotal: number
   discountAmount: number
   chargesAmount: number
+  chargeLines?: SaleReceiptChargeLine[]
+  discountLines?: SaleReceiptDiscountLine[]
   totalAmount: number
   amountPaid: number
   creditAmount: number

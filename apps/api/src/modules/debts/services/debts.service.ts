@@ -34,6 +34,7 @@ import type { I18nTranslations } from '@/i18n/i18n.types'
 import { LOGGER } from '@/logger/logger.module'
 import type { RecordDebtPaymentDto } from '../dto/record-debt-payment.dto'
 import type { WriteOffDebtDto } from '../dto/write-off-debt.dto'
+import { OpeningBalancesService } from './opening-balances.service'
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
@@ -70,6 +71,7 @@ export class DebtsService {
     private readonly paymentsRepo: Repository<DebtPayment>,
     @InjectRepository(Contact)
     private readonly contactsRepo: Repository<Contact>,
+    private readonly openingBalancesService: OpeningBalancesService,
     private readonly i18n: I18nService<I18nTranslations>,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
@@ -431,15 +433,18 @@ export class DebtsService {
         }
       }
 
-      const debts = await this.debtsRepo
-        .createQueryBuilder('debt')
-        .leftJoinAndSelect('debt.payments', 'payment')
-        .where('debt.business_id = :businessId', { businessId })
-        .andWhere('debt.contact_id = :contactId', { contactId })
-        .andWhere('debt.direction = :direction', { direction })
-        .orderBy('debt.created_at', 'ASC')
-        .addOrderBy('payment.payment_date', 'ASC')
-        .getMany()
+      const [debts, openingBalance] = await Promise.all([
+        this.debtsRepo
+          .createQueryBuilder('debt')
+          .leftJoinAndSelect('debt.payments', 'payment')
+          .where('debt.business_id = :businessId', { businessId })
+          .andWhere('debt.contact_id = :contactId', { contactId })
+          .andWhere('debt.direction = :direction', { direction })
+          .orderBy('debt.created_at', 'ASC')
+          .addOrderBy('payment.payment_date', 'ASC')
+          .getMany(),
+        this.openingBalancesService.findForContactAndDirection(contactId, businessId, direction),
+      ])
 
       const events: Array<{
         sortAt: number
@@ -450,6 +455,18 @@ export class DebtsService {
         debit: number
         credit: number
       }> = []
+
+      if (openingBalance) {
+        events.push({
+          sortAt: Date.parse(`${openingBalance.asOfDate}T00:00:00.000Z`) - 1,
+          date: openingBalance.asOfDate,
+          type: ContactStatementEntryType.OPENING_BALANCE,
+          reference: null,
+          description: 'Opening balance',
+          debit: openingBalance.amount,
+          credit: 0,
+        })
+      }
 
       for (const debt of debts) {
         events.push({
@@ -523,7 +540,7 @@ export class DebtsService {
           phone: contact.phone ?? null,
         },
         direction,
-        openingBalance: 0,
+        openingBalance: openingBalance?.amount ?? 0,
         entries,
         closingBalance: balance,
       }

@@ -1,7 +1,6 @@
 {
   "extends": "@biztrack/typescript-config/nextjs.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "target": "ES2017",
     "lib": [
       "dom",

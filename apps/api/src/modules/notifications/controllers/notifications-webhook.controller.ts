@@ -1,46 +1,98 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common'
+import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common'
 import { Public } from '@/common/decorators/public.decorator'
+import { RedisService } from '@/common/redis/redis.service'
 import { NotificationsService } from '../services/notifications.service'
+import { ResendWebhookGuard, RESEND_WEBHOOK_IDEMPOTENCY_TTL_S } from '../guards/resend-webhook.guard'
+import type { ResendWebhookRequest } from '../guards/resend-webhook.guard'
+import { RESEND_PROVIDER } from '../providers/email.provider'
 
-/**
- * Webhook endpoints for delivery-status callbacks from notification providers.
- *
- * These routes are intentionally public — they are called by external services.
- * TODO: add HMAC signature verification per-provider before going to production.
- */
+interface ResendWebhookEvent {
+  type: string
+  created_at: string
+  data: {
+    email_id: string
+    from?: string
+    to?: string[]
+    subject?: string
+    attachments?: { id: string; filename: string; content_type: string }[]
+    [key: string]: unknown
+  }
+}
+
 @Controller('notifications/webhooks')
 export class NotificationsWebhookController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService,
+  ) {}
 
   /**
-   * SendGrid event webhook.
-   * SendGrid POSTs an array of event objects.
-   * Relevant event types: 'delivered', 'bounce', 'dropped', 'spamreport'.
+   * Resend email event webhook.
+   * Signature is verified and idempotency checked by ResendWebhookGuard before this handler runs.
+   * See: https://resend.com/docs/dashboard/webhooks/event-types
    */
   @Public()
+  @UseGuards(ResendWebhookGuard)
   @Post('email')
   @HttpCode(HttpStatus.OK)
-  async sendgridWebhook(@Body() events: Record<string, unknown>[]): Promise<void> {
-    const eventList = Array.isArray(events) ? events : [events]
+  async resendWebhook(
+    @Req() req: ResendWebhookRequest,
+    @Body() event: ResendWebhookEvent,
+  ): Promise<void> {
+    // Already processed — acknowledge without re-processing (idempotent)
+    if (req._svixDuplicate) return
 
-    for (const event of eventList) {
-      const messageId = event['sg_message_id'] as string | undefined
-      const eventType = event['event'] as string | undefined
+    const emailId = event?.data?.email_id
+    if (!emailId) return
 
-      if (!messageId || !eventType) continue
+    switch (event.type) {
+      case 'email.delivered':
+        await this.notificationsService.markDelivered(emailId, RESEND_PROVIDER)
+        break
 
-      // SendGrid appends a filter-specific suffix after a dot — strip it.
-      const providerMessageId = messageId.split('.')[0] || ''
+      case 'email.bounced':
+        await this.notificationsService.markFailedByProvider(emailId, 'bounced', RESEND_PROVIDER)
+        break
 
-      if (eventType === 'delivered') {
-        await this.notificationsService.markDelivered(providerMessageId)
-      }
+      case 'email.failed':
+        await this.notificationsService.markFailedByProvider(emailId, 'failed', RESEND_PROVIDER)
+        break
+
+      case 'email.complained':
+        await this.notificationsService.markFailedByProvider(emailId, 'complained', RESEND_PROVIDER)
+        break
+
+      case 'email.suppressed':
+        await this.notificationsService.markFailedByProvider(emailId, 'suppressed', RESEND_PROVIDER)
+        break
+
+      case 'email.received':
+        // Webhook only carries metadata — forwardInboundEmail fetches the body then resends to founder
+        await this.notificationsService.forwardInboundEmail({
+          emailId,
+          from: event.data.from,
+          subject: event.data.subject,
+        })
+        break
+
+      // email.sent, email.opened, email.clicked, email.scheduled,
+      // email.delivery_delayed — no action needed
+      default:
+        break
+    }
+
+    // Mark this svix-id as processed to prevent replay / duplicate delivery
+    if (req._svixId) {
+      await this.redisService.setex(
+        `whook:resend:${req._svixId}`,
+        RESEND_WEBHOOK_IDEMPOTENCY_TTL_S,
+        '1',
+      )
     }
   }
 
   /**
    * SMS provider webhook (MTN / Orange / Africa's Talking — TBD).
-   * Shape will vary per provider; parse providerMessageId and status.
    */
   @Public()
   @Post('sms')
@@ -61,9 +113,4 @@ export class NotificationsWebhookController {
     // TODO: parse Meta Cloud API statuses and call markDelivered / markFailed
     void payload
   }
-
-  /**
-   * Meta requires a GET challenge during webhook registration.
-   * Add a @Get('whatsapp') handler here once the webhook URL is registered.
-   */
 }

@@ -123,8 +123,8 @@ function getPreviousPeriodRange(period: PeriodKey) {
   return { start, end }
 }
 
-function formatCurrency(value: number, localeTag: string) {
-  return `XAF ${Math.round(value).toLocaleString(localeTag)}`
+function formatCurrency(value: number, localeTag: string, currency = 'XAF') {
+  return `${currency} ${Math.round(value).toLocaleString(localeTag)}`
 }
 
 function formatDateLabel(value: string, localeTag: string) {
@@ -346,6 +346,7 @@ function ExpensesPageContent() {
   const localeTag = locale.startsWith('fr') ? 'fr-CM' : 'en-GB'
   const businessId = useAuthStore((state) => state.businessId)
   const businessName = useAuthStore((state) => state.businessName)
+  const businessCurrency = useAuthStore((state) => state.businessCurrency)
   const planState = usePlanStore((state) => state.current)
   const canUseCategories = useMemo(
     () => (planState ? getPermissionAccessFromState(planState, Resource.EXPENSES_CATEGORIES).allowed : true),
@@ -590,7 +591,10 @@ function ExpensesPageContent() {
         await updateExpenseLocal(businessId, activeExpenseId, payload)
         toast.success(t('messages.updated'))
       } else {
-        await createExpenseLocal(businessId, 'local-user', payload)
+        await createExpenseLocal(businessId, 'local-user', {
+          ...payload,
+          categoryId: payload.categoryId!,
+        })
         toast.success(t('messages.created'))
       }
 
@@ -709,7 +713,7 @@ function ExpensesPageContent() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label={t('metrics.total_expenses')}
-            value={formatCurrency(totalAmount, localeTag)}
+            value={formatCurrency(totalAmount, localeTag, businessCurrency)}
             hint={
               trend
                 ? t('metrics.compared_to_previous', { value: trend.value })
@@ -719,13 +723,13 @@ function ExpensesPageContent() {
           />
           <MetricCard
             label={t('metrics.recurring')}
-            value={formatCurrency(recurringAmount, localeTag)}
+            value={formatCurrency(recurringAmount, localeTag, businessCurrency)}
             hint={t('metrics.share_of_total', { value: recurringShare })}
             tone="accent"
           />
           <MetricCard
             label={t('metrics.one_off')}
-            value={formatCurrency(oneOffAmount, localeTag)}
+            value={formatCurrency(oneOffAmount, localeTag, businessCurrency)}
             hint={t('metrics.share_of_total', { value: oneOffShare })}
           />
           {canUseCategories ? (
@@ -768,7 +772,7 @@ function ExpensesPageContent() {
                         <div className="flex flex-1 items-end justify-center">
                           <div className="group relative flex w-full max-w-[64px] justify-center">
                             <div className="absolute -top-11 hidden rounded-xl border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-xl group-hover:block">
-                              {formatCurrency(category.amount, localeTag)}
+                              {formatCurrency(category.amount, localeTag, businessCurrency)}
                             </div>
                             <div
                               className="w-full rounded-t-xl transition-opacity group-hover:opacity-90"
@@ -776,14 +780,14 @@ function ExpensesPageContent() {
                                 height: `${barHeight}px`,
                                 backgroundColor: category.color,
                               }}
-                              title={`${category.name}: ${formatCurrency(category.amount, localeTag)}`}
+                              title={`${category.name}: ${formatCurrency(category.amount, localeTag, businessCurrency)}`}
                             />
                           </div>
                         </div>
                         <div className="space-y-1 text-center">
                           <p className="truncate text-xs font-medium text-foreground">{category.name}</p>
                           <p className="text-[11px] text-muted-foreground">
-                            {formatCurrency(category.amount, localeTag)}
+                            {formatCurrency(category.amount, localeTag, businessCurrency)}
                           </p>
                         </div>
                       </div>
@@ -1190,7 +1194,7 @@ function ExpensesPageContent() {
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-sm text-muted-foreground">{t('detail.amount')}</span>
                     <span className="text-2xl font-semibold text-foreground">
-                      {formatCurrency(activeExpense.amount, localeTag)}
+                      {formatCurrency(activeExpense.amount, localeTag, businessCurrency)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
@@ -1267,7 +1271,7 @@ function ExpensesPageContent() {
                 <p className="text-sm leading-6 text-muted-foreground">
                   {t('dialogs.delete_message', {
                     description: activeExpense.description,
-                    amount: formatCurrency(activeExpense.amount, localeTag),
+                    amount: formatCurrency(activeExpense.amount, localeTag, businessCurrency),
                   })}
                 </p>
               </div>

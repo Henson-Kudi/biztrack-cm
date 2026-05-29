@@ -31,7 +31,8 @@
     "subscription": "Abonnement",
     "team": "Equipe",
     "roles": "Roles",
-    "settings_general": "General"
+    "settings_general": "General",
+    "savings": "Épargne"
   },
   "topbar": {
     "last_sync": "Derniere synchro : {time}",
@@ -70,6 +71,8 @@
     "theme_to_dark": "Passer au mode sombre",
     "language_label": "Langue",
     "user_fallback": "Utilisateur local",
+    "business_fallback": "Mon entreprise",
+    "switch_business_title": "Vos entreprises",
     "languages": {
       "en": "English",
       "fr": "Francais"
@@ -226,7 +229,25 @@
       "walk_in": "Client passage",
       "online_sync": "Synchronise",
       "offline_sync": "Sync en attente",
-      "no_recent_sales": "Aucune vente sur cette periode."
+      "no_recent_sales": "Aucune vente sur cette periode.",
+      "cashier_subtitle": "Voici votre activite de vente pour aujourd'hui.",
+      "accountant_subtitle": "Vue d'ensemble financiere pour la periode selectionnee.",
+      "collected_revenue": "Encaisse",
+      "paid_in_full": "{count} payees en totalite",
+      "cashier_header_active": "Actif",
+      "cashier_shift_sales": "Ventes du shift",
+      "cashier_transactions": "Transactions",
+      "cashier_avg_order": "Valeur moy. commande",
+      "cashier_voids": "Annulations",
+      "cashier_void_of_shift": "{count} annulees ce shift",
+      "cashier_voided_total": "–{amount} total",
+      "cashier_hourly_title": "Transactions par heure",
+      "cashier_activity_title": "Activite recente",
+      "cashier_top_items_title": "Top articles ce shift",
+      "cashier_payment_split_title": "Repartition paiements",
+      "cashier_no_activity": "Aucune transaction aujourd'hui.",
+      "cashier_no_top_items": "Aucun article vendu aujourd'hui.",
+      "cashier_no_payment_split": "Aucun paiement enregistre."
     },
     "sell": {
       "all_categories": "Toutes",
@@ -262,10 +283,14 @@
       "clear": "Tout vider",
       "hold": "Mettre en attente",
       "charge": "Encaisser",
-      "discount_title": "Appliquer une remise",
-      "discount_by": "Type",
-      "charges_title": "Ajouter des frais",
-      "charges_hint": "Utilisez ceci pour suivre les frais payes avec la vente.",
+      "discount_title": "Ajouter une remise",
+      "discount_by": "Selectionnez le type et saisissez la valeur de la remise.",
+      "discount_description": "Description (optionnelle)",
+      "discount_description_placeholder": "ex. Remise fidelite",
+      "charges_title": "Ajouter des charges",
+      "charges_hint": "Sélectionnez un type de charge et saisissez le montant. Vous pouvez en ajouter plusieurs.",
+      "charges_done": "Terminé",
+      "charges_applied": "Charges appliquées",
       "percent": "Pourcentage",
       "amount": "Montant",
       "custom_value": "Valeur personnalisÃ©e",
@@ -371,6 +396,18 @@
       "payment_back": "Retour au panier",
       "business_required": "Selectionnez un business sur cet appareil avant d ouvrir la vente.",
       "load_error": "Impossible de charger l espace de vente.",
+      "payment_methods": "Modes de paiement",
+      "add_payment_method": "Ajouter un mode de paiement",
+      "total_paid": "Montant paye",
+      "split_payment": "Paiement partage",
+      "savings": "Épargne",
+      "savings_available": "Disponible",
+      "savings_max_usable": "Max utilisable",
+      "add_charge": "Ajouter une charge",
+      "add_custom_charge": "Charge personnalisee",
+      "charge_type_percent": "du sous-total",
+      "charge_type_fixed": "Montant fixe",
+      "charge_auto_calc": "Calcul automatique",
       "errors": {
         "SALE_EMPTY": "Ajoutez au moins un article avant de confirmer la vente.",
         "SALE_QUANTITY_INVALID": "Chaque ligne doit avoir une quantite valide.",
@@ -477,6 +514,7 @@
         "title": "Ajouter un produit",
         "description": "Commencez avec l'essentiel. Vous pourrez ajuster les details et les regles de stock ensuite.",
         "update_title": "Modifier le produit",
+        "product": "Produit",
         "update_description": "Mettez a jour les informations catalogue de ce produit sans quitter l'espace de travail.",
         "close": "Fermer la boite de dialogue",
         "cancel": "Annuler",
@@ -1235,7 +1273,25 @@
         "void_error": "Impossible d'annuler cette vente.",
         "void_reason_invalid": "Entrez une raison d'au moins 10 caracteres.",
         "void_forbidden": "Seuls les proprietaires et gerants peuvent annuler des ventes.",
-        "void_already_voided": "Cette vente a deja ete annulee."
+        "void_already_voided": "Cette vente a deja ete annulee.",
+        "back": "Retour",
+        "go_to_sales": "Aller aux ventes",
+        "not_found": "Vente introuvable.",
+        "financial_summary": "Résumé financier",
+        "sale_subtotal": "Sous-total",
+        "sale_discount": "Remise",
+        "sale_charges": "Frais",
+        "sale_paid": "Montant payé",
+        "sale_change": "Monnaie rendue",
+        "payment_receipt_title": "REÇU DE PAIEMENT",
+        "print_payment_receipt": "Imprimer le reçu",
+        "share_payment_receipt": "Partager le reçu",
+        "payment_receipt_client": "Client",
+        "payment_receipt_paid": "Montant payé",
+        "payment_receipt_method": "Mode",
+        "payment_receipt_remaining": "Solde restant",
+        "receipt_number_label": "Reçu n°",
+        "credit_label": "À crédit"
       }
     },
     "contacts": {
@@ -1332,7 +1388,14 @@
         "contact_exists": "Un contact avec ce numero existe deja.",
         "type_conflict": "L'historique des dettes de ce contact exige un autre type de contact.",
         "contacts_quota_reached": "Ce business a atteint sa limite de contacts pour le plan actuel. Reconnectez-vous a internet pour changer de plan ou archiver un contact avant d'en ajouter un autre.",
-        "load_error": "Impossible d'enregistrer le contact pour le moment."
+        "load_error": "Impossible d'enregistrer le contact pour le moment.",
+        "ob_title": "Solde initial (facultatif)",
+        "ob_hint": "Saisissez le solde que ce contact avait deja avant de commencer a utiliser BizTrack.",
+        "ob_receivable_label": "Il vous doit (XAF)",
+        "ob_payable_label": "Vous lui devez (XAF)",
+        "ob_amount_placeholder": "0",
+        "ob_date_label": "Date de reference",
+        "ob_save_error": "Contact enregistre, mais le solde initial n'a pas pu etre defini. Ouvrez la fiche du contact pour l'ajouter."
       }
     },
     "contactDetail": {
@@ -1514,12 +1577,14 @@
           "payment_received_method": "Paiement recu par {method}",
           "payment_made": "Paiement verse",
           "payment_made_method": "Paiement verse par {method}",
-          "write_off": "Passe en perte"
+          "write_off": "Passe en perte",
+          "opening_balance": "Solde initial"
         },
         "types": {
           "debt": "Dette",
           "payment": "Paiement",
-          "write_off": "Perte"
+          "write_off": "Perte",
+          "opening_balance": "Solde initial"
         }
       },
       "statuses": {
@@ -1527,6 +1592,30 @@
         "partially_paid": "Partiellement paye",
         "settled": "Regle",
         "written_off": "Passe en perte"
+      },
+      "opening_balance": {
+        "title": "Soldes initiaux",
+        "description": "Definissez un solde de depart pour ce contact afin de prendre en compte les dettes anterieures a vos registres dans BizTrack.",
+        "receivable_label": "Solde initial client (il vous doit)",
+        "payable_label": "Solde initial fournisseur (vous lui devez)",
+        "not_set": "Non defini",
+        "set": "Definir",
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "deleting": "Suppression...",
+        "cancel": "Annuler",
+        "save": "Enregistrer le solde",
+        "saving": "Enregistrement...",
+        "amount_label": "Montant (XAF)",
+        "date_label": "Date de reference",
+        "notes_label": "Notes (facultatif)",
+        "notes_placeholder": "Ex. Solde reporte depuis les registres papier",
+        "amount_invalid": "Saisissez un montant valide superieur a 0.",
+        "date_required": "Selectionnez une date pour ce solde initial.",
+        "saved": "Solde initial enregistre.",
+        "save_error": "Impossible d'enregistrer le solde initial.",
+        "deleted": "Solde initial supprime.",
+        "delete_error": "Impossible de supprimer le solde initial."
       }
     },
     "debtors": {
@@ -2128,7 +2217,32 @@
     },
     "settings": {
       "title": "Parametres",
-      "subtitle": "Parametres - bientot disponible."
+      "subtitle": "Parametres - bientot disponible.",
+      "general": {
+        "title": "General",
+        "subtitle": "Mettez a jour les informations de votre entreprise.",
+        "offline_warning": "Vous devez etre en ligne pour modifier les parametres de l'entreprise.",
+        "loading": "Chargement des informations...",
+        "form_title": "Informations de l'entreprise",
+        "field_name": "Nom de l'entreprise",
+        "field_name_placeholder": "ex. Epicerie du coin",
+        "field_description": "Description",
+        "field_description_placeholder": "Breve description de votre entreprise",
+        "field_phone": "Numero de telephone",
+        "field_email": "Adresse email",
+        "field_email_placeholder": "contact@entreprise.com",
+        "field_address": "Adresse",
+        "field_address_placeholder": "Adresse postale",
+        "field_city": "Ville",
+        "field_city_placeholder": "ex. Yaounde",
+        "field_country": "Pays",
+        "field_country_placeholder": "ex. Cameroun",
+        "field_currency": "Devise",
+        "save_action": "Enregistrer",
+        "saving": "Enregistrement...",
+        "save_success": "Informations de l'entreprise mises a jour avec succes.",
+        "save_error": "Echec de la mise a jour des informations de l'entreprise."
+      }
     },
     "team": {
       "title": "Equipe",
@@ -2445,6 +2559,101 @@
       "subtitle": "Ajoutez votre premier produit pour demarrer.",
       "add": "Ajouter un produit",
       "skip": "Passer pour l'instant"
+    },
+    "savings": {
+      "title": "Épargne",
+      "subtitle": "Gérer les comptes d'épargne clients",
+      "loading": "Chargement des comptes...",
+      "load_error": "Erreur lors du chargement des comptes",
+      "business_required": "Aucune session d'entreprise active",
+      "new_deposit": "Nouveau dépôt",
+      "table": {
+        "number": "N° compte",
+        "customer": "Client",
+        "balance": "Solde",
+        "total_deposited": "Total déposé",
+        "last_activity": "Dernière activité",
+        "no_customer": "Client inconnu",
+        "actions": "Actions"
+      },
+      "actions": {
+        "more": "Plus",
+        "view_statement": "Voir le relevé",
+        "add_deposit": "Ajouter un dépôt",
+        "refund": "Remboursement"
+      },
+      "empty": {
+        "title": "Aucun compte d'épargne",
+        "subtitle": "Créez un nouveau dépôt pour ouvrir un compte d'épargne pour un client."
+      },
+      "pagination": {
+        "showing": "{from}–{to} sur {total}",
+        "none": "Aucun résultat"
+      },
+      "deposit": {
+        "title": "Nouveau dépôt",
+        "description": "Enregistrer un dépôt client. Si le client a déjà un compte, le dépôt sera ajouté à son solde.",
+        "customer_label": "Client",
+        "pick_customer": "Sélectionner un client",
+        "amount": "Montant (XAF)",
+        "method": "Mode de paiement",
+        "reference": "Référence mobile money",
+        "reference_placeholder": "ex. CM-12345678",
+        "notes": "Notes",
+        "notes_placeholder": "Notes optionnelles",
+        "submit": "Enregistrer le dépôt",
+        "submitting": "Enregistrement...",
+        "success": "Dépôt enregistré avec succès",
+        "cancel": "Annuler",
+        "existing_balance": "Solde existant : XAF {balance}"
+      },
+      "refund": {
+        "title": "Remboursement",
+        "description": "Effectuer un remboursement sur le solde du compte d'épargne.",
+        "available_balance": "Solde disponible : XAF {balance}",
+        "amount": "Montant du remboursement (XAF)",
+        "method": "Mode de paiement",
+        "reference": "Référence mobile money",
+        "reference_placeholder": "ex. CM-12345678",
+        "notes": "Notes",
+        "notes_placeholder": "Notes optionnelles",
+        "submit": "Enregistrer le remboursement",
+        "submitting": "Traitement...",
+        "success": "Remboursement enregistré avec succès",
+        "cancel": "Annuler"
+      },
+      "detail": {
+        "back": "Retour à l'épargne",
+        "account_number": "Numéro de compte",
+        "customer": "Client",
+        "balance": "Solde actuel",
+        "total_deposited": "Total déposé",
+        "total_refunded": "Total remboursé",
+        "transaction_type_deposit": "Dépôt",
+        "transaction_type_refund": "Remboursement",
+        "transaction_type_sale": "Vente",
+        "transaction_type_voided_sale": "Vente annulée",
+        "date": "Date",
+        "method": "Méthode",
+        "notes": "Notes",
+        "amount": "Montant",
+        "running_balance": "Solde courant",
+        "no_transactions": "Aucune transaction",
+        "tagged_products": "Produits associés",
+        "tagged_products_none": "Aucun produit associé",
+        "add_deposit": "Ajouter un dépôt",
+        "refund_balance": "Remboursement",
+        "share_statement": "Partager le relevé",
+        "share_generating": "Génération du PDF…",
+        "share_error": "Échec de la génération du relevé PDF"
+      },
+      "errors": {
+        "SAVINGS_CUSTOMER_REQUIRED": "Un client est requis",
+        "SAVINGS_AMOUNT_INVALID": "Le montant doit être supérieur à zéro",
+        "SAVINGS_INSUFFICIENT_BALANCE": "Solde insuffisant pour ce remboursement",
+        "SAVINGS_NOT_FOUND": "Compte d'épargne introuvable",
+        "SAVINGS_METHOD_INVALID": "Mode de paiement invalide"
+      }
     }
   }
 }

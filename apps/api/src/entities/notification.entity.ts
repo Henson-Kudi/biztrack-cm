@@ -12,6 +12,7 @@ export enum NotificationType {
   INVITE = 'invite',
   OTP = 'otp',
   PAYMENT_REMINDER = 'payment_reminder',
+  MARKETING = 'marketing',
 }
 
 export enum NotificationStatus {
@@ -41,6 +42,10 @@ export class Notification extends BaseEntity {
   @Column({ type: 'enum', enum: NotificationType })
   type!: NotificationType
 
+  /// Email address for email notifications, phone number for SMS, WhatsApp ID for WhatsApp, null for InApp etc.
+  @Column({ type: 'varchar', length: 320, nullable: true })
+  sender?: string | null
+
   /** Phone number or email address */
   @Column({ type: 'varchar', length: 320 })
   recipient!: string
@@ -61,6 +66,10 @@ export class Notification extends BaseEntity {
     default: NotificationStatus.PENDING,
   })
   status!: NotificationStatus
+
+  /** The specific service that delivered this notification (e.g. 'resend', 'africas_talking', 'meta') */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  provider?: string | null
 
   /** Provider-assigned message ID used to correlate webhook delivery events */
   @Column({ name: 'provider_message_id', type: 'varchar', length: 255, nullable: true })

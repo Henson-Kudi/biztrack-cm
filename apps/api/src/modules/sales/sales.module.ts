@@ -9,6 +9,7 @@ import { Sale } from '@/entities/sale.entity'
 import { DebtsModule } from '@/modules/debts/debts.module'
 import { InventoryModule } from '@/modules/inventory/inventory.module'
 import { PermissionsModule } from '@/modules/permissions/permissions.module'
+import { SavingsModule } from '@/modules/savings/savings.module'
 import { SalesController } from './controllers/sales.controller'
 import { DailySalesSummaryService } from './services/daily-sales-summary.service'
 import { SaleNumberService } from './services/sale-number.service'
@@ -19,6 +20,7 @@ import { SalesService } from './services/sales.service'
     PermissionsModule,
     DebtsModule,
     InventoryModule,
+    SavingsModule,
     TypeOrmModule.forFeature([
       Business,
       DailySaleSummary,

@@ -3,6 +3,8 @@
 import { useEffect, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { usePathname as useLocalizedPathname } from '@/i18n/navigation'
+import { routing, type Locale } from '@/i18n/routing'
 import { useAuthStore } from '@/stores/auth.store'
 
 type AuthRouteKind =
@@ -23,11 +25,13 @@ export function AuthRedirect({ children }: { children: ReactNode }) {
   const locale = useLocale()
   const router = useRouter()
   const pathname = usePathname()
+  const localizedPathname = useLocalizedPathname()
   const hydrated = useAuthStore((s) => s.hydrated)
   const accessToken = useAuthStore((s) => s.accessToken)
   const tokenType = useAuthStore((s) => s.tokenType)
   const isOffline = useAuthStore((s) => s.isOffline)
   const pending = useAuthStore((s) => s.pending)
+  const userLanguage = useAuthStore((s) => s.user?.language ?? null)
   const routeKind = getAuthRouteKind(pathname)
   const redirectTarget = hydrated
     ? resolveRedirectTarget({
@@ -41,13 +45,25 @@ export function AuthRedirect({ children }: { children: ReactNode }) {
       })
     : null
 
+  const preferredLocale =
+    userLanguage && routing.locales.includes(userLanguage as Locale)
+      ? (userLanguage as Locale)
+      : locale
+
   useEffect(() => {
     if (!hydrated || !redirectTarget) {
       return
     }
+    router.replace(`/${preferredLocale}${redirectTarget}`)
+  }, [hydrated, preferredLocale, redirectTarget, router])
 
-    router.replace(`/${locale}${redirectTarget}`)
-  }, [hydrated, locale, redirectTarget, router])
+  // Redirect to user's preferred locale if it doesn't match the current one
+  useEffect(() => {
+    if (!hydrated || redirectTarget || preferredLocale === locale) {
+      return
+    }
+    router.replace(`/${preferredLocale}${localizedPathname}`)
+  }, [hydrated, redirectTarget, preferredLocale, locale, localizedPathname, router])
 
   if (!hydrated) return null
   if (redirectTarget) return null

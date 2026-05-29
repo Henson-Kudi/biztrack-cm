@@ -70,6 +70,11 @@ declare global {
           canceled?: boolean
           error?: string
         }>
+        renderPdf: (data: { html?: string }) => Promise<{
+          success: boolean
+          buffer?: number[]
+          error?: string
+        }>
         exportFile: (data: {
           content?: string
           filename?: string
@@ -199,14 +204,9 @@ const fallbackIpc: Window['electronAPI'] = {
     url: async () => ({ success: false, shared: false }),
   },
   documents: {
-    exportPdf: async () => ({
-      success: false,
-      canceled: true,
-    }),
-    exportFile: async () => ({
-      success: false,
-      canceled: true,
-    }),
+    exportPdf: async () => ({ success: false, canceled: true }),
+    renderPdf: async () => ({ success: false }),
+    exportFile: async () => ({ success: false, canceled: true }),
   },
   app: {
     version: async () => 'web',

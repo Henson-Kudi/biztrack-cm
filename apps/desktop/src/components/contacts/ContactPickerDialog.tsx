@@ -1,15 +1,18 @@
 'use client'
 
 import { useDeferredValue, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Button, Input, PhoneInput, Spinner } from '@biztrack/ui'
-import type { ContactListResult, ContactsQuery } from '@biztrack/types'
+import { Button, Input, NumberInput, PhoneInput, Spinner } from '@biztrack/ui'
+import { DebtDirection, Resource, type ContactListResult, type ContactsQuery } from '@biztrack/types'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/services/api-response'
+import { getPermissionAccessFromState } from '@/lib/plan-access'
 import {
   ContactLocalError,
+  upsertOpeningBalanceLocal,
   type LocalContactCreateInput,
   type LocalContactRecord,
 } from '@/services/contacts.local'
+import { usePlanStore } from '@/stores/plan.store'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +45,12 @@ type ContactPickerDialogCopy = {
   phoneInvalid: string
   nameRequired: string
   contactExists: string
+  obTitle?: string
+  obHint?: string
+  obAmountLabel?: string
+  obAmountPlaceholder?: string
+  obDateLabel?: string
+  obSaveError?: string
 }
 
 type ContactPickerDialogProps = {
@@ -62,6 +71,7 @@ type ContactPickerDialogProps = {
   initialView?: ContactDialogView
   allowSelectView?: boolean
   initialFormState?: Partial<ContactFormState>
+  openingBalanceDirection?: DebtDirection | null
   copy: ContactPickerDialogCopy
 }
 
@@ -77,6 +87,10 @@ type ContactFormState = {
 
 const textareaClassName =
   'block min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20'
+
+function getTodayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 function createDefaultFormState(initial?: Partial<ContactFormState>): ContactFormState {
   return {
@@ -100,6 +114,7 @@ export function ContactPickerDialog({
   initialView = 'select',
   allowSelectView = true,
   initialFormState,
+  openingBalanceDirection,
   copy,
 }: ContactPickerDialogProps) {
   const resolvedInitialView: ContactDialogView = allowSelectView ? initialView : 'create'
@@ -110,6 +125,14 @@ export function ContactPickerDialog({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<ContactFormState>(createDefaultFormState(initialFormState))
+  const [obAmount, setObAmount] = useState('')
+  const [obDate, setObDate] = useState(getTodayIso())
+
+  const planState = usePlanStore((state) => state.current)
+  const canManageOb = planState
+    ? (getPermissionAccessFromState(planState, Resource.OPENING_BALANCES).allowed ?? false)
+    : false
+  const showObSection = Boolean(openingBalanceDirection) && canManageOb
 
   useEffect(() => {
     if (!open) {
@@ -119,6 +142,8 @@ export function ContactPickerDialog({
       setLoading(false)
       setSaving(false)
       setForm(createDefaultFormState(initialFormState))
+      setObAmount('')
+      setObDate(getTodayIso())
       return
     }
 
@@ -196,6 +221,21 @@ export function ContactPickerDialog({
         notes: form.notes,
         createdById,
       })
+
+      if (showObSection && openingBalanceDirection && Number(obAmount) > 0 && obDate) {
+        try {
+          await upsertOpeningBalanceLocal(businessId, contact.id, createdById ?? '', {
+            direction: openingBalanceDirection,
+            amount: Number(obAmount),
+            asOfDate: obDate,
+          })
+        } catch {
+          if (copy.obSaveError) {
+            toast.warning(copy.obSaveError)
+          }
+        }
+      }
+
       toast.success(copy.saved)
       onSelect(contact)
       onOpenChange(false)
@@ -209,7 +249,7 @@ export function ContactPickerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100vh-4rem)] max-w-2xl"
+        className="flex max-h-[calc(100vh-4rem)] max-w-2xl flex-col"
         closeLabel={copy.cancel}
       >
         <DialogHeader>
@@ -288,6 +328,7 @@ export function ContactPickerDialog({
               ) : null}
 
               <div className="grid gap-4 sm:grid-cols-2">
+
                 <Input
                   autoFocus
                   label={copy.fullName}
@@ -338,6 +379,39 @@ export function ContactPickerDialog({
                   placeholder={copy.notesPlaceholder}
                 />
               </label>
+
+              {showObSection ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{copy.obTitle}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{copy.obHint}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {copy.obAmountLabel}
+                      </span>
+                      <NumberInput
+                        value={obAmount}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setObAmount(e.target.value)}
+                        placeholder={copy.obAmountPlaceholder}
+                        min="0"
+                        step="1"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {copy.obDateLabel}
+                      </span>
+                      <Input
+                        type="date"
+                        value={obDate}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setObDate(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
               <DialogFooter className="px-0 pb-0">
                 <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>

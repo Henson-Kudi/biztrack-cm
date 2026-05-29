@@ -1,0 +1,41 @@
+.strip {
+  padding: 2rem clamp(1rem, 5vw, 3rem);
+  border-top: 1px solid var(--borderL);
+  border-bottom: 1px solid var(--borderL);
+}
+
+.inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-size: 0.78rem;
+  color: var(--textXS);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.pills {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(29, 158, 117, 0.06);
+  border: 1px solid var(--borderL);
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  color: var(--textS);
+  font-weight: 500;
+}

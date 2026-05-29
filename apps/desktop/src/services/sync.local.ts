@@ -5,6 +5,7 @@ import { hasDesktopIpc, ipc } from './ipc.bridge'
 
 export type SyncEntity =
   | 'contacts'
+  | 'openingBalances'
   | 'products'
   | 'productCategories'
   | 'expenseCategories'
@@ -15,6 +16,8 @@ export type SyncEntity =
   | 'debts'
   | 'sales'
   | 'expenses'
+  | 'savings'
+  | 'savingsTransactions'
 
 export function buildOutboxUpsertOperation(
   entity: SyncEntity,
@@ -60,12 +63,41 @@ export function buildOutboxUpsertOperation(
 export function buildOutboxEventOperation(
   entity: Extract<
     SyncEntity,
-    'contacts' | 'inventoryAdjustments' | 'inventoryRestocks' | 'debts' | 'sales'
+    | 'contacts'
+    | 'openingBalances'
+    | 'inventoryAdjustments'
+    | 'inventoryRestocks'
+    | 'debts'
+    | 'sales'
+    | 'savings'
+    | 'savingsTransactions'
   >,
   recordId: string,
   payload: unknown,
 ): DbOperation {
   return buildOutboxUpsertOperation(entity, recordId, payload)
+}
+
+export function buildOutboxDeleteOperation(
+  entity: SyncEntity,
+  recordId: string,
+): DbOperation {
+  const now = new Date().toISOString()
+  return {
+    sql: `
+      INSERT INTO sync_outbox (
+        id, entity, record_id, operation, payload, status, attempt_count, last_attempt_at, last_error, last_error_details, created_at, updated_at
+      ) VALUES (?, ?, ?, 'DELETE', NULL, 'pending', 0, NULL, NULL, NULL, ?, ?)
+      ON CONFLICT(entity, record_id) DO UPDATE SET
+        operation = 'DELETE',
+        payload = NULL,
+        status = 'pending',
+        last_error = NULL,
+        last_error_details = NULL,
+        updated_at = excluded.updated_at
+    `,
+    params: [crypto.randomUUID(), entity, recordId, now, now],
+  }
 }
 
 let backgroundSyncTimeout: ReturnType<typeof setTimeout> | null = null

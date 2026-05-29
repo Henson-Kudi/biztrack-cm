@@ -10,15 +10,17 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { Resource, type DailySalesSummary, type JwtPayload, type PaginatedResult, type Sale, type SaleListItem, type SaleReceipt } from '@biztrack/types'
+import { BusinessMemberRole, Resource, type CashierShiftSummary, type DailySalesSummary, type JwtPayload, type PaginatedResult, type Sale, type SaleListItem, type SaleReceipt } from '@biztrack/types'
 import { serializeDto, serializePaginatedResult } from '@/common/http/serialization'
 import { CurrentUser } from '@/common/decorators/current-user.decorator'
 import { Phase2Guard } from '@/modules/auth/guards/phase2.guard'
 import { RequireResource, ResourceGuard } from '@/modules/permissions/guards/resource.guard'
+import { CashierSummaryQueryDto } from '../dto/cashier-summary-query.dto'
 import { CreateSaleDto } from '../dto/create-sale.dto'
 import { DailySalesSummaryQueryDto } from '../dto/daily-sales-summary-query.dto'
 import { ListSalesQueryDto } from '../dto/list-sales-query.dto'
 import {
+  CashierShiftSummaryDto,
   DailySalesSummaryDto,
   SaleListItemDto,
   SaleReceiptDto,
@@ -69,6 +71,30 @@ export class SalesController {
     return serializeDto(
       DailySalesSummaryDto.fromEntity(
         await this.salesService.getDailySummary(user.businessId as string, query.date),
+      ),
+    )
+  }
+
+  @Get('cashier-summary')
+  @RequireResource(Resource.SALES_VIEW)
+  @ApiOperation({ summary: 'Get cashier shift summary for a given date' })
+  async getCashierShiftSummary(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: CashierSummaryQueryDto,
+  ): Promise<CashierShiftSummary> {
+    const date = query.date ?? new Date().toISOString().slice(0, 10)
+    const isCashierRole = [
+      BusinessMemberRole.CASHIER,
+      BusinessMemberRole.STAFF,
+    ].includes(user.role as BusinessMemberRole)
+    const cashierId = isCashierRole ? user.sub : (query.cashierId ?? user.sub)
+    return serializeDto(
+      CashierShiftSummaryDto.fromData(
+        await this.salesService.getCashierShiftSummary(
+          user.businessId as string,
+          cashierId,
+          date,
+        ),
       ),
     )
   }

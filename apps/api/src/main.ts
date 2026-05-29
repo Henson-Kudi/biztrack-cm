@@ -10,7 +10,7 @@ import { createI18nValidationPipe } from './common/pipes/i18n-validation.pipe'
 import cookieParser from 'cookie-parser'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create(AppModule, { rawBody: true })
 
   const config = app.get<ConfigService<AppConfig>>(ConfigService)
   const redis = app.get<RedisService>(RedisService)

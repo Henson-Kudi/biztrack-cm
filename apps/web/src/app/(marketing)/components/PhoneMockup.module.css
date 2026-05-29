@@ -1,0 +1,260 @@
+.container {
+  position: relative;
+  width: 280px;
+  margin: 0 auto;
+}
+
+.phone {
+  width: 280px;
+  aspect-ratio: 9 / 19.5;
+  background: #0a1f17;
+  border-radius: 36px;
+  border: 2px solid rgba(29, 158, 117, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(29, 158, 117, 0.08);
+  position: relative;
+}
+
+.notch {
+  width: 80px;
+  height: 20px;
+  background: #06140f;
+  border-radius: 0 0 12px 12px;
+  margin: 0 auto 8px;
+  flex-shrink: 0;
+}
+
+.screen {
+  flex: 1;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  padding: 4px 0 10px;
+}
+
+.shopName {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dateTime {
+  font-size: 0.6rem;
+  color: var(--textXS);
+  margin-top: 1px;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.kpiCard {
+  background: rgba(17, 43, 32, 0.8);
+  border-radius: 8px;
+  padding: 8px;
+  border: 1px solid var(--borderL);
+}
+
+.kpiLabel {
+  font-size: 0.52rem;
+  color: var(--textXS);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpiValue {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-top: 2px;
+  color: var(--text);
+}
+
+.kpiValue.teal { color: var(--teal); }
+.kpiValue.amber { color: var(--amber); }
+.kpiValue.red { color: var(--red); }
+
+.sectionLabel {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--textXS);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.saleRows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.saleRow {
+  background: rgba(17, 43, 32, 0.6);
+  border-radius: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--borderL);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.saleRow.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.saleName {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saleItems {
+  font-size: 0.55rem;
+  color: var(--textXS);
+  margin-top: 1px;
+}
+
+.saleAmount {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--teal);
+  text-align: right;
+  margin-top: 2px;
+}
+
+.totalBar {
+  background: var(--teal);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  flex-shrink: 0;
+}
+
+.totalBar.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.totalLabel {
+  font-size: 0.58rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.totalValue {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.payButtons {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  flex-shrink: 0;
+}
+
+.payButtons.visible {
+  opacity: 1;
+}
+
+.payBtn {
+  flex: 1;
+  background: rgba(17, 43, 32, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 2px;
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: var(--textS);
+  text-align: center;
+}
+
+.confirm {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--teal);
+  text-align: center;
+  margin-top: 5px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  flex-shrink: 0;
+}
+
+.confirm.visible {
+  opacity: 1;
+}
+
+/* Floating cards */
+.floatCard {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  min-width: 140px;
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(var(--rot)); }
+  50% { transform: translateY(-6px) rotate(var(--rot)); }
+}
+
+.cardTop {
+  top: 10%;
+  right: -130px;
+  --rot: 3deg;
+  transform: rotate(3deg);
+}
+
+.cardBottom {
+  bottom: 15%;
+  left: -140px;
+  --rot: -2deg;
+  transform: rotate(-2deg);
+}
+
+.cardLabel {
+  font-size: 0.62rem;
+  color: var(--textXS);
+  margin-bottom: 4px;
+}
+
+.cardValue {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--teal);
+  margin-bottom: 2px;
+}
+
+.cardSub {
+  font-size: 0.58rem;
+  color: var(--textS);
+}
+
+@media (max-width: 899px) {
+  .floatCard {
+    display: none;
+  }
+}

@@ -17,6 +17,7 @@
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
+    "@biztrack/types": "workspace:*",
     "@biztrack/eslint-config": "workspace:*",
     "@biztrack/typescript-config": "workspace:*",
     "eslint": "^9.32.0",

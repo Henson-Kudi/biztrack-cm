@@ -12,6 +12,9 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'text-foreground hover:bg-accent',
         danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        warning: 'bg-warning text-warning-foreground hover:bg-warning/90',
+        success: 'bg-success text-success-foreground hover:bg-success/90',
+        outline: 'border border-input bg-transparent hover:bg-accent',
       },
       size: {
         sm: 'h-9 px-3',

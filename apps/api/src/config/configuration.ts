@@ -16,6 +16,20 @@ const normalizeEnvString = (value: unknown) => {
   return hasMatchingQuotes ? text.slice(1, -1) : text
 }
 
+const normalizeEnvBoolean = (value: unknown) => {
+  if (value === undefined) return value
+  const text = String(value).trim().toLowerCase()
+  return text === 'true' || text === '1'
+}
+
+const normalizeEnvArray = (value: unknown) => {
+  if (value === undefined) return value
+  if (Array.isArray(value)) return value.map(normalizeEnvString)
+  
+    typeof value === 'string' && value.includes(',') ? value.split(',').map(normalizeEnvString) : [normalizeEnvString(value)]
+  return [normalizeEnvString(value)]
+}
+
 const normalizeNumber = (value: unknown) => {
   if (value === undefined) return value
   return Number(normalizeEnvString(value))
@@ -53,10 +67,15 @@ const envSchema = z.object({
   MVP_PAID_PLAN_TRIAL_DAYS: z.preprocess(normalizeNumber, z.number().int().positive()).default(180),
   // Frontend URL — used to construct invite deep-links in notification bodies
   APP_URL: z.preprocess(normalizeEnvString, z.string().url()).optional(),
-  // Notification provider credentials (all optional — stubs log when absent)
-  SENDGRID_API_KEY: z.preprocess(normalizeEnvString, z.string()).optional(),
-  SENDGRID_FROM_EMAIL: z.preprocess(normalizeEnvString, z.string().email()).optional(),
-  SENDGRID_FROM_NAME: z.preprocess(normalizeEnvString, z.string()).optional(),
+  // Resend (email notifications + webhooks)
+  RESEND_API_KEY: z.preprocess(normalizeEnvString, z.string()).optional(),
+  RESEND_API_BASE_URL: z.preprocess(normalizeEnvString, z.string().url()).optional(),
+  RESEND_WEBHOOK_SECRET: z.preprocess(normalizeEnvString, z.string()).optional(),
+  RESEND_SENDER_DOMAINS: z.preprocess(normalizeEnvArray, z.array(z.string().min(1)).min(1)),
+  // For receiving notifications about important account events (e.g. approaching usage limits)
+  FOUNDER_EMAIL: z.preprocess(normalizeEnvString, z.string().email()).optional(),
+  // Waiting list feature flags
+  INTERNAL_API_SECRET: z.preprocess(normalizeEnvString, z.string()).optional(),
 })
 
 export type AppConfig = z.infer<typeof envSchema>

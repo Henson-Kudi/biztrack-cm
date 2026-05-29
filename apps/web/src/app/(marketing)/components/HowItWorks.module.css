@@ -1,0 +1,182 @@
+.section {
+  padding: 6rem clamp(1rem, 5vw, 3rem);
+  background: var(--deep2);
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+
+.section.visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section { opacity: 1; transform: none; transition: none; }
+}
+
+.inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5rem;
+  align-items: start;
+}
+
+.eyebrow {
+  font-size: 0.78rem;
+  color: var(--teal);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+
+.title {
+  font-family: var(--font-fraunces, 'Fraunces'), serif;
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 300;
+  color: var(--text);
+  margin: 0 0 1rem;
+  line-height: 1.2;
+}
+
+.title em {
+  font-style: italic;
+  color: var(--teal);
+}
+
+.sub {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--textS);
+  margin: 0 0 2.5rem;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step {
+  display: flex;
+  gap: 1.25rem;
+  position: relative;
+}
+
+.stepLine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.stepNum {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(29, 158, 117, 0.15);
+  border: 2px solid var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--teal);
+  flex-shrink: 0;
+}
+
+.connector {
+  width: 2px;
+  flex: 1;
+  min-height: 24px;
+  background: linear-gradient(to bottom, var(--teal), transparent);
+  opacity: 0.3;
+  margin: 4px 0;
+}
+
+.step:last-child .connector {
+  display: none;
+}
+
+.stepContent {
+  padding-bottom: 2rem;
+}
+
+.step:last-child .stepContent {
+  padding-bottom: 0;
+}
+
+.stepTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+  padding-top: 6px;
+}
+
+.stepDesc {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--textS);
+  margin: 0;
+}
+
+/* Receipt mockup */
+.receipt {
+  background: #0a1f17;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: var(--textS);
+  position: sticky;
+  top: 80px;
+}
+
+.receiptDash {
+  border-top: 1px dashed rgba(29, 158, 117, 0.3);
+  margin: 8px 0;
+}
+
+.receiptCenter {
+  text-align: center;
+}
+
+.receiptBold {
+  color: var(--text);
+  font-weight: bold;
+}
+
+.receiptRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.receiptTotal {
+  color: var(--teal);
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.receiptFooter {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--textXS);
+  margin-top: 4px;
+}
+
+@media (max-width: 899px) {
+  .inner {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .receipt {
+    position: static;
+  }
+}

@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { PasswordManager } from '@/common/security/password-manager'
 import { BusinessMember } from '@/entities/business-member.entity'
 import { Business } from '@/entities/business.entity'
+import { ContactOpeningBalance } from '@/entities/contact-opening-balance.entity'
 import { Contact } from '@/entities/contact.entity'
 import { Debt } from '@/entities/debt.entity'
 import { DebtPayment } from '@/entities/debt-payment.entity'
@@ -37,6 +38,7 @@ import { ExpensesModule } from '@/modules/expenses/expenses.module'
 import { InventoryModule } from '@/modules/inventory/inventory.module'
 import { PermissionsModule } from '@/modules/permissions/permissions.module'
 import { SalesModule } from '@/modules/sales/sales.module'
+import { SavingsModule } from '@/modules/savings/savings.module'
 import type { AppConfig } from '@/config/configuration'
 import { SYNC_BATCHES_QUEUE } from './constants/sync.constants'
 import { SyncController } from './sync.controller'
@@ -57,6 +59,7 @@ import { SyncService } from './sync.service'
     ExpensesModule,
     InventoryModule,
     PermissionsModule,
+    SavingsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig>) => ({
@@ -71,6 +74,7 @@ import { SyncService } from './sync.service'
       BusinessMember,
       Business,
       Contact,
+      ContactOpeningBalance,
       Debt,
       DebtPayment,
       Expense,
