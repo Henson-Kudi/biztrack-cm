@@ -16,9 +16,10 @@ RUN pnpm install --filter @biztrack/api... --frozen-lockfile
 FROM base AS build
 COPY --from=deps /app ./
 COPY . .
-RUN pnpm --filter @biztrack/logger --filter @biztrack/types --filter @biztrack/utils --filter @biztrack/http-client build
+RUN pnpm --filter @biztrack/logger --filter @biztrack/types --filter @biztrack/utils build
 RUN pnpm --filter @biztrack/validators build
 RUN pnpm --filter @biztrack/api build
+RUN pnpm --filter @biztrack/http-client build
 
 FROM node:22-slim AS runtime
 WORKDIR /app/apps/api
@@ -33,6 +34,6 @@ COPY --from=build /app/packages/logger /app/packages/logger
 COPY --from=build /app/packages/types /app/packages/types
 COPY --from=build /app/packages/utils /app/packages/utils
 COPY --from=build /app/packages/validators /app/packages/validators
-
+COPY --from=build /app/packages/http-client /app/packages/http-client
 EXPOSE 3001
 CMD ["node", "dist/main.js"]
