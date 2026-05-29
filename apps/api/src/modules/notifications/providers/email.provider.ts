@@ -86,7 +86,7 @@ export class EmailProvider {
         subject?: string
         html?: string
         text?: string
-      }>(`/emails/${emailId}`)
+      }>(`/emails/receiving/${emailId}`) 
       return response.data ?? null
     } catch (err) {
       this.logger.error('Failed to fetch received email from Resend', 'EmailProvider', {
